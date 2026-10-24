@@ -887,3 +887,59 @@ body.dragging { user-select: none; cursor: col-resize; }
   .nav a { padding: 6px 9px; font-size: 12.5px; }
   .brand-text { display: none; }
 }
+
+/* -------------------------------------------------------------------------
+   窄屏（≤640px，含 375px 手机）：顶栏折两行、表格容器可横滑、内边距收紧
+   目标：整页 scrollWidth 等于视口宽度，任何列都能通过横滑到达，不再被裁掉。
+   ------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  :root { --topbar-h: 96px; }
+
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 52px;
+    padding: 8px 12px;
+    gap: 6px 10px;
+    align-content: center;
+  }
+  /* 导航整体下沉为第二行，并在自身内部横向滚动（不再把顶栏撑宽） */
+  .nav {
+    order: 3;
+    flex: 1 0 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 2px;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { padding: 5px 9px; font-size: 12.5px; }
+  .topbar-right { margin-left: auto; }
+
+  /* 分数胶囊压缩为 Lv.N，避免把品牌挤出去 */
+  .score-chip { padding: 2px 8px 2px 3px; gap: 5px; }
+  .score-chip .pts { display: none; }
+
+  .page { padding: 20px 12px 60px; }
+  .page-head h1 { font-size: 19px; }
+
+  /* 表格：容器横滑，标签列/通过率列可到达 */
+  .table-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  table.ptable { min-width: 560px; }
+  table.ptable th, table.ptable td { padding: 10px 10px; }
+
+  .problem-layout { height: auto; }
+  .pane-left { padding: 16px 14px 40px; }
+  .pane-right { height: auto; min-height: 60vh; }
+  .editor-toolbar { flex-wrap: wrap; gap: 8px; height: auto; padding: 8px 10px; }
+  .tb-right { flex-wrap: wrap; }
+  .problem-head h1 { font-size: 17px; }
+  .result-head { flex-wrap: wrap; }
+  .modal { width: calc(100vw - 24px); padding: 18px 16px; }
+  .section-title { margin: 22px 0 10px; }
+}

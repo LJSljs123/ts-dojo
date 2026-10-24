@@ -20,7 +20,11 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'assets', 'js', 'app.js'), 'utf8');
+/** app 层源码（拆分后：core → store → ui → views → app.js，按加载顺序拼接后整体审计） */
+const APP_FILES = ['app/core.js', 'app/store.js', 'app/ui.js', 'app/views.js', 'app.js'];
+const SRC = APP_FILES
+  .map((rel) => fs.readFileSync(path.join(ROOT, 'assets', 'js', rel), 'utf8'))
+  .join('\n');
 
 /** storage 里可能出现的字段名 */
 const FIELDS = ['best', 'score', 'at', 'title', 'problemId', 'metric', 'verdict', 'passed', 'attempts'];
@@ -120,13 +124,29 @@ console.log('\n=== 2. app.js：html.push / innerHTML 行里的 storage 字段都
 check(real.naked.length === 0, '所有 storage 字段都过 esc()/归一化' + (real.naked.length ? '：' + real.naked.join(' | ') : ''));
 
 /* ------------------------------------------------------------------ */
-console.log('\n=== 3. readJSON 带类型守卫，init() 三个键都传了 guard ===');
+console.log('\n=== 3. readJSON 带类型守卫，装载三个键时都传了 guard ===');
 check(/function readJSON\(key, fallback, guard\)/.test(SRC), 'readJSON 接受 guard 参数');
 check(/typeof guard === 'function' && !guard\(val\)/.test(SRC), 'readJSON 对不合法数据做丢弃');
 check(/writeJSON\(key, fallback\);\s*\/\/ 类型不符/.test(SRC), 'readJSON 丢弃时静默重写 storage');
-check(/readNormalized\(STORE\.progress, \{\}, isPlainObject, normalizeProgress\)/.test(SRC), 'progress 用 isPlainObject 守卫');
-check(/readNormalized\(STORE\.drafts, \{\}, isPlainObject, normalizeDrafts\)/.test(SRC), 'drafts 用 isPlainObject 守卫');
-check(/readNormalized\(STORE\.submissions, \[\], isArrayValue, normalizeSubmissions\)/.test(SRC), 'submissions 用 isArrayValue 守卫');
+
+/**
+ * 生成「装载调用」的匹配式（容忍 core. 前缀与换行：拆分后调用点在 app/store.js）。
+ * @param {string} key 存储键字段名
+ * @param {string} empty 兜底值字面量
+ * @param {string} guard 类型守卫函数名
+ * @param {string} norm 归一化函数名
+ * @returns {RegExp}
+ */
+function loadRe(key, empty, guard, norm) {
+  const e = empty.replace(/[{}[\]]/g, '\\$&');
+  return new RegExp(
+    'readNormalized\\(\\s*(?:core\\.)?STORE\\.' + key + ',\\s*' + e +
+    ',\\s*(?:core\\.)?' + guard + ',\\s*(?:core\\.)?' + norm
+  );
+}
+check(loadRe('progress', '{}', 'isPlainObject', 'normalizeProgress').test(SRC), 'progress 用 isPlainObject 守卫');
+check(loadRe('drafts', '{}', 'isPlainObject', 'normalizeDrafts').test(SRC), 'drafts 用 isPlainObject 守卫');
+check(loadRe('submissions', '[]', 'isArrayValue', 'normalizeSubmissions').test(SRC), 'submissions 用 isArrayValue 守卫');
 
 /* ------------------------------------------------------------------ */
 console.log('\n=== 4. 归一化函数存在且会被回写 ===');

@@ -51,11 +51,13 @@ function installFakeWorker(judge, opts) {
       // ① 先铺好「投递通道」——必须在 worker 源码封禁 globalThis 之前完成，
       //    否则后面连脚手架都读不到（这本身也说明 __block 确实生效了）。
       //    postMessage 用 context 原生函数，避免把 host 函数暴露进沙箱造成「假越狱」。
+      //    注意：worker 源码末尾会 Object.freeze(globalThis)，因此作业载荷放在**可变对象**里
+      //    （__inbox.json），而不是每次给全局变量赋新值 —— 后者在冻结后会被静默丢弃。
       vm.runInContext(
         'globalThis.self = globalThis;' +
           'globalThis.__outbox = [];' +
           'globalThis.__canary = [];' +
-          'globalThis.__jobJson = null;' +
+          'globalThis.__inbox = { json: null };' +
           // 预先抓住 push，模拟原生 postMessage 不依赖 Array.prototype（防止载荷劫持 push 卡住回包）
           'var __push = Array.prototype.push;' +
           'globalThis.postMessage = function (m) { __push.call(__outbox, m); };' +
@@ -65,7 +67,7 @@ function installFakeWorker(judge, opts) {
           'globalThis.importScripts = function () { __canary.push("importScripts"); };' +
           'globalThis.Worker = function () { __canary.push("Worker"); };' +
           // 投递入口：JSON.parse 做一次「结构化克隆」，避免把 host 对象塞进沙箱
-          'globalThis.__run = function () { onmessage({ data: JSON.parse(__jobJson) }); };',
+          'globalThis.__run = function () { onmessage({ data: JSON.parse(__inbox.json) }); };',
         ctx
       );
       // ② 执行 worker 源码（它会封掉 fetch / globalThis 等名字）
@@ -79,7 +81,8 @@ function installFakeWorker(judge, opts) {
       setImmediate(function () {
         if (self._dead) return;
         const ctx = self._ctx;
-        ctx.__jobJson = payload;
+        // 通过可变容器投递：worker 源码末尾会冻结 globalThis，不能直接给全局变量赋值
+        ctx.__inbox.json = payload;
         try {
           vm.runInContext('__run()', ctx, { timeout: hangMs });
         } catch (e) {

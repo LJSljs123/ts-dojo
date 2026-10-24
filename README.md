@@ -5,7 +5,7 @@
 - **无需安装任何东西**：双击 `index.html` 即可使用（`file://` 协议下完整可用）。
 - **无外部依赖**：不引 CDN、不引外部字体、不引图片、不引 npm 包。图标是内联 SVG，字体是系统字体栈。
 - **无构建步骤**：纯 HTML + CSS + 原生 JavaScript（ES2019），经典 `<script>` 顺序加载，全部挂在全局命名空间 `window.TSJ` 上。
-- **真沙箱判题**：用户代码在 `Blob URL` 创建的 Web Worker 中执行，单次 1500ms / 整题 8000ms 超时保护，危险 API 全部封禁。
+- **隔离执行环境判题**：用户代码在 `Blob URL` 创建的 Web Worker 中执行，单次 1500ms / 整题 8000ms 超时保护，网络与 DOM 类 API 全部封禁；无 Worker 时**拒绝提交**而不是降级卡死页面。
 
 ---
 
@@ -42,9 +42,17 @@ ts-dojo/
 │       ├── judge.js           # 判题引擎：指标 + 基线 + 评分 + Worker 沙箱
 │       ├── editor.js          # 自研代码编辑器（高亮 / 行号 / 缩进 / 快捷键）
 │       ├── chart.js           # Canvas 折线图（历史 / 测试区间 / 预测）
-│       └── app.js             # 路由、视图渲染、判题交互、localStorage
+│       ├── app.js             # 应用外壳：路由 / 判题会话 / 提交记录·排行榜·学习路径 / init()
+│       └── app/               # 应用层（经典 script，顺序 core → store → ui → views → app.js）
+│           ├── core.js        #   STORE 键名、存储读写、字段归一化、esc/fmt/debounce
+│           ├── store.js       #   state（含判题令牌）+ 派生量（总分 / 等级 / 每题统计 / 参考解分）
+│           ├── ui.js          #   Markdown、结果面板、预测曲线、按钮态、分栏拖拽
+│           └── views.js       #   题库页 / 题目页 / 题解 / 引导弹层
 ├── tests/
-│   └── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
+│   ├── qa/                    # node --test tests/qa/*.test.js（132 条）
+│   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
+│   ├── starter-check.js       # 9 题模板原样提交必须全 WA
+│   └── storage-audit.js       # localStorage 输出安全静态审计
 └── README.md
 ```
 
@@ -218,16 +226,66 @@ var url = URL.createObjectURL(new Blob([WORKER_SOURCE], { type: 'application/jav
 var worker = new Worker(url);
 ```
 
-沙箱策略：
+### 7.1 口径：这是「隔离执行环境」，**不是**安全边界
 
-1. **先缓存**内部要用的 `postMessage` / `Function` / `Error` / `isFinite`，避免被自己封掉；
-2. 把 `fetch`、`XMLHttpRequest`、`importScripts`、`WebSocket`、`EventSource`、`Worker`、`SharedWorker`、`postMessage`、`self`、`globalThis`、`window`、`document`、`localStorage`、`sessionStorage`、`indexedDB`、`navigator`、`location`、`history`、`alert`、`open`、`parent`、`top`、`frames` 全部替换成**「读取即抛错」的 getter**，访问即报 `沙箱限制：禁止访问 xxx`；
-3. 用户代码通过 `new Function` 执行，函数体首行 = 用户代码第 1 行；
-4. **行号映射**：不同引擎对 `new Function` 的包裹方式不同（V8 头部 3 行、SpiderMonkey 1 行），因此启动时用一段"已知在第 1 行抛错"的探针实测偏移量，再换算成用户行号；
-5. 超时：单次执行 **1500ms**、整题 **8000ms**，超时 `worker.terminate()` 并判 `TLE`；
-6. 返回值在 worker 内校验（长度 / 有限性），错误信息与行号回传主线程。
+本项目的目标是**防止误用**（用户自己写出死循环、误用 `fetch`、误改全局），不是对抗刻意构造的攻击者。
+同机同浏览器里能跑任意页面脚本的攻击者，仍然可以通过侧信道等方式推断信息 —— 不要把它当成安全沙箱。
 
-**降级策略**：若环境禁止创建 Worker（个别浏览器策略），自动降级为同线程执行，判题结果一致但超时保护失效，UI 会显示黄色提示条。
+### 7.2 三层防护（缺一不可）
+
+**第 1 层：Worker 内的能力遮蔽（judge.js 的 `WORKER_SOURCE`）**
+
+1. **先缓存**内部要用的 `postMessage` / `Function` / `Error` / `isFinite` / `Date.now`，避免被自己封掉；
+2. `fetch`、`XMLHttpRequest`、`importScripts`、`WebSocket`、`EventSource`、`Worker`、`SharedWorker`、`postMessage`、`close`、`self`、`globalThis`、`window`、`document`、`localStorage`、`sessionStorage`、`indexedDB`、`navigator`、`location`、`history`、`alert`、`open`、`parent`、`top`、`frames`、`caches`、`BroadcastChannel`、`WebTransport`、`RTCPeerConnection` 全部改成**「读取即抛错」的访问器**，访问即报 `沙箱限制：禁止访问 xxx`；
+   - 定义在 **globalThis 与整条原型链**上，且 `configurable: false` / `writable: false` —— `delete` 和重新赋值都恢复不了；
+   - 因此 `var g = new Function("return this")(); delete g.importScripts;` 这类 3 行逃逸载荷不再有效（回归用例：`tests/qa/regressions.test.js` 的 ②）；
+3. **代码执行面收窄**：全局 `Function` / `eval` 换成抛错桩，`Function.prototype.constructor` 同样封死（否则 `(function(){}).constructor` 就能拿回真正的 `Function`）；`setTimeout` / `setInterval` 只接受函数参数，字符串形式（`setTimeout("code")`）直接拒绝；
+4. **冻结**：`Object.freeze(globalThis)` 及整条原型链（含 `Object.prototype`），事后无法再往原型上挂钩子；
+5. 用户代码通过 `new Function` 执行，函数体首行 = 用户代码第 1 行；
+6. **行号映射**：不同引擎对 `new Function` 的包裹方式不同（V8 头部 3 行、SpiderMonkey 1 行），因此启动时用一段"已知在第 1 行抛错"的探针实测偏移量，再换算成用户行号；
+7. 超时：单次执行 **1500ms**、整题 **8000ms**，超时 `worker.terminate()` 并判 `TLE`；
+8. 返回值在 worker 内校验（长度 / 有限性），错误信息与行号回传主线程；
+9. **测试点之间互不影响**：每个测试点投递的是 `history.slice()` 独立副本，用户代码就地改数组也污染不到下一个窗口。
+
+**第 2 层：CSP（index.html 的 meta）**
+
+```
+default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:;
+style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none';
+worker-src blob:; font-src 'self'
+```
+
+| 指令 | 作用 |
+|---|---|
+| `default-src 'none'` | 默认全部禁止（白名单制） |
+| `script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:` | 本地脚本 + 内联脚本 + 判题必需的 `new Function` + Blob Worker；**不含 http(s)**，外链脚本一律加载不了 |
+| `style-src 'self' 'unsafe-inline'` | 样式表 + 内联 style（结果条/进度条宽度是内联的） |
+| `img-src 'self' data:` | 图标 / 内联图 |
+| `connect-src 'none'` | `fetch` / XHR / WebSocket / `sendBeacon` 全部禁止 —— **即使 JS 层出现未知逃逸，请求也发不出去** |
+| `worker-src blob:` | 判题 Worker 由 Blob URL 创建 |
+| `font-src 'self'` | 只用系统字体，无远程字体 |
+
+实测（无头 Edge / `file://` 双击）：上面的指令**不需要**额外补 `file:` —— 本地脚本、内联 style、Blob Worker、`new Function`、canvas 全部正常，5 个路由无 console 异常。
+
+**第 3 层：会话与超时**
+
+- 判题在 Worker 里顺序执行，超时立刻 `terminate()`；
+- 路由切换时作废会话令牌并 `abort()` 旧 Worker，**不留后台计算**；
+- 旧会话的回调首行校验「令牌 + 题目 id」，不匹配就整段丢弃（不碰 DOM、不写存储）。
+
+### 7.3 无 Worker 时：拒绝提交，而不是降级
+
+若环境禁止创建 Worker（隐私设置 / 旧内核 / 策略限制），`judge.evaluate()` 返回 `{ refused: true, reason }`，
+**不会**降级到主线程执行 —— 降级意味着 `while(true){}` 直接锁死页面且没有任何超时保护。
+此时题目页的「运行 / 提交判题」按钮直接置灰，结果面板给出明确提示。
+
+`judge.evaluateSync()`（同线程）只用于**可信代码**：参考解评分与排行榜虚拟选手，永不用于用户提交。
+
+### 7.4 数据不足时：显式报错，不静默缩水
+
+滚动回测题需要 `len >= horizon + windows × originStep` 个数据点。不满足时 `judge.evaluate()` 返回
+`{ dataError: true, message }`，UI 在结果面板显示提示且**不显示任何分数** ——
+不会把「装不下的窗口」静默丢弃后当成正常成绩（回归用例：`regressions.test.js` 的 ④）。
 
 ---
 
@@ -374,8 +432,8 @@ P9 是唯一的例外形态：平均分 79 高于通过线，但窗口 1 只有 
 
 ## 十一、已知限制
 
-1. **沙箱不是安全边界**。它是"防误用"级别的隔离（封禁网络与 DOM API、超时终止），但无法防御刻意构造的原型链逃逸。请不要把不可信代码当成真正的安全威胁模型来跑。`eval` 在部分引擎中不可配置，因此未能完全封禁（`Function` 可以封禁）。
-2. **Worker 不可用时降级为同线程执行**，此时无法中断死循环（页面会卡住），UI 会给出提示。
+1. **沙箱不是安全边界**。它是"防误用"级别的隔离执行环境（能力遮蔽 + CSP + 超时终止），目标是拦住误用与常见逃逸（`delete` 封禁、原型链取回、`eval` / `Function` 构造器），但**不对抗**刻意构造的侧信道攻击。请不要把不可信代码当成真正的安全威胁模型来跑。
+2. **Worker 不可用时禁止提交**（不再降级到主线程）：`evaluate` 返回 `refused: true`，UI 置灰按钮并提示原因。
 3. **滚动回测的逐点判定较严**：任一窗口 `score < passScore` 就判 `WA`，即使平均分很高。这是有意为之（"长期可复现的能力"），但也意味着 P9 的容错空间最小。
 4. **判题在主线程做结构化克隆**：每个测试点都会把训练窗口（最多 ~700 个数字）传给 Worker，数据量很小，不影响性能。
 5. **图表为手绘 Canvas**：只画折线 + 网格 + 测试区间高亮带，没有缩放 / 悬浮提示等交互。

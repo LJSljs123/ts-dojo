@@ -6,7 +6,7 @@
  *   baselines 统计基线（naive / seasonal_naive / mean / linear_trend / moving_average）
  *   scoring   由「误差比」映射到 0~100 分（分段线性、单调、平滑）
  *   sandbox   Web Worker（Blob URL）沙箱执行用户代码，单次 1500ms / 整题 8000ms
- *   evaluate  异步判题（浏览器走 Worker；无 Worker 环境降级为同线程执行）
+ *   evaluate  异步判题（浏览器走 Worker；**无 Worker 环境一律拒绝执行**，不降级到主线程）
  *   evaluateSync 同步判题（只用于可信代码，例如参考解、排行榜计算）
  *
  * 挂载点：window.TSJ.judge = { evaluate, evaluateSync, metrics, baselines, runSandbox, ... }
@@ -558,12 +558,24 @@
   /**
    * Worker 源码。必须用 Blob URL 创建，因为 file:// 下无法加载独立 worker 文件。
    *
-   * 沙箱策略：
-   *   1. 先缓存内部要用的 postMessage / Function，避免被自己封掉；
-   *   2. 把 fetch / XMLHttpRequest / importScripts / WebSocket / Worker / postMessage /
-   *      self / globalThis / window / document / localStorage ... 全部替换成「读取即抛错」的 getter；
-   *   3. 用户代码通过 new Function 执行，函数体首行即用户代码第 1 行，便于行号映射；
-   *   4. 返回值的长度与有限性在 worker 内校验，错误信息回传主线程。
+   * 沙箱策略（三层，缺一不可）：
+   *   1. **能力遮蔽**：fetch / XMLHttpRequest / importScripts / WebSocket / Worker /
+   *      postMessage / self / globalThis / window / document / localStorage / location ...
+   *      在「全局对象 + 整条原型链」上被改写成「读取即抛错」的访问器，
+   *      且 configurable:false / writable:false —— `delete` 与重新赋值都不再能恢复；
+   *   2. **代码执行面收窄**：全局 Function / eval 换成抛错桩，Function.prototype.constructor
+   *      同样封死（否则 `(function(){}).constructor` 就能拿回真正的 Function）；
+   *      setTimeout / setInterval 只接受函数参数，字符串形式直接拒绝；
+   *   3. **冻结**：globalThis 与整条原型链 Object.freeze，杜绝事后往原型上挂钩子。
+   *
+   * 另外 index.html 的 CSP（connect-src 'none' / script-src 不含 http）在网络层再兜一层：
+   * 即便 JS 层出现未知逃逸，请求也发不出去。
+   *
+   * 用户代码通过 new Function 执行，函数体首行即用户代码第 1 行，便于行号映射；
+   * 返回值的长度与有限性在 worker 内校验，错误信息回传主线程。
+   *
+   * 注意：这里只做「隔离执行环境」，**不是**安全边界（同一台机器上的恶意代码仍可能通过
+   * 侧信道推断信息）。README 里有明确口径。
    */
   var WORKER_SOURCE = [
     '(function () {',
@@ -572,8 +584,15 @@
     '  var __post = __global.postMessage.bind(__global);',
     '  var __Function = Function;',
     '  var __Error = Error;',
-    '  var __isFinite = isFinite;',
     '  var __String = String;',
+    '  var __isFinite = isFinite;',
+    '  var __now = Date.now;',
+    '  var __define = Object.defineProperty;',
+    '  var __getProto = Object.getPrototypeOf;',
+    '  var __freeze = Object.freeze;',
+    '  var __hasOwn = Object.prototype.hasOwnProperty;',
+    '  var __realTimeout = (typeof setTimeout === "function") ? setTimeout : null;',
+    '  var __realInterval = (typeof setInterval === "function") ? setInterval : null;',
     '  function __rawLineOf(err) {',
     '    var stack = __String((err && err.stack) || "");',
     '    var m = /<anonymous>:(\\d+):(\\d+)/.exec(stack);',
@@ -581,7 +600,7 @@
     '    m = /:(\\d+):(\\d+)/.exec(stack);',
     '    return m ? parseInt(m[1], 10) : null;',
     '  }',
-    '  // 探测「函数体第 1 行」在堆栈中的偏移（不同引擎不同）',
+    '  // 探测「函数体第 1 行」在堆栈中的偏移（不同引擎不同）——必须在封 Function 之前完成',
     '  var __lineOffset = (function () {',
     '    try {',
     '      var p = new __Function("", "throw new Error(\\"probe\\");");',
@@ -592,24 +611,86 @@
     '    }',
     '    return 0;',
     '  })();',
+    '  /* ---------- 第 1 层：能力遮蔽（全局 + 原型链） ---------- */',
     '  var __DENY = [',
     '    "fetch", "XMLHttpRequest", "importScripts", "WebSocket", "EventSource",',
     '    "Worker", "SharedWorker", "postMessage", "close", "self", "globalThis",',
     '    "window", "document", "localStorage", "sessionStorage", "indexedDB",',
-    '    "navigator", "location", "history", "alert", "open", "parent", "top", "frames"',
+    '    "navigator", "location", "history", "alert", "open", "parent", "top", "frames",',
+    '    "caches", "BroadcastChannel", "WebTransport", "RTCPeerConnection"',
     '  ];',
-    '  function __block(name) {',
+    '  function __denyGetter(name) {',
+    '    return function () { throw new __Error("沙箱限制：禁止访问 " + name); };',
+    '  }',
+    '  var __targets = [__global];',
+    '  (function () {',
+    '    var proto = __getProto(__global);',
+    '    var guard = 0;',
+    '    while (proto && guard < 12) {',
+    '      __targets.push(proto);',
+    '      proto = __getProto(proto);',
+    '      guard++;',
+    '    }',
+    '  })();',
+    '  function __sealName(target, name, force) {',
+    '    var own = false;',
+    '    try { own = __hasOwn.call(target, name); } catch (e) { own = false; }',
+    '    if (!own && !force) return;',
     '    try {',
-    '      Object.defineProperty(__global, name, {',
-    '        configurable: true,',
-    '        get: function () { throw new __Error("沙箱限制：禁止访问 " + name); },',
-    '        set: function () {}',
+    '      __define(target, name, {',
+    '        configurable: false,',
+    '        enumerable: false,',
+    '        get: __denyGetter(name),',
+    '        set: __denyGetter(name)',
     '      });',
     '    } catch (e) {',
-    '      try { __global[name] = undefined; } catch (e2) {}',
+    '      try { target[name] = undefined; } catch (e2) {}',
     '    }',
     '  }',
-    '  for (var __i = 0; __i < __DENY.length; __i++) __block(__DENY[__i]);',
+    '  for (var __t = 0; __t < __targets.length; __t++) {',
+    '    for (var __d = 0; __d < __DENY.length; __d++) {',
+    '      __sealName(__targets[__t], __DENY[__d], __t === 0);',
+    '    }',
+    '  }',
+    '  /* ---------- 第 2 层：代码执行面（Function / eval / 字符串定时器） ---------- */',
+    '  function __lockValue(target, name, value) {',
+    '    try {',
+    '      __define(target, name, {',
+    '        configurable: false,',
+    '        writable: false,',
+    '        enumerable: false,',
+    '        value: value',
+    '      });',
+    '    } catch (e) {',
+    '      try { target[name] = value; } catch (e2) {}',
+    '    }',
+    '  }',
+    '  function __blockedCtor() { throw new __Error("沙箱限制：禁止使用 Function 构造器"); }',
+    '  function __blockedEval() { throw new __Error("沙箱限制：禁止使用 eval"); }',
+    '  __lockValue(__global, "Function", __blockedCtor);',
+    '  __lockValue(__global, "eval", __blockedEval);',
+    '  try {',
+    '    __define(__Function.prototype, "constructor", {',
+    '      configurable: false,',
+    '      writable: false,',
+    '      enumerable: false,',
+    '      value: __blockedCtor',
+    '    });',
+    '  } catch (e) {}',
+    '  function __timerGuard(name, real) {',
+    '    return function (fn, ms) {',
+    '      if (typeof fn === "string") {',
+    '        throw new __Error("沙箱限制：禁止以字符串形式调用 " + name);',
+    '      }',
+    '      if (!real) throw new __Error("沙箱限制：当前环境不支持 " + name);',
+    '      var args = [fn, ms];',
+    '      for (var i = 2; i < arguments.length; i++) args.push(arguments[i]);',
+    '      return real.apply(__global, args);',
+    '    };',
+    '  }',
+    '  __lockValue(__global, "setTimeout", __timerGuard("setTimeout", __realTimeout));',
+    '  __lockValue(__global, "setInterval", __timerGuard("setInterval", __realInterval));',
+    '  /* ---------- 执行与回传 ---------- */',
     '  function __lineOf(err) {',
     '    var raw = __rawLineOf(err);',
     '    if (raw === null) return null;',
@@ -636,7 +717,7 @@
     '  }',
     '  __global.onmessage = function (ev) {',
     '    var job = ev.data || {};',
-    '    var t0 = Date.now();',
+    '    var t0 = __now();',
     '    var fn;',
     '    try {',
     '      fn = new __Function("history", "horizon", "ctx",',
@@ -656,7 +737,7 @@
     '      if (checked.error) {',
     '        __post({ id: job.id, status: "error", error: checked.error, line: null });',
     '      } else {',
-    '        __post({ id: job.id, status: "ok", value: checked.value, ms: Date.now() - t0 });',
+    '        __post({ id: job.id, status: "ok", value: checked.value, ms: __now() - t0 });',
     '      }',
     '    } catch (err) {',
     '      __post({',
@@ -667,19 +748,49 @@
     '      });',
     '    }',
     '  };',
+    '  /* ---------- 第 3 层：冻结全局与整条原型链（必须放在 onmessage 之后） ---------- */',
+    '  for (var __f = 0; __f < __targets.length; __f++) {',
+    '    try { __freeze(__targets[__f]); } catch (e) {}',
+    '  }',
     '})();'
   ].join('\n');
+
+  /**
+   * 当前环境能否使用 Web Worker 沙箱。
+   * UI 用它决定是否允许提交（不能沙箱 = 禁止提交，避免死循环锁死界面）。
+   * @returns {boolean}
+   */
+  function canUseSandbox() {
+    try {
+      return (typeof Worker !== 'undefined') &&
+        (typeof Blob !== 'undefined') &&
+        (typeof URL !== 'undefined') &&
+        typeof URL.createObjectURL === 'function';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** 无沙箱时的拒绝理由（UI 直接展示给用户） */
+  var SANDBOX_REFUSED_REASON =
+    '当前环境无法创建 Web Worker 沙箱（可能被浏览器安全策略、隐私设置或内核版本限制）。' +
+    '为避免死循环卡死页面，已拒绝在页面主线程执行你的代码：请改用最新版 Chrome / Edge 打开，' +
+    '或通过 http(s) 方式访问本页面。';
 
   /**
    * 在 Worker 沙箱中顺序执行全部测试点。
    * 单次执行超时 perJob → 终止 worker 并判 TLE；整题超时 total → 同样判 TLE。
    *
+   * 环境不支持 Worker 时**拒绝执行**（返回 refused），不再静默降级到主线程 ——
+   * 降级会让 `while(true){}` 直接锁死 UI，且没有任何超时保护。
+   *
    * @param {string} code 用户代码
    * @param {Array} jobs [{history, horizon, ctx}]
    * @param {Object} [limits] { perJob, total }
-   * @returns {Promise<{results: Array, timedOut: boolean, degraded?: boolean}>}
+   * @param {Object} [session] 可选会话句柄；会被挂上 abort()，供调用方（路由切换）取消
+   * @returns {Promise<{results: Array, timedOut: boolean, refused?: boolean, aborted?: boolean, reason?: string}>}
    */
-  function runSandbox(code, jobs, limits) {
+  function runSandbox(code, jobs, limits, session) {
     var lim = limits || LIMITS;
 
     return new Promise(function (resolve) {
@@ -703,6 +814,9 @@
           try { URL.revokeObjectURL(url); } catch (e) { /* ignore */ }
           url = null;
         }
+        if (session && typeof session === 'object') {
+          session.abort = null;
+        }
       }
 
       /**
@@ -725,6 +839,19 @@
         resolve({ results: results, timedOut: !!timedOut });
       }
 
+      /**
+       * 放弃当前会话：立即 terminate 旧 Worker，不留后台计算。
+       * 结果由调用方按 token 丢弃。
+       */
+      function abort() {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        resolve({ results: results, timedOut: false, aborted: true });
+      }
+
+      if (session && typeof session === 'object') session.abort = abort;
+
       /** 派发下一个测试点 */
       function next() {
         if (index >= jobs.length) { finish(false); return; }
@@ -733,7 +860,8 @@
           worker.postMessage({
             id: index,
             code: code,
-            history: job.history,
+            // 每个测试点传独立副本：用户代码即便就地修改 history，也污染不到下一个测试点
+            history: job.history.slice(),
             horizon: job.horizon,
             ctx: job.ctx
           });
@@ -746,16 +874,10 @@
         jobTimer = setTimeout(function () { finish(true); }, lim.perJob);
       }
 
-      // 环境不支持 Worker（例如某些 file:// 限制）时降级为同线程执行
-      var canWorker = (typeof Worker !== 'undefined') &&
-        (typeof Blob !== 'undefined') &&
-        (typeof URL !== 'undefined') &&
-        typeof URL.createObjectURL === 'function';
-
-      if (!canWorker) {
-        var fallback = runInProcess(code, jobs);
-        fallback.degraded = true;
-        resolve(fallback);
+      // 环境不支持 Worker：拒绝执行（不再静默降级到主线程）
+      if (!canUseSandbox()) {
+        cleanup();
+        resolve({ results: [], timedOut: false, refused: true, reason: SANDBOX_REFUSED_REASON });
         return;
       }
 
@@ -764,9 +886,12 @@
         worker = new Worker(url);
       } catch (e) {
         cleanup();
-        var fb = runInProcess(code, jobs);
-        fb.degraded = true;
-        resolve(fb);
+        resolve({
+          results: [],
+          timedOut: false,
+          refused: true,
+          reason: SANDBOX_REFUSED_REASON + '（创建 Worker 失败：' + ((e && e.message) || e) + '）'
+        });
         return;
       }
 
@@ -800,6 +925,68 @@
   /* ================================================================== *
    * 8. 判题主流程
    * ================================================================== */
+
+  /**
+   * 滚动回测窗口覆盖度前置校验。
+   *
+   * 背景：`buildTestPoints` 在 `len < horizon + windows*originStep` 时会把装不下的窗口
+   * **静默丢弃**（`trainEnd < 4` 分支），于是「4 个窗口的题」可能只剩 1 个测试点，
+   * 而题面仍然写着 4 个窗口 —— 判题口径与题面不一致，属于数据/配置缺陷。
+   *
+   * `buildTestPoints` 的语义被 60+ 条用例锁死，一行都不能改；因此把校验放在它**之前**：
+   * 判题入口先算一次「窗口是否装得下」，装不下就直接给出显式错误报告，绝不静默缩水。
+   *
+   * @param {Object} problem 题目
+   * @param {Object} dataset 数据集
+   * @returns {string|null} 错误说明；null 表示通过
+   */
+  function coverageError(problem, dataset) {
+    if (!problem || (problem.mode || 'holdout') !== 'rolling') return null;
+    var horizon = Number(problem.horizon) || 0;
+    var windows = Math.max(1, Number(problem.windows) || 1);
+    var step = Math.max(1, Number(problem.originStep) || horizon || 1);
+    var len = (dataset && dataset.values) ? dataset.values.length : 0;
+    var required = horizon + windows * step;
+    if (len < required) {
+      return '滚动回测窗口不足：' + windows + ' 个窗口（步长 ' + step + '、预测 ' + horizon +
+        ' 步）至少需要 ' + required + ' 个数据点，当前数据集「' + ((dataset && dataset.id) || '?') +
+        '」只有 ' + len + ' 个。已停止判题，避免把缩水后的测试点当作成绩。';
+    }
+    return null;
+  }
+
+  /**
+   * 构造一个「不进入评分流程」的报告骨架（数据不足 / 沙箱不可用 / 会话取消）。
+   * 结构与 buildReport 的返回值保持一致，便于 UI 统一渲染。
+   *
+   * @param {Object} params { problem }
+   * @param {string} message 说明
+   * @param {Object} flags 额外标记（dataError / refused / aborted）
+   * @returns {Object} 判题报告
+   */
+  function guardReport(params, message, flags) {
+    var problem = params.problem || {};
+    var metric = problem.metric || 'mse';
+    var report = {
+      problemId: problem.id,
+      verdict: 'RE',
+      passed: false,
+      score: 0,
+      passScore: Number(problem.passScore) || 60,
+      metric: metric,
+      metricLabel: metricLabels[metric] || String(metric).toUpperCase(),
+      cases: [],
+      message: message,
+      degraded: false,
+      at: Date.now()
+    };
+    if (flags) {
+      for (var k in flags) {
+        if (Object.prototype.hasOwnProperty.call(flags, k)) report[k] = flags[k];
+      }
+    }
+    return report;
+  }
 
   /**
    * 汇总执行结果，产出最终判题报告。
@@ -903,17 +1090,32 @@
 
   /**
    * 异步判题（浏览器：Worker 沙箱）。
-   * @param {Object} params { problem, dataset, code, limits? }
+   *
+   * 三条前置/旁路分支（都不进入评分流程）：
+   *   - 数据/配置缺陷（滚动窗口装不下）→ dataError 报告；
+   *   - 环境无沙箱 → refused 报告（**拒绝执行**，不降级到主线程）；
+   *   - 会话被调用方取消（路由切换）→ aborted 报告（结果由调用方丢弃）。
+   *
+   * @param {Object} params { problem, dataset, code, limits?, session? }
    * @returns {Promise<Object>} 判题报告
    */
   function evaluate(params) {
+    var bad = coverageError(params.problem, params.dataset);
+    if (bad) return Promise.resolve(guardReport(params, bad, { dataError: true }));
+
     var jobs;
     try {
       jobs = buildJobs(params.problem, params.dataset, params.code);
     } catch (e) {
       return Promise.reject(e);
     }
-    return runSandbox(params.code, jobs, params.limits).then(function (run) {
+    return runSandbox(params.code, jobs, params.limits, params.session).then(function (run) {
+      if (run && run.aborted) {
+        return guardReport(params, '判题已取消（页面已切换）。', { aborted: true });
+      }
+      if (run && run.refused) {
+        return guardReport(params, run.reason || SANDBOX_REFUSED_REASON, { refused: true });
+      }
       return buildReport(params, run);
     });
   }
@@ -924,6 +1126,8 @@
    * @returns {Object} 判题报告
    */
   function evaluateSync(params) {
+    var bad = coverageError(params.problem, params.dataset);
+    if (bad) return guardReport(params, bad, { dataError: true });
     var jobs = buildJobs(params.problem, params.dataset, params.code);
     var run = runInProcess(params.code, jobs);
     run.degraded = true;
@@ -946,8 +1150,11 @@
     runInProcess: runInProcess,
     evaluate: evaluate,
     evaluateSync: evaluateSync,
+    canUseSandbox: canUseSandbox,
+    coverageError: coverageError,
     parseLine: parseLine,
     LIMITS: LIMITS,
+    SANDBOX_REFUSED_REASON: SANDBOX_REFUSED_REASON,
     WORKER_SOURCE: WORKER_SOURCE
   };
 

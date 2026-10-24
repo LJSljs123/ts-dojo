@@ -14,21 +14,34 @@ const { spawnSync } = require('node:child_process');
 const { ROOT, JS_DIR } = require('./helpers/engine');
 
 const JS_FILES = ['datasets', 'problems', 'judge', 'editor', 'chart', 'app'].map((n) => path.join(JS_DIR, n + '.js'));
+/** app 层 5 个文件（拆分后）：core → store → ui → views → app.js */
+const APP_FILES = ['core', 'store', 'ui', 'views'].map((n) => path.join(JS_DIR, 'app', n + '.js'))
+  .concat([path.join(JS_DIR, 'app.js')]);
+/** 全部参与静态审计的脚本（顺序即 index.html 的加载顺序） */
+const ALL_JS = JS_FILES.slice(0, 5).concat(APP_FILES);
 const read = (p) => fs.readFileSync(p, 'utf8');
 const html = read(path.join(ROOT, 'index.html'));
 const css = read(path.join(ROOT, 'assets', 'css', 'style.css'));
 const jsAll = JS_FILES.map(read).join('\n');
+/** app 层源码拼接（存储/归一化/转义等审计跨文件进行） */
+const appAll = APP_FILES.map(read).join('\n');
+const appLineCounts = APP_FILES.map((f) => [path.relative(ROOT, f), read(f).split('\n').length - 1]);
 
 test('node --check：所有 js 语法合法（含 tests/selftest.js）', () => {
-  const files = JS_FILES.concat([path.join(ROOT, 'tests', 'selftest.js')]);
+  const files = ALL_JS.concat([path.join(ROOT, 'tests', 'selftest.js')]);
   for (const f of files) {
     const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
     assert.equal(r.status, 0, path.basename(f) + ' 语法错误：' + r.stderr);
   }
 });
 
+test('app 层 5 个文件都 ≤350 行（可维护性上限）', () => {
+  const over = appLineCounts.filter(([, n]) => n > 350).map(([f, n]) => f + '=' + n);
+  assert.deepEqual(over, [], '以下文件超过 350 行：' + over.join(', '));
+});
+
 test('无 ESM 痕迹：无 import/export、无 type="module"', () => {
-  for (const f of JS_FILES) {
+  for (const f of ALL_JS) {
     const src = read(f);
     assert.ok(!/^\s*(import|export)\s/m.test(src), path.basename(f) + ' 含 import/export');
   }
@@ -65,6 +78,10 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/judge.js',
     'assets/js/editor.js',
     'assets/js/chart.js',
+    'assets/js/app/core.js',
+    'assets/js/app/store.js',
+    'assets/js/app/ui.js',
+    'assets/js/app/views.js',
     'assets/js/app.js',
   ]);
   // 每个文件必须真实存在
@@ -74,8 +91,29 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
   assert.ok(appIdx > html.indexOf('id="view"'), 'app.js 必须在 #view 之后加载');
   assert.ok(appIdx < html.indexOf('</body>'), 'app.js 应在 </body> 之前');
   assert.equal(html.slice(appIdx).indexOf('<script'), -1, 'app.js 之后不应再有 script');
-  // 依赖方向：app.js 依赖 judge/problems/editor/chart，不能反过来
-  assert.ok(!/TSJ\.app|TSJ\.renderProblem/.test(jsAll), '不应存在反向依赖');
+});
+
+test('依赖方向：引擎层不得引用 app 层；app 层只能引用**更早加载**的命名空间', () => {
+  // 1) 引擎文件（datasets/problems/judge/editor/chart）不能反向依赖应用层
+  for (const f of JS_FILES.slice(0, 5)) {
+    const src = read(f);
+    assert.ok(!/TSJ\.app(Core|Store|Ui|Views)?\b/.test(src), path.basename(f) + ' 反向依赖了应用层');
+    assert.ok(!/TSJ\.renderProblem|TSJ\.route\b/.test(src), path.basename(f) + ' 反向依赖了应用层');
+  }
+  // 2) app 层按 core → store → ui → views → app.js 加载，每个文件只能引用排在自己前面的命名空间
+  const namespaces = ['TSJ.appCore', 'TSJ.appStore', 'TSJ.appUi', 'TSJ.appViews', 'TSJ.app'];
+  APP_FILES.forEach((file, idx) => {
+    const src = read(file);
+    for (let j = idx + 1; j < namespaces.length; j++) {
+      const later = namespaces[j];
+      // 用「后面不能再接字母」的边界判断，避免 TSJ.app 误匹配 TSJ.appCore / TSJ.appStore
+      const re = new RegExp(later.replace('.', '\\.') + '(?![A-Za-z])');
+      assert.ok(
+        !re.test(src),
+        path.relative(ROOT, file) + ' 引用了更晚加载的 ' + later + '（会形成反向依赖 / 循环依赖）'
+      );
+    }
+  });
 });
 
 test('app.js 在脚本末尾同步 init()（依赖 body 末尾加载，而非 DOMContentLoaded）', () => {
@@ -92,7 +130,7 @@ test('CSS 覆盖率：JS/HTML 里出现的 class 都能在 style.css 找到定�
   const ALLOW = new Set(['tsj-editor-host', 'brand-logo']);
 
   const used = new Map();
-  for (const f of JS_FILES.concat([path.join(ROOT, 'index.html')])) {
+  for (const f of ALL_JS.concat([path.join(ROOT, 'index.html')])) {
     const src = read(f);
     const name = path.basename(f);
     for (const m of src.matchAll(/class=\\?["']([^"'\\]*)/g)) {
@@ -120,7 +158,8 @@ test('CSS 覆盖率：JS/HTML 里出现的 class 都能在 style.css 找到定�
 });
 
 test('localStorage：键名统一 tsoj:*，且没有未捕获的 JSON.parse', () => {
-  const src = read(path.join(JS_DIR, 'app.js'));
+  // 拆分后存储层在 app/core.js、装载在 app/store.js，因此对整个 app 层拼接源码做审计
+  const src = appAll;
   // 1) STORE 里所有键都以 tsoj: 开头
   const storeBlock = src.slice(src.indexOf('var STORE = {'), src.indexOf('};', src.indexOf('var STORE = {')));
   const keys = [...storeBlock.matchAll(/'([^']+)'/g)].map((m) => m[1]).filter((s) => s.indexOf(':') > 0);
@@ -138,6 +177,22 @@ test('localStorage：键名统一 tsoj:*，且没有未捕获的 JSON.parse', ()
   const wStart = src.indexOf('function writeJSON');
   const wBody = src.slice(wStart, src.indexOf('\n  }', wStart));
   assert.ok(wBody.indexOf('try') > 0 && wBody.indexOf('catch') > 0, 'writeJSON 缺少 try/catch');
+});
+
+test('localStorage：init 装载三个键时都传了类型守卫 + 归一化函数', () => {
+  const flat = appAll.replace(/\s+/g, ' ');
+  const cases = [
+    ['progress', '{}', 'isPlainObject', 'normalizeProgress'],
+    ['drafts', '{}', 'isPlainObject', 'normalizeDrafts'],
+    ['submissions', '[]', 'isArrayValue', 'normalizeSubmissions'],
+  ];
+  for (const [key, empty, guard, norm] of cases) {
+    const re = new RegExp(
+      'readNormalized\\( ?(?:core\\.)?STORE\\.' + key + ', ' + empty.replace(/[{}[\]]/g, '\\$&') +
+      ', (?:core\\.)?' + guard + ', (?:core\\.)?' + norm
+    );
+    assert.match(flat, re, key + ' 的装载缺少类型守卫或归一化');
+  }
 });
 
 test('编辑器转义：<script> / </code> / <img onerror> 不会破坏高亮层结构', () => {

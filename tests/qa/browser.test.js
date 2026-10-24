@@ -65,7 +65,7 @@ test('浏览器可用性检查（无浏览器则跳过）', (t) => {
 
 test('file:// 首屏：无未捕获异常，题库页渲染出 9 道题', async (t) => {
   if (!page) return t.skip('无浏览器');
-  await sleep(400);
+  // 不再需要 sleep(400)：cdp.launch() 内置 waitReady()，拿到 page 时 TSJ.findProblem 已可调用
   const info = await page.evaluate(
     '(function(){return {title:document.title, rows:document.querySelectorAll(".prow").length, view:document.querySelector("#view").innerHTML.length, onboarded: !!document.querySelector(".modal")};})()'
   );

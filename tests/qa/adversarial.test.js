@@ -233,15 +233,21 @@ test('沙箱：fetch / XHR / importScripts / Worker / postMessage / self / globa
   }
 });
 
-test('沙箱：eval 不能绕过超时（while(true) 在 eval 里也判 TLE）', async () => {
+test('沙箱：eval 被遮蔽 —— 既不能执行任意代码，也就无法绕过超时（判 RE + 沙箱限制）', async () => {
+  // 期望值变更（T03）：加固后 eval 被替换成抛错桩，载荷根本跑不到 while(true)，
+  // 因此判决从 TLE 变成 RE「沙箱限制：禁止使用 eval」。这是**产品行为变正确**，不是放宽断言：
+  //   - 旧行为：eval 能执行任意代码，只是靠 1500ms 超时兜底；
+  //   - 新行为：eval 直接不可用，超时兜底仍然存在（见下一条「死循环 → TLE」用例）。
   const t0 = Date.now();
   const { res, stat } = await evalSandbox('function predict(){ eval("while(true){}"); return [1,1,1,1]; }');
   const dt = Date.now() - t0;
-  assert.equal(res.verdict, 'TLE');
+  assert.equal(res.verdict, 'RE');
   assert.equal(res.score, 0);
-  assert.match(res.message, /超时/);
-  assert.ok(dt < 4000, 'TLE 应在数秒内返回，实际 ' + dt + 'ms');
-  assert.ok(stat.terminated >= 1, 'TLE 后应 terminate worker');
+  assert.match(res.cases[0].error, /沙箱限制/, '应提示沙箱限制，实际：' + res.cases[0].error);
+  assert.match(res.cases[0].error, /eval/);
+  assert.match(res.message, /沙箱限制/);
+  assert.ok(dt < 4000, '应在数秒内返回，实际 ' + dt + 'ms');
+  assert.ok(stat.terminated >= 1, '结束时应 terminate worker');
 });
 
 test('沙箱：死循环 → TLE（perJob 生效），进程不被挂死', async () => {

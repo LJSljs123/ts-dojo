@@ -3,6 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  CSP：在浏览器网络层再加一道闸，与 judge.js 的 Worker 沙箱互补。
+    default-src 'none'   默认什么都不许（白名单制）
+    script-src  'self' 'unsafe-inline' 'unsafe-eval' blob:
+                         本地脚本 + 内联脚本 + 判题必需的 new Function + Blob Worker；
+                         不含 http(s)，所以外链脚本一律加载不了
+    style-src   'self' 'unsafe-inline'   样式表 + 内联 style（结果条/进度条宽度是内联的）
+    img-src     'self' data:             图标/内联图
+    connect-src 'none'   fetch / XHR / WebSocket / sendBeacon 全部禁止 —— 即使 JS 层出现未知逃逸，请求也发不出去
+    worker-src  blob:    判题 Worker 由 Blob URL 创建
+    font-src    'self'   只用系统字体，无远程字体
+  实测（无头 Edge / file:// 双击）：上面这条指令**不需要**额外补 file: —— 本地脚本、内联 style、
+  Blob Worker、new Function、canvas 全部正常，5 个路由无异常。若将来换内核后 file:// 白屏，
+  优先怀疑 script-src 的 'self' 对 file: 的匹配，可临时补 file: 并在提交说明里记录原因。
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; worker-src blob:; font-src 'self'">
 <title>时序竞技场 TSOJ · 时间序列预测在线判题</title>
 <meta name="description" content="时序竞技场 TSOJ：写 predict 函数、提交、打败统计基线得分并解锁题解的纯前端时间序列预测判题平台。">
 <link rel="stylesheet" href="assets/css/style.css">
@@ -42,12 +58,17 @@
 <!-- ============ 引导 / 弹层 ============ -->
 <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true"></div>
 
-<!-- 经典 script 按顺序加载，全部挂到 window.TSJ 命名空间 -->
+<!-- 经典 script 按顺序加载，全部挂到 window.TSJ 命名空间
+     应用层顺序固定：core → store → ui → views → app.js（app.js 必须最后，末尾同步 init()） -->
 <script src="assets/js/datasets.js"></script>
 <script src="assets/js/problems.js"></script>
 <script src="assets/js/judge.js"></script>
 <script src="assets/js/editor.js"></script>
 <script src="assets/js/chart.js"></script>
+<script src="assets/js/app/core.js"></script>
+<script src="assets/js/app/store.js"></script>
+<script src="assets/js/app/ui.js"></script>
+<script src="assets/js/app/views.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
 </html>

@@ -33,9 +33,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * 启动无头浏览器并连上第一个 page target。
+ *
+ * 返回前会内置调用 waitReady()，因此调用方拿到 page 时 `window.TSJ.findProblem` 已可调用、
+ * `#view` 已渲染出内容 —— 不需要再 `sleep(400)` 之类的固定等待。
+ *
  * @param {string} url 要打开的 file:// URL
- * @param {{timeout?: number}} [opts]
- * @returns {Promise<{send: Function, on: Function, close: Function, exceptions: Array, logs: Array}|null>}
+ * @param {{timeout?: number, readyTimeout?: number}} [opts]
+ * @returns {Promise<{send: Function, evaluate: Function, waitReady: Function,
+ *   reload: Function, on: Function, close: Function, exceptions: Array, logs: Array}|null>}
  */
 async function launch(url, opts) {
   const exe = findBrowser();
@@ -154,9 +159,59 @@ async function launch(url, opts) {
     return r.result.value;
   }
 
+  /** 页面就绪判据：TSJ 命名空间可用 + 首个视图已渲染 */
+  const READY_EXPR =
+    '!!(window.TSJ && typeof TSJ.findProblem === "function" && ' +
+    'typeof TSJ.judge === "object" && document.querySelector("#view") && ' +
+    'document.querySelector("#view").innerHTML.length > 0)';
+
+  /**
+   * 轮询等待页面脚本执行完毕（消除「靠固定 sleep 掩盖 flake」的做法）。
+   *
+   * 判据必须包含「TSJ.findProblem 可调用」与「#view 已渲染」两条：
+   *   - 只看 TSJ 存在会在 app.js 还没 init 时提前通过；
+   *   - 只看 #view 非空会在 datasets/problems 尚未挂载时提前通过。
+   *
+   * @param {number} [timeout] 超时毫秒
+   * @returns {Promise<boolean>} 就绪返回 true，超时抛错
+   */
+  async function waitReady(timeout) {
+    const end = Date.now() + (timeout || 15000);
+    let last = '';
+    while (Date.now() < end) {
+      try {
+        const r = await send('Runtime.evaluate', {
+          expression: READY_EXPR,
+          returnByValue: true,
+          allowUnsafeEvalBlockedByCSP: true,
+        });
+        if (r && r.result && r.result.value === true) return true;
+        if (r && r.exceptionDetails) last = r.exceptionDetails.text || 'exception';
+      } catch (e) {
+        last = (e && e.message) || String(e); // 页面重载期间执行上下文会被销毁
+      }
+      await sleep(80);
+    }
+    throw new Error('页面在 ' + (timeout || 15000) + 'ms 内未就绪（TSJ.findProblem 不可用）' + (last ? '：' + last : ''));
+  }
+
+  /**
+   * 重载页面并等待就绪（替代 reload + 固定 sleep）。
+   * @returns {Promise<void>}
+   */
+  async function reload() {
+    await send('Page.reload');
+    await waitReady(15000);
+  }
+
+  // 启动即等待就绪：调用方不再需要 sleep(400) 之类的兜底
+  await waitReady(opts && opts.readyTimeout ? opts.readyTimeout : 15000);
+
   return {
     send,
     evaluate,
+    waitReady,
+    reload,
     exceptions,
     logs,
     on(method, fn) {
