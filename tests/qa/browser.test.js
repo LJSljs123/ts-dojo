@@ -16,7 +16,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { ROOT } = require('./helpers/engine');
+const { ROOT, loadEngine } = require('./helpers/engine');
+const PROBLEM_COUNT = loadEngine().problems.length;
 const { launch, findBrowser } = require('./helpers/cdp');
 
 const INDEX_URL = pathToFileURL(path.join(ROOT, 'index.html')).href;
@@ -63,13 +64,14 @@ test('浏览器可用性检查（无浏览器则跳过）', (t) => {
   assert.ok(page, 'CDP 连接失败');
 });
 
-test('file:// 首屏：无未捕获异常，题库页渲染出 9 道题', async (t) => {
+test('file:// 首屏：无未捕获异常，题库页渲染出全部题目', async (t) => {
   if (!page) return t.skip('无浏览器');
   // 不再需要 sleep(400)：cdp.launch() 内置 waitReady()，拿到 page 时 TSJ.findProblem 已可调用
   const info = await page.evaluate(
     '(function(){return {title:document.title, rows:document.querySelectorAll(".prow").length, view:document.querySelector("#view").innerHTML.length, onboarded: !!document.querySelector(".modal")};})()'
   );
-  assert.equal(info.rows, 9, '题库应有 9 行，实际 ' + info.rows);
+  const want = PROBLEM_COUNT;
+  assert.equal(info.rows, want, '题库应有 ' + want + ' 行，实际 ' + info.rows);
   assert.ok(info.view > 500, '#view 内容过少，疑似渲染失败');
   assert.deepEqual(page.exceptions, [], '首屏出现未捕获异常：' + JSON.stringify(page.exceptions));
 });
@@ -267,7 +269,7 @@ test('localStorage 脏数据（非法 JSON）不影响启动', async (t) => {
   // reload 会保留 hash，先回到题库页再断言
   await goto('#/problems');
   const info = await page.evaluate('(function(){return {rows:document.querySelectorAll(".prow").length};})()');
-  assert.equal(info.rows, 9, '脏数据导致题库渲染失败');
+  assert.equal(info.rows, PROBLEM_COUNT, '脏数据导致题库渲染失败');
   // 非法 JSON / 类型不符的键必须被静默重写成合法默认值
   const rewritten = await page.evaluate(
     "(function(){return {p:localStorage.getItem('tsoj:progress'), d:localStorage.getItem('tsoj:drafts'), f:localStorage.getItem('tsoj:filter')};})()"

@@ -27,22 +27,13 @@ const methods = require(fileOf('methods'));
 const TIERS = methods.tiers.map((t) => t.id);
 
 /**
- * v2.2 第一批的已知缺口：内容层（methods.js，只读）已经把 practice 指向 p10–p15，
- * 但这 6 道新题属于第二批施工范围，当前 TSJ.problems 里还没有。
+ * practice 引用白名单：methods.js 里每条方法的 practice 指向的题目必须真实存在。
  *
- * 这里不是「放宽断言」，而是把缺口固定成一份精确清单：
- *   - 断言 missing 恰好等于 PENDING（多一个、少一个都失败）；
- *   - 第二批把 6 道题加进 problems.js 后 missing 会变成 []，本用例会立刻失败，
- *     迫使维护者把 PENDING 清空 —— 缺口不会悄悄变成永久豁免。
+ * v2.2 第二批（p10–p15 落地）之后这里就是空的 —— 空名单意味着「一个都不许缺」。
+ * 如果将来又出现「内容层先行、题目后补」的过渡期，请把缺口作为精确清单临时列在这里，
+ * 并在题目落地后立刻清空；本文件下方的反向断言会在题落地后强制提醒清理。
  */
-const PENDING_PRACTICE = [
-  'p10-theta',
-  'p11-ar-yw',
-  'p12-croston',
-  'p13-harmonic',
-  'p14-combination',
-  'p15-dlinear',
-];
+const PENDING_PRACTICE = [];
 
 const INDEX_URL = pathToFileURL(path.join(ROOT, 'index.html')).href;
 const HAS_BROWSER = !!findBrowser();

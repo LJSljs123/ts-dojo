@@ -385,6 +385,449 @@
     return out;
   }
 
+  /* ================================================================== *
+   * 0.5 高阶题参考解（P10–P15）
+   *
+   * 这六道题对应方法库里「经典统计」与「竞赛级方法」两层的可练条目：
+   *   P10 Theta 方法        —— Assimakopoulos & Nikolopoulos, IJF 2000（M3 冠军）
+   *   P11 AR(p) Yule-Walker —— Box & Jenkins 传统，闭式解
+   *   P12 Croston 法        —— Syntetos & Boylan, IJF 2005（间歇需求）
+   *   P13 周期图 + 谐波回归  —— 经典谱分析，频域方法的思想源头
+   *   P14 组合预测          —— Bates & Granger 1969，M4 的核心结论
+   *   P15 DLinear 分解线性  —— Zeng et al., AAAI 2023
+   * ================================================================== */
+
+  /**
+   * P10 Theta 方法：θ=0 线（线性回归）与 θ=2 线（SES）各占一半，再加回季节。
+   * 两个极简模型拼起来打赢任何单一基线 —— 这正是 M3 冠军的做法。
+   */
+  function solTheta(history, horizon, ctx) {
+    var n = history.length;
+    var m = (ctx && ctx.season > 1) ? ctx.season : 1;
+    var i;
+
+    // 1) 先用全局 OLS 去掉趋势，再按相位求残差均值，得到加性季节项（归一后和为 0）
+    var sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (i = 0; i < n; i++) { sx += i; sy += history[i]; sxx += i * i; sxy += i * history[i]; }
+    var den = n * sxx - sx * sx;
+    var slope = Math.abs(den) < 1e-12 ? 0 : (n * sxy - sx * sy) / den;
+    var icept = (sy - slope * sx) / n;
+
+    var s = null;
+    if (m > 1) {
+      var sum = [], cnt = [];
+      for (i = 0; i < m; i++) { sum.push(0); cnt.push(0); }
+      for (i = 0; i < n; i++) { var p = i % m; sum[p] += history[i] - (icept + slope * i); cnt[p]++; }
+      s = [];
+      var mean = 0;
+      for (i = 0; i < m; i++) { s.push(cnt[i] > 0 ? sum[i] / cnt[i] : 0); mean += s[i]; }
+      mean /= m;
+      for (i = 0; i < m; i++) s[i] -= mean;
+    }
+
+    // 2) 去季节序列
+    var d = [];
+    for (i = 0; i < n; i++) d.push(history[i] - (s ? s[i % m] : 0));
+
+    // 3) θ=0 线：对去季节序列再做一次 OLS 直线（长期趋势）
+    var ax = 0, ay = 0, axx = 0, axy = 0;
+    for (i = 0; i < n; i++) { ax += i; ay += d[i]; axx += i * i; axy += i * d[i]; }
+    var den2 = n * axx - ax * ax;
+    var b0 = Math.abs(den2) < 1e-12 ? 0 : (n * axy - ax * ay) / den2;
+    var a0 = (ay - b0 * ax) / n;
+
+    // 4) θ=2 线：SES（α=0.2），取末端水平（短期）
+    var alpha = 0.2;
+    var level = d[0];
+    for (i = 1; i < n; i++) level = alpha * d[i] + (1 - alpha) * level;
+
+    // 5) 0.5 / 0.5 组合，再加回季节
+    var out = [];
+    for (var h = 0; h < horizon; h++) {
+      var t = n + h;
+      var v = 0.5 * (a0 + b0 * t) + 0.5 * level;
+      if (s) v += s[t % m];
+      out.push(v);
+    }
+    return out;
+  }
+
+  /**
+   * P11 AR(p)：Yule-Walker 方程 + Levinson-Durbin 递推，闭式解、无需迭代优化。
+   */
+  function solArYW(history, horizon, ctx) {
+    var n = history.length;
+    var p = Math.min(10, Math.max(1, Math.floor(n / 4)));
+    var i, k;
+
+    var mu = 0;
+    for (i = 0; i < n; i++) mu += history[i];
+    mu /= n;
+    var x = [];
+    for (i = 0; i < n; i++) x.push(history[i] - mu);
+
+    // 自协方差 γ(0..p)
+    var g = [];
+    for (k = 0; k <= p; k++) {
+      var acc = 0;
+      for (i = 0; i + k < n; i++) acc += x[i] * x[i + k];
+      g.push(acc / n);
+    }
+    // 常数序列：没有可提取的自相关结构，直接给均值
+    if (!(g[0] > 1e-12)) {
+      var flat = [];
+      for (i = 0; i < horizon; i++) flat.push(mu);
+      return flat;
+    }
+
+    // Levinson-Durbin：递推解 Toeplitz 方程 Γ_p φ = γ_p
+    var prev = null, err = g[0], phi = null;
+    for (k = 0; k < p; k++) {
+      var cur = new Array(p + 1).fill(0);
+      if (k === 0) {
+        cur[1] = g[1] / g[0];
+        err = g[0] * (1 - cur[1] * cur[1]);
+      } else {
+        var num = g[k + 1];
+        for (i = 1; i <= k; i++) num -= prev[i] * g[k + 1 - i];
+        var refl = num / err;
+        cur[k + 1] = refl;
+        for (i = 1; i <= k; i++) cur[i] = prev[i] - refl * prev[k + 1 - i];
+        err = err * (1 - refl * refl);
+      }
+      if (!(err > 1e-12)) { cur = new Array(p + 1).fill(0); err = 1e-12; }
+      prev = cur;
+      phi = cur;
+    }
+
+    // 多步递推：用已预测的值回填
+    var ext = x.slice();
+    for (var h = 1; h <= horizon; h++) {
+      var v = 0;
+      for (i = 1; i <= p; i++) v += phi[i] * ext[ext.length - i];
+      ext.push(v);
+    }
+    var out = [];
+    for (var j = 0; j < horizon; j++) out.push(mu + ext[n + j]);
+    return out;
+  }
+
+  /**
+   * P12 Croston 法（含 SBA 偏差修正）：需求量与需求间隔分开平滑。
+   */
+  /**
+   * P12 TSB（Teunter-Syntetos-Babai, IJPE 2011）：
+   * 不估「间隔」而直接估「本月有需求」的概率 q，预测 q · z。
+   * 对需求频率的变化比 Croston / SBA 更敏感。
+   */
+  function solTsb(history, horizon, ctx) {
+    var n = history.length;
+    var alpha = 0.05;   // 非零需求量 z 的平滑系数
+    var beta = 0.1;     // 需求发生概率 q 的平滑系数
+    var prob = 1;       // 平滑后的「本月有需求」概率
+    var z = null;       // 平滑后的「非零需求量」
+
+    for (var i = 0; i < n; i++) {
+      var v = history[i];
+      var occurred = v > 0 ? 1 : 0;
+      prob = beta * occurred + (1 - beta) * prob;
+      if (!occurred) continue;
+      if (z === null) { z = v; }
+      else { z += alpha * (v - z); }
+    }
+    // 全程零需求：没什么可预测的
+    if (z === null || !(prob > 0)) {
+      var zeros = [];
+      for (var j = 0; j < horizon; j++) zeros.push(0);
+      return zeros;
+    }
+    var rate = prob * z;
+    var out = [];
+    for (var k = 0; k < horizon; k++) out.push(rate);
+    return out;
+  }
+
+  /**
+   * P13 周期图 + 谐波回归：先用功率谱估周期，再最小二乘外推。
+   */
+  function solHarmonic(history, horizon, ctx) {
+    var n = history.length;
+    var i, j;
+
+    // 1) 周期图：先去掉线性趋势，再在整数周期上求功率
+    var sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (i = 0; i < n; i++) { sx += i; sy += history[i]; sxx += i * i; sxy += i * history[i]; }
+    var den = n * sxx - sx * sx;
+    var b = Math.abs(den) < 1e-12 ? 0 : (n * sxy - sx * sy) / den;
+    var a = (sy - b * sx) / n;
+
+    var d = [];
+    for (i = 0; i < n; i++) d.push(history[i] - (a + b * i));
+
+    var best = [];
+    for (var P = 4; P <= Math.floor(n / 2); P++) {
+      var re = 0, im = 0;
+      for (i = 0; i < n; i++) {
+        var w = 2 * Math.PI * i / P;
+        re += d[i] * Math.cos(w);
+        im += d[i] * Math.sin(w);
+      }
+      best.push({ P: P, power: (re * re + im * im) / n });
+    }
+    best.sort(function (u, v) { return v.power - u.power; });
+    // 取 top-3，并去掉彼此成倍数关系的（同一个物理周期的谐波）
+    var periods = [];
+    for (i = 0; i < best.length && periods.length < 3; i++) {
+      var cand = best[i].P;
+      var dup = false;
+      for (j = 0; j < periods.length; j++) {
+        if (cand % periods[j] === 0 || periods[j] % cand === 0) { dup = true; break; }
+      }
+      if (!dup && best[i].power > 1e-9) periods.push(cand);
+    }
+    if (periods.length === 0) periods.push(12);
+
+    // 2) 设计矩阵：[截距, 时间, 每个周期的 cos / sin]，直接对原序列做最小二乘
+    var ncol = 2 + 2 * periods.length;
+    var A = [];
+    for (i = 0; i < n; i++) {
+      var row = [1, i];
+      for (j = 0; j < periods.length; j++) {
+        var w2 = 2 * Math.PI * i / periods[j];
+        row.push(Math.cos(w2));
+        row.push(Math.sin(w2));
+      }
+      A.push(row);
+    }
+    var coef = lstsq(A, history, ncol);
+
+    // 3) 外推
+    var out = [];
+    for (var h = 0; h < horizon; h++) {
+      var t = n + h;
+      var v = coef[0] + coef[1] * t;
+      for (j = 0; j < periods.length; j++) {
+        var w3 = 2 * Math.PI * t / periods[j];
+        v += coef[2 + 2 * j] * Math.cos(w3) + coef[3 + 2 * j] * Math.sin(w3);
+      }
+      out.push(v);
+    }
+    return out;
+
+    /** 正规方程 + 列主元高斯消元（带极小 ridge 防止奇异）。 */
+    function lstsq(M, y, nc) {
+      var ata = [], aty = [];
+      for (var c1 = 0; c1 < nc; c1++) { ata.push(new Array(nc).fill(0)); aty.push(0); }
+      for (var r = 0; r < M.length; r++) {
+        for (var c2 = 0; c2 < nc; c2++) {
+          aty[c2] += M[r][c2] * y[r];
+          for (var c3 = 0; c3 < nc; c3++) ata[c2][c3] += M[r][c2] * M[r][c3];
+        }
+      }
+      for (var c4 = 0; c4 < nc; c4++) ata[c4][c4] += 1e-8;
+      for (var col = 0; col < nc; col++) {
+        var piv = col;
+        for (var rr = col + 1; rr < nc; rr++) {
+          if (Math.abs(ata[rr][col]) > Math.abs(ata[piv][col])) piv = rr;
+        }
+        if (piv !== col) {
+          var tmp = ata[piv]; ata[piv] = ata[col]; ata[col] = tmp;
+          var t2 = aty[piv]; aty[piv] = aty[col]; aty[col] = t2;
+        }
+        var dd = ata[col][col];
+        if (Math.abs(dd) < 1e-12) continue;
+        for (var r2 = col + 1; r2 < nc; r2++) {
+          var f = ata[r2][col] / dd;
+          if (f === 0) continue;
+          for (var cc = col; cc < nc; cc++) ata[r2][cc] -= f * ata[col][cc];
+          aty[r2] -= f * aty[col];
+        }
+      }
+      var xs = new Array(nc).fill(0);
+      for (var r3 = nc - 1; r3 >= 0; r3--) {
+        var s2 = aty[r3];
+        for (var cc2 = r3 + 1; cc2 < nc; cc2++) s2 -= ata[r3][cc2] * xs[cc2];
+        xs[r3] = Math.abs(ata[r3][r3]) < 1e-12 ? 0 : s2 / ata[r3][r3];
+      }
+      return xs;
+    }
+  }
+
+  /**
+   * P14 组合预测：五个候选（Holt-Winters / Holt / SES / 季节朴素 / 漂移朴素）取中位数。
+   * 中位数比加权平均更稳 —— 这是 M4 之后被反复验证的结论。
+   */
+  function solCombination(history, horizon, ctx) {
+    var m = (ctx && ctx.season > 1) ? ctx.season : 1;
+
+    function ses(hist, alpha, h) {
+      var l = hist[0];
+      for (var i = 1; i < hist.length; i++) l = alpha * hist[i] + (1 - alpha) * l;
+      var o = []; for (var j = 0; j < h; j++) o.push(l); return o;
+    }
+    function holt(hist, alpha, beta, h) {
+      var l = hist[0], tr = hist.length > 1 ? hist[1] - hist[0] : 0;
+      for (var i = 1; i < hist.length; i++) {
+        var prev = l;
+        l = alpha * hist[i] + (1 - alpha) * (l + tr);
+        tr = beta * (l - prev) + (1 - beta) * tr;
+      }
+      var o = []; for (var j = 0; j < h; j++) o.push(l + (j + 1) * tr); return o;
+    }
+    function seasNaive(hist, h) {
+      var T = hist.length - 1, o = [];
+      for (var j = 0; j < h; j++) {
+        var hh = j + 1;
+        var lag = m * Math.ceil(hh / m);
+        var idx = T + hh - lag;
+        o.push(idx >= 0 ? hist[idx] : hist[0]);
+      }
+      return o;
+    }
+    function driftNaive(hist, h) {
+      var last = hist[hist.length - 1];
+      var sl = hist.length > 1 ? (hist[hist.length - 1] - hist[0]) / (hist.length - 1) : 0;
+      var o = []; for (var j = 0; j < h; j++) o.push(last + (j + 1) * sl); return o;
+    }
+    function hwAdditive(hist, h, alpha, beta, gamma) {
+      var len = hist.length;
+      if (m <= 1 || len < 2 * m) return null;
+      var l = 0, tr = 0, s = [];
+      for (var i = 0; i < m; i++) { s.push(hist[i]); l += hist[i]; }
+      l /= m;
+      tr = (hist[m] - hist[0]) / m;
+      for (var t = 1; t < len; t++) {
+        var ph = t % m, prev = l;
+        l = alpha * (hist[t] - s[ph]) + (1 - alpha) * (l + tr);
+        tr = beta * (l - prev) + (1 - beta) * tr;
+        s[ph] = gamma * (hist[t] - l) + (1 - gamma) * s[ph];
+      }
+      var o = [];
+      for (var j = 0; j < h; j++) o.push(l + (j + 1) * tr + s[(len + j) % m]);
+      return o;
+    }
+
+    var members = [];
+    var hw = hwAdditive(history, horizon, 0.3, 0.05, 0.3);
+    if (hw) members.push(hw);
+    members.push(holt(history, 0.3, 0.1, horizon));
+    members.push(ses(history, 0.3, horizon));
+    members.push(seasNaive(history, horizon));
+    members.push(driftNaive(history, horizon));
+
+    var out = [];
+    for (var h = 0; h < horizon; h++) {
+      var col = [];
+      for (var c = 0; c < members.length; c++) col.push(members[c][h]);
+      col.sort(function (u, v) { return u - v; });
+      var mid = col.length >> 1;
+      out.push(col.length % 2 ? col[mid] : (col[mid - 1] + col[mid]) / 2);
+    }
+    return out;
+  }
+
+  /**
+   * P15 DLinear：趋势 / 季节分解，两条分支各做一次线性映射。
+   * 论文里那两层是训练出来的，这里用最小二乘在历史窗口上拟合等价映射。
+   */
+  function solDLinear(history, horizon, ctx) {
+    var n = history.length;
+    var m = (ctx && ctx.season > 1) ? ctx.season : 1;
+    var L = Math.min(2 * m, n);
+    var i, j;
+
+    /** 列主元高斯消元解 A x = b。 */
+    function gauss(A, rhs) {
+      var nc = rhs.length;
+      var M = [], v = [];
+      for (i = 0; i < nc; i++) { M.push(A[i].slice()); v.push(rhs[i]); }
+      for (var col = 0; col < nc; col++) {
+        var piv = col;
+        for (var r = col + 1; r < nc; r++) {
+          if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+        }
+        if (piv !== col) {
+          var t1 = M[piv]; M[piv] = M[col]; M[col] = t1;
+          var t2 = v[piv]; v[piv] = v[col]; v[col] = t2;
+        }
+        var dd = M[col][col];
+        if (Math.abs(dd) < 1e-14) continue;
+        for (var r2 = col + 1; r2 < nc; r2++) {
+          var f = M[r2][col] / dd;
+          if (f === 0) continue;
+          for (var c = col; c < nc; c++) M[r2][c] -= f * M[col][c];
+          v[r2] -= f * v[col];
+        }
+      }
+      var xs = new Array(nc).fill(0);
+      for (var r3 = nc - 1; r3 >= 0; r3--) {
+        var s = v[r3];
+        for (var c2 = r3 + 1; c2 < nc; c2++) s -= M[r3][c2] * xs[c2];
+        xs[r3] = Math.abs(M[r3][r3]) < 1e-14 ? 0 : s / M[r3][r3];
+      }
+      return xs;
+    }
+
+    /**
+     * 拟合「长度为 Lv 的窗口 → 未来 hz 步」的线性映射（ridge 正则的最小二乘）。
+     * @returns {Array|null} W[k] 是第 k 步的权重向量；样本不足时返回 null
+     */
+    function fitMap(seq, Lv, hz) {
+      var rows = seq.length - Lv - hz + 1;
+      if (rows < Lv + 2) return null;
+      var A = [], B = [];
+      for (i = 0; i < Lv; i++) { A.push(new Array(Lv).fill(0)); B.push(new Array(hz).fill(0)); }
+      for (var r = 0; r < rows; r++) {
+        var x = seq.slice(r, r + Lv);
+        var y = seq.slice(r + Lv, r + Lv + hz);
+        for (var p1 = 0; p1 < Lv; p1++) {
+          for (var p2 = 0; p2 < Lv; p2++) A[p1][p2] += x[p1] * x[p2];
+          for (var c = 0; c < hz; c++) B[p1][c] += x[p1] * y[c];
+        }
+      }
+      for (var q = 0; q < Lv; q++) A[q][q] += 1e-6;
+      var W = [];
+      for (var k = 0; k < hz; k++) {
+        var col = [];
+        for (var q2 = 0; q2 < Lv; q2++) col.push(B[q2][k]);
+        W.push(gauss(A, col));
+      }
+      return W;
+    }
+
+    // 1) 趋势 = 居中移动平均（窗口 2m+1，边界用可用点）
+    var ww = 2 * m + 1;
+    var trend = [];
+    for (i = 0; i < n; i++) {
+      var lo = Math.max(0, i - m), hi = Math.min(n - 1, i + m);
+      var s = 0;
+      for (j = lo; j <= hi; j++) s += history[j];
+      trend.push(s / (hi - lo + 1));
+    }
+    // 2) 季节 = 残差
+    var seas = [];
+    for (i = 0; i < n; i++) seas.push(history[i] - trend[i]);
+
+    var Wt = fitMap(trend, L, horizon);
+    var Ws = fitMap(seas, L, horizon);
+    if (!Wt || !Ws) {
+      // 样本不足以拟合映射：退化为「重复最后一个观测值」，至少不会崩
+      var fb = [];
+      for (var h = 0; h < horizon; h++) fb.push(history[n - 1]);
+      return fb;
+    }
+
+    var lastT = trend.slice(n - L);
+    var lastS = seas.slice(n - L);
+    var out = [];
+    for (var h2 = 0; h2 < horizon; h2++) {
+      var vt = 0, vs = 0;
+      for (var q3 = 0; q3 < L; q3++) { vt += Wt[h2][q3] * lastT[q3]; vs += Ws[h2][q3] * lastS[q3]; }
+      out.push(vt + vs);
+    }
+    return out;
+  }
+
   /**
    * 把参考解函数转成用户可见的代码字符串（函数名统一改成 predict）。
    * @param {Function} fn 参考解函数
@@ -1298,6 +1741,679 @@
         '  var out = [];',
         '  for (var h = 1; h <= horizon; h++) {',
         '    out.push(level + h * trend + season[(n + h - 1) % m]);',
+        '  }',
+        '  return out;',
+        '}'
+      ].join('\n')
+    },
+
+    /* ---------------- P10 ---------------- */
+    {
+      id: 'p10-theta',
+      index: 10,
+      title: 'Theta 方法：两个笨模型拼赢一个聪明模型',
+      difficulty: '提高',
+      tags: ['Theta', 'M3 冠军', '组合', '去季节'],
+      points: 100,
+      passScore: 60,
+      dataset: 'retail',
+      mode: 'holdout',
+      horizon: 12,
+      metric: 'mse',
+      baselines: ['naive', 'seasonal_naive', 'mean', 'linear_trend'],
+      threshold: 0.7,
+      passRate: 24,
+
+      statement: [
+        '### 背景',
+        '',
+        'Theta 方法是 M3 竞赛的冠军方法（Assimakopoulos & Nikolopoulos，',
+        '*International Journal of Forecasting*，2000）。它的思路朴素得几乎不像一个「模型」：',
+        '',
+        '把去季节后的序列拆成两条 theta 线，各取一半相加：',
+        '',
+        '- **θ = 0 线**：对时间做最小二乘的直线，负责长期趋势；',
+        '- **θ = 2 线**：简单指数平滑（SES）的末端水平，负责短期状态。',
+        '',
+        '两个极简模型各管一头，拼起来就能在大量月度 / 季度序列上打赢任何单一基线。',
+        '这道题要你完整实现一遍：去季节 → 两条线 → 0.5 / 0.5 组合 → 加回季节。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`retail`（周零售额，单位：万元）',
+        '- 长度：156 点（3 年），季节周期 52',
+        '- 形态：线性趋势（每周约 +2.6 万元）+ 52 周季节（振幅约 ±17%）+ 固定节奏促销（每 13 周）+ 随机促销尖峰',
+        '- 评估方式：留出法。前 144 点作为 `history`，最后 12 周作为测试集',
+        '',
+        '### 任务',
+        '',
+        '实现 `predict`，用 Theta 方法给出未来 12 周预测。',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**MSE**',
+        '- 对照基线：`naive`、`seasonal_naive`、`mean`、`linear_trend`，取误差最小者',
+        '- `ratio <= 0.5` 满分，`ratio = 0.7` 恰好 60 分，`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '本题真正的对手是 `mean`：它完全放弃趋势，但在这种振幅不大的序列上反而很稳。',
+        '想赢过它，两条线都必须真的实现 —— 只留 θ=0 线就是一条纯直线，赢不了。',
+        '',
+        '所以本题的关键是：**季节项要按相位求均值并归一（让 52 个相位的季节项之和为 0），',
+        'θ=2 线要用 SES 的末端水平而不是又一次最小二乘**。'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 144 个历史周零售额（万元），`ctx.season = 52`。',
+      outputSpec: '`number[]` —— 长度必须为 12。',
+
+      hints: [
+        '先跑一次模板：它只输出了 θ=0 线（纯直线 + 季节项），θ=2 线完全没实现。',
+        '季节项不要直接拿残差均值用 —— 52 个相位的均值加起来通常不为 0，会让整体水平被抬高或压低。先求平均再整体减去这个平均。',
+        'θ=2 线是指数平滑：`level = a * d[t] + (1 - a) * level`，取循环结束时的 `level`，不要再拟合一次直线。',
+        '外推时两条线用的是同一个未来时刻 `t = n + h`，季节项也用同一个时刻的 `t % m` —— 三者必须对齐。'
+      ],
+
+      solution: toPredictSource(solTheta),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  var n = history.length;',
+        '  var m = ctx.season > 1 ? ctx.season : 1;',
+        '  var i;',
+        '',
+        '  // 1) 全局最小二乘直线',
+        '  var sx = 0, sy = 0, sxx = 0, sxy = 0;',
+        '  for (i = 0; i < n; i++) {',
+        '    sx += i; sy += history[i]; sxx += i * i; sxy += i * history[i];',
+        '  }',
+        '  var den = n * sxx - sx * sx;',
+        '  var slope = Math.abs(den) < 1e-12 ? 0 : (n * sxy - sx * sy) / den;',
+        '  var intercept = (sy - slope * sx) / n;',
+        '',
+        '  // 2) 相位残差剖面（加性季节项）',
+        '  var sum = [], cnt = [];',
+        '  for (i = 0; i < m; i++) { sum.push(0); cnt.push(0); }',
+        '  for (i = 0; i < n; i++) {',
+        '    var p = i % m;',
+        '    sum[p] += history[i] - (intercept + slope * i);',
+        '    cnt[p]++;',
+        '  }',
+        '  var season = [];',
+        '  for (i = 0; i < m; i++) season.push(cnt[i] > 0 ? sum[i] / cnt[i] : 0);',
+        '',
+        '  // TODO: 季节项还没归一化。52 个相位的均值加起来一般不为 0，',
+        '  //       会把整体水平顶高或压低。请先求 season 的平均值，再整体减掉它。',
+        '',
+        '  // TODO: θ=2 线还没实现。请在去季节序列上做 SES（a 取 0.2），',
+        '  //       取循环结束时的末端水平 level。',
+        '',
+        '  // 3) 目前只有 θ=0 线：纯直线 + 季节项',
+        '  var out = [];',
+        '  for (var h = 0; h < horizon; h++) {',
+        '    var t = n + h;',
+        '    out.push(intercept + slope * t + season[t % m]);',
+        '  }',
+        '  return out;',
+        '}'
+      ].join('\n')
+    },
+
+    /* ---------------- P11 ---------------- */
+    {
+      id: 'p11-ar-yw',
+      index: 11,
+      title: 'AR(p) 与 Yule-Walker：不训练的闭式自回归',
+      difficulty: '挑战',
+      tags: ['自回归', 'Box-Jenkins', 'Levinson-Durbin', '闭式解'],
+      points: 100,
+      passScore: 60,
+      dataset: 'sunspot',
+      mode: 'holdout',
+      horizon: 8,
+      metric: 'mse',
+      baselines: ['naive', 'mean', 'linear_trend'],
+      threshold: 0.75,
+      passRate: 18,
+
+      statement: [
+        '### 背景',
+        '',
+        'AR(p) 是 Box-Jenkins 传统（1970）的核心构件：把当前值写成过去 p 个值的线性组合。',
+        '它的参数不需要迭代优化 —— 自协方差满足一组 **Yule-Walker 方程**：',
+        '',
+        '```',
+        'Γ_p · φ = γ_p',
+        '```',
+        '',
+        '其中 `Γ_p` 是由自协方差组成的 Toeplitz 矩阵，`γ_p` 是滞后 1..p 的自协方差。',
+        '这个方程可以用 **Levinson-Durbin 递推**在 O(p²) 内精确解出，全程闭式。',
+        '',
+        '太阳黑子数是最经典的 AR 适用序列：有明显的自相关和约 11 年的周期，',
+        '而它又是年度数据（`ctx.season = 11`，不要指望季节朴素法）。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`sunspot`（太阳黑子相对数，年度）',
+        '- 长度：300 点，季节周期 11',
+        '- 形态：均值约 55，标准差约 45，含约 11 年周期与明显的自相关',
+        '- 评估方式：留出法。前 292 点作为 `history`，最后 8 年作为测试集',
+        '',
+        '### 任务',
+        '',
+        '实现 `predict`：估自协方差 → Levinson-Durbin 解 Yule-Walker → 多步递推预测 8 年。',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**MSE**',
+        '- 对照基线：`naive`、`mean`、`linear_trend`，取误差最小者',
+        '- `ratio <= 0.5` 满分，`ratio = 0.75` 恰好 60 分，`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '这里最强的对手是 `mean`：太阳黑子长期围绕一个水平波动，均值预测相当稳。',
+        'AR(p) 要赢，必须真的把自相关结构利用起来 —— 只套个公式但解错了方程是赢不了的。',
+        '',
+        '所以本题的关键是：**解的是 Toeplitz 方程，不是把自相关系数直接当 AR 系数**。'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 292 个年度太阳黑子数，`ctx.season = 11`。',
+      outputSpec: '`number[]` —— 长度必须为 8，且不含 NaN / Infinity。',
+
+      hints: [
+        '先跑一次模板：它把自相关系数 γ(k)/γ(0) 直接当成 AR 系数用，这是最常见的错误。',
+        '正确的做法是解方程：Γ_p φ = γ_p。Γ_p 的第 (i,j) 个元素是 γ(|i-j|)，右边是 γ(1..p)。',
+        'Levinson-Durbin 递推：从一阶开始，每阶用反射系数把上一阶的系数更新到本阶，同时更新预测误差方差。',
+        '多步预测要把刚预测出来的值回填进历史再预测下一步（`ext` 数组边算边推）。',
+        '如果 γ(0) 接近 0（序列几乎是常数），直接返回均值，不要除零。'
+      ],
+
+      solution: toPredictSource(solArYW),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  var n = history.length;',
+        '  var p = Math.min(10, Math.max(1, Math.floor(n / 4)));',
+        '  var i, k;',
+        '',
+        '  var mu = 0;',
+        '  for (i = 0; i < n; i++) mu += history[i];',
+        '  mu /= n;',
+        '',
+        '  var x = [];',
+        '  for (i = 0; i < n; i++) x.push(history[i] - mu);',
+        '',
+        '  // 1) 自协方差 γ(0..p)',
+        '  var g = [];',
+        '  for (k = 0; k <= p; k++) {',
+        '    var acc = 0;',
+        '    for (i = 0; i + k < n; i++) acc += x[i] * x[i + k];',
+        '    g.push(acc / n);',
+        '  }',
+        '  if (!(g[0] > 1e-12)) {',
+        '    var flat = [];',
+        '    for (i = 0; i < horizon; i++) flat.push(mu);',
+        '    return flat;',
+        '  }',
+        '',
+        '  // TODO: 这里直接把自相关系数当成 AR 系数 —— 错了。',
+        '  //       自相关 ρ(k) = γ(k)/γ(0) 不是 AR 系数 φ。',
+        '  //       请用 Levinson-Durbin 递推解 Yule-Walker 方程 Γ_p φ = γ_p。',
+        '  var phi = [];',
+        '  for (k = 0; k <= p; k++) phi.push(g[k] / g[0]);',
+        '',
+        '  // 2) 多步递推',
+        '  var ext = x.slice();',
+        '  for (var h = 1; h <= horizon; h++) {',
+        '    var v = 0;',
+        '    for (i = 1; i <= p; i++) v += phi[i] * ext[ext.length - i];',
+        '    ext.push(v);',
+        '  }',
+        '',
+        '  var out = [];',
+        '  for (var j = 0; j < horizon; j++) out.push(mu + ext[n + j]);',
+        '  return out;',
+        '}'
+      ].join('\n')
+    },
+
+    /* ---------------- P12 ---------------- */
+    {
+      id: 'p12-croston',
+      index: 12,
+      title: '间歇需求：把需求量与需求频率分开估计',
+      difficulty: '提高',
+      tags: ['间歇需求', '零膨胀', '库存', 'Croston', 'TSB'],
+      points: 100,
+      passScore: 60,
+      dataset: 'intermittent',
+      mode: 'holdout',
+      horizon: 12,
+      metric: 'mae',
+      baselines: ['naive', 'mean', 'seasonal_naive', 'moving_average'],
+      threshold: 0.85,
+      passRate: 22,
+
+      statement: [
+        '### 背景',
+        '',
+        '间歇需求（intermittent demand）是指「大量月份完全没有需求、偶尔来一单」的序列，',
+        '典型如备件、慢销品、B2B 订单。这类序列的麻烦在于：**均值被大量零稀释，',
+        '方差被偶发大单放大**，任何「把整段历史一锅平滑」的做法都只能给出一个含糊的中间值。',
+        '',
+        'Croston（1972）的做法是把两件事分开估计：',
+        '',
+        '- **非零需求量** `z`：只在有需求的月份更新；',
+        '- **需求间隔** `p`：只在有需求的月份更新「距上次需求过了多久」。',
+        '',
+        '需求率 = `z / p`。Syntetos & Boylan（*IJF*，2005）指出 Croston 对需求率',
+        '系统性偏高，乘以修正因子 `(1 - α/2)` 即 SBA。Teunter、Syntetos & Babai',
+        '（*IJPE*，2011）的 TSB 则换成直接平滑「本月是否有需求」的概率 `q`，',
+        '预测 `q · z`，对需求频率的变化更敏感 —— 本题参考解用的就是 TSB。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`intermittent`（月度备件需求，单位：件）',
+        '- 长度：120 个月（10 年）',
+        '- 形态：约半数月份为零；有需求的月份 20–180 件；随备件进入服役中后期，',
+        '  需求频率由约 18% 升至约 85%、单次量级放大约 1.2 倍；偶发 3–5 倍大单',
+        '- 评估方式：留出法。前 108 个月作为 `history`，最后 12 个月作为测试集',
+        '',
+        '### 任务',
+        '',
+        '实现 `predict`：把「需求量」与「需求频率」分开估计，输出未来 12 个月的需求率。',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**MAE**（间歇需求用 MAE 比 MSE 合理，不受偶发大单支配）',
+        '- 对照基线：`naive`、`mean`、`seasonal_naive`、`moving_average`，取误差最小者',
+        '- `ratio <= 0.5` 满分，`ratio = 0.85` 恰好 60 分，`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '四个基线会以四种方式失败：',
+        '',
+        '- `naive`：重复最后一个月的值 —— 那个值要么是 0（灾难性低估），要么是一笔偶发大单（严重高估）；',
+        '- `seasonal_naive`：滞后 12 个月，把一年前的随机波动原样搬过来；',
+        '- `moving_average`：对原序列取近 12 个月均值，被大量零稀释；',
+        '- `mean`：全局均值，跟不上服役期内的上升。',
+        '',
+        '一句实话：本题并不阻止你用别的办法过关。服役中后期需求变密之后，',
+        '「用很小的 α 直接平滑原序列」也能打到阈值附近 —— 这是间歇需求文献里',
+        '被反复验证过的现象（Kourentzes，*IJF*，2014：平滑法在不少真实序列上',
+        '并不输给 Croston 家族）。值得你自己试一把，再想清楚它为什么追了上来。'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 108 个月备件需求（件），`ctx.season = 12`。',
+      outputSpec: '`number[]` —— 长度必须为 12，元素为有限数值。',
+
+      hints: [
+        '模板用的是「重复最近一次非零需求」—— 把一笔偶发大单当常态，也完全没用到需求频率。',
+        'Croston 的循环里，遇到 0 只累加间隔 `since`，不碰 `z`；遇到非零值才同时更新 `z` 和 `p`。',
+        '`p` 的初值是「从序列开头到第一个非零需求的月数」，不是 1。',
+        'TSB 更直接：单独平滑「本月有需求」的概率 `q`（初值 1，β 取 0.1），预测 `q · z`。',
+        '如果整个历史一个非零值都没有，返回全 0，不要除零。'
+      ],
+
+      solution: toPredictSource(solTsb),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  var n = history.length;',
+        '',
+        '  // TODO: 这里只是「重复最近一次非零需求」—— 把一笔偶发大单当成了常态，',
+        '  //       也完全没有利用需求频率。请把「需求量」与「需求频率/间隔」分开估计。',
+        '  var last = 0;',
+        '  for (var i = 0; i < n; i++) {',
+        '    if (history[i] > 0) last = history[i];',
+        '  }',
+        '',
+        '  var out = [];',
+        '  for (var j = 0; j < horizon; j++) out.push(last);',
+        '  return out;',
+        '}'
+      ].join('\n')
+    },
+
+    /* ---------------- P13 ---------------- */
+    {
+      id: 'p13-harmonic',
+      index: 13,
+      title: '周期图 + 谐波回归：让数据自己说出周期',
+      difficulty: '提高',
+      tags: ['频域', '周期图', '谐波回归', '最小二乘'],
+      points: 100,
+      passScore: 60,
+      dataset: 'temperature',
+      mode: 'holdout',
+      horizon: 24,
+      metric: 'mse',
+      baselines: ['seasonal_naive', 'naive', 'mean', 'linear_trend'],
+      threshold: 0.75,
+      passRate: 20,
+
+      statement: [
+        '### 背景',
+        '',
+        '谐波回归的思路：把序列写成「截距 + 线性趋势 + 若干组 sin/cos」的形式，',
+        '然后用最小二乘解出系数。周期**不必事先知道** —— 可以先用**周期图**',
+        '（离散傅里叶变换的功率谱）从数据里把主导频率找出来。',
+        '',
+        '这是所有频域深度模型（FEDformer、TimesNet 等）的思想源头：',
+        '先估计周期，再在周期结构上建模。本题用最经典的谱分析把它完整走一遍。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`temperature`（日平均气温，单位：℃）',
+        '- 长度：730 点（2 年），季节周期 365',
+        '- 形态：强年周期（正弦型）+ 缓慢上升趋势 + 噪声',
+        '- 评估方式：留出法。前 706 点作为 `history`，最后 24 天作为测试集',
+        '',
+        '### 任务',
+        '',
+        '实现 `predict`：算周期图 → 取 top-3 周期 → 构造设计矩阵 → 最小二乘 → 外推 24 天。',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**MSE**',
+        '- 对照基线：`seasonal_naive`、`naive`、`mean`、`linear_trend`，取误差最小者',
+        '- `ratio <= 0.5` 满分，`ratio = 0.75` 恰好 60 分，`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '这条序列的形状接近正弦，是谐波回归的理想场景：',
+        '两三组谐波就能把年周期拟合得很准，而 `seasonal_naive` 只能生硬地重复去年同一天。',
+        '',
+        '所以本题的关键是：**周期要从功率谱里挑出来，而不是照抄 `ctx.season`；',
+        '设计矩阵要包含截距和线性趋势，谐波只是它的补充**。'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 706 个日平均气温（℃），`ctx.season = 365`。',
+      outputSpec: '`number[]` —— 长度必须为 24。',
+
+      hints: [
+        '先跑一次模板：它把周期硬编码成 12，且只用一组谐波 —— 这条序列的真周期是 365。',
+        '周期图的做法：先减掉线性趋势，再对每个候选周期 P 算 `Σ d[t]·cos(2πt/P)` 与 `Σ d[t]·sin(2πt/P)`，功率 = (实部² + 虚部²) / n。',
+        '取功率最大的前 3 个周期，但要把彼此成倍数关系的去掉（同一个物理周期的谐波）。',
+        '解最小二乘要自己写正规方程 + 高斯消元；对角上加 1e-8 的 ridge 防止奇异。',
+        '外推时用的是未来的时刻 `t = n + h`，设计矩阵的列要和外推时的列完全一致。'
+      ],
+
+      solution: toPredictSource(solHarmonic),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  var n = history.length;',
+        '  var i, j;',
+        '',
+        '  // TODO: 周期被硬编码成 12，且只用一组谐波。',
+        '  //       请先用周期图从数据里估出 top-3 周期，再用多组谐波做最小二乘。',
+        '  var P = 12;',
+        '',
+        '  var ncol = 4;   // 截距 + 时间 + 一组 cos/sin',
+        '  var A = [];',
+        '  for (i = 0; i < n; i++) {',
+        '    var w = 2 * Math.PI * i / P;',
+        '    A.push([1, i, Math.cos(w), Math.sin(w)]);',
+        '  }',
+        '',
+        '  // 正规方程 + 高斯消元（列主元）',
+        '  function lstsq(M, y, nc) {',
+        '    var ata = [], aty = [];',
+        '    for (var c1 = 0; c1 < nc; c1++) { ata.push(new Array(nc).fill(0)); aty.push(0); }',
+        '    for (var r = 0; r < M.length; r++) {',
+        '      for (var c2 = 0; c2 < nc; c2++) {',
+        '        aty[c2] += M[r][c2] * y[r];',
+        '        for (var c3 = 0; c3 < nc; c3++) ata[c2][c3] += M[r][c2] * M[r][c3];',
+        '      }',
+        '    }',
+        '    for (var c4 = 0; c4 < nc; c4++) ata[c4][c4] += 1e-8;',
+        '    for (var col = 0; col < nc; col++) {',
+        '      var piv = col;',
+        '      for (var rr = col + 1; rr < nc; rr++) {',
+        '        if (Math.abs(ata[rr][col]) > Math.abs(ata[piv][col])) piv = rr;',
+        '      }',
+        '      if (piv !== col) {',
+        '        var tmp = ata[piv]; ata[piv] = ata[col]; ata[col] = tmp;',
+        '        var t2 = aty[piv]; aty[piv] = aty[col]; aty[col] = t2;',
+        '      }',
+        '      var dd = ata[col][col];',
+        '      if (Math.abs(dd) < 1e-12) continue;',
+        '      for (var r2 = col + 1; r2 < nc; r2++) {',
+        '        var f = ata[r2][col] / dd;',
+        '        if (f === 0) continue;',
+        '        for (var cc = col; cc < nc; cc++) ata[r2][cc] -= f * ata[col][cc];',
+        '        aty[r2] -= f * aty[col];',
+        '      }',
+        '    }',
+        '    var xs = new Array(nc).fill(0);',
+        '    for (var r3 = nc - 1; r3 >= 0; r3--) {',
+        '      var s2 = aty[r3];',
+        '      for (var cc2 = r3 + 1; cc2 < nc; cc2++) s2 -= ata[r3][cc2] * xs[cc2];',
+        '      xs[r3] = Math.abs(ata[r3][r3]) < 1e-12 ? 0 : s2 / ata[r3][r3];',
+        '    }',
+        '    return xs;',
+        '  }',
+        '',
+        '  var coef = lstsq(A, history, ncol);',
+        '',
+        '  var out = [];',
+        '  for (var h = 0; h < horizon; h++) {',
+        '    var t = n + h;',
+        '    var w2 = 2 * Math.PI * t / P;',
+        '    out.push(coef[0] + coef[1] * t + coef[2] * Math.cos(w2) + coef[3] * Math.sin(w2));',
+        '  }',
+        '  return out;',
+        '}'
+      ].join('\n')
+    },
+
+    /* ---------------- P14 ---------------- */
+    {
+      id: 'p14-combination',
+      index: 14,
+      title: '组合预测：别把赌注押在一个模型上',
+      difficulty: '提高',
+      tags: ['组合', '中位数', '稳健', 'Bates-Granger'],
+      points: 100,
+      passScore: 60,
+      dataset: 'gmv',
+      mode: 'holdout',
+      horizon: 12,
+      metric: 'mse',
+      baselines: ['naive', 'seasonal_naive', 'mean', 'linear_trend'],
+      threshold: 0.80,
+      passRate: 30,
+
+      statement: [
+        '### 背景',
+        '',
+        'Bates & Granger（1969）发现：多个模型的误差往往不完全相关，',
+        '把它们组合起来，方差会下降。这是预测领域最稳的一条经验规律 ——',
+        '**组合几乎从不比最好的单模型差太多，却极少灾难性翻车**。M4 竞赛（*IJF*，2020）',
+        '再次确认：冠军方案的核心就是组合，而不是某个更花的模型。',
+        '',
+        '加权方式上，简单平均和**中位数**往往比「按误差加权」更稳：',
+        '权重在短样本上估计不稳，一个偶然表现好的模型就会垄断权重。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`gmv`（日成交额 GMV，单位：万元）',
+        '- 长度：160 点，季节周期 7',
+        '- 形态：加速增长（二次趋势）+ 弱周周期 + 随水平放大的噪声 + 大促尖峰',
+        '- 评估方式：留出法。前 148 点作为 `history`，最后 12 天作为测试集',
+        '',
+        '### 任务',
+        '',
+        '实现 `predict`：内部实现至少 4 个候选预测器，取它们的中位数作为输出。',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**MSE**',
+        '- 对照基线：`naive`、`seasonal_naive`、`mean`、`linear_trend`，取误差最小者',
+        '- `ratio <= 0.5` 满分，`ratio = 0.80` 恰好 60 分，`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '这条序列同时有二次趋势、周周期、放大的噪声和偶发大促尖峰 —— ',
+        '没有任何单一模型能同时处理好这四件事，这正是组合的用武之地。',
+        '',
+        '所以本题的关键是：**候选要真的多样化（趋势型 / 水平型 / 季节型都要有），',
+        '然后取中位数，而不是自己再发明一个模型**。'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 148 个日成交额（万元），`ctx.season = 7`。',
+      outputSpec: '`number[]` —— 长度必须为 12。',
+
+      hints: [
+        '先跑一次模板：它只组合了两个成员（朴素 + 季节朴素），成员太少，抗不住这条序列的二次趋势。',
+        '候选至少要覆盖三类：水平型（SES）、趋势型（Holt 或带漂移的朴素）、季节型（季节朴素或 Holt-Winters）。',
+        '中位数的取法：把该步所有候选值排序，偶数个取中间两个的平均。',
+        '不要用「按历史误差加权」—— 权重在短样本上不稳，本题取中位数就够。',
+        'Holt-Winters 的季节项要按 `t % m` 存取，初值可以用前 m 个点。'
+      ],
+
+      solution: toPredictSource(solCombination),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  var n = history.length;',
+        '  var m = ctx.season > 1 ? ctx.season : 1;',
+        '  var i;',
+        '',
+        '  // TODO: 只组合了两个成员，且都偏「水平 / 季节」，没有趋势型候选。',
+        '  //       请至少补上 Holt 或带漂移的朴素，再取全部候选的中位数。',
+        '  var naive = [];',
+        '  for (i = 0; i < horizon; i++) naive.push(history[n - 1]);',
+        '',
+        '  var seas = [];',
+        '  for (i = 0; i < horizon; i++) {',
+        '    var hh = i + 1;',
+        '    var lag = m * Math.ceil(hh / m);',
+        '    var idx = n - 1 + hh - lag;',
+        '    seas.push(idx >= 0 ? history[idx] : history[0]);',
+        '  }',
+        '',
+        '  var out = [];',
+        '  for (var h = 0; h < horizon; h++) {',
+        '    out.push((naive[h] + seas[h]) / 2);',
+        '  }',
+        '  return out;',
+        '}'
+      ].join('\n')
+    },
+
+    /* ---------------- P15 ---------------- */
+    {
+      id: 'p15-dlinear',
+      index: 15,
+      title: 'DLinear：一层线性打败一堆 Transformer',
+      difficulty: '挑战',
+      tags: ['分解', '线性模型', 'AAAI 2023', '最小二乘'],
+      points: 100,
+      passScore: 60,
+      dataset: 'electricity',
+      mode: 'holdout',
+      horizon: 24,
+      metric: 'mse',
+      baselines: ['naive', 'seasonal_naive', 'mean', 'linear_trend', 'moving_average'],
+      threshold: 0.7,
+      passRate: 16,
+
+      statement: [
+        '### 背景',
+        '',
+        'Zeng 等人在 *AAAI 2023* 的论文《Are Transformers Effective for Time Series Forecasting?》',
+        '里给出一个反直觉结论：把序列分解成趋势与季节两部分，各接一个**单层线性**映射，',
+        '就能在多个长期预测基准上打败 Informer / Autoformer 这一整代 Transformer。',
+        '',
+        '作者的解释是：时序的「顺序」信息会被自注意力打乱，而线性层天然保序。',
+        '这个模型后来被称为 **DLinear**，它的两个分支是：',
+        '',
+        '- `trend = MovingAverage(y)`，`seasonal = y - trend`；',
+        '- 每条分支各做一个「从长度为 L 的窗口到 horizon 步」的线性映射，输出相加。',
+        '',
+        '论文里那两层是**训练**出来的。本题不要求你训练 —— ',
+        '用最小二乘在历史的重叠窗口上拟合一个等价的线性映射即可。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`electricity`（小时用电负荷，单位：MW）',
+        '- 长度：720 点，季节周期 24（日内）',
+        '- 形态：趋势 + 24 小时周期 + 噪声',
+        '- 评估方式：留出法。前 696 点作为 `history`，最后 24 小时作为测试集',
+        '',
+        '### 任务',
+        '',
+        '实现 `predict`：居中移动平均分解 → 两条分支各拟合一个线性映射 → 相加输出 24 步。',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**MSE**',
+        '- 对照基线：`naive`、`seasonal_naive`、`mean`、`linear_trend`、`moving_average`，取误差最小者',
+        '- `ratio <= 0.5` 满分，`ratio = 0.7` 恰好 60 分，`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '`seasonal_naive` 在这里已经不错（周期很规整），想大幅赢过它，',
+        '必须让两条分支都真的起作用：趋势分支跟上水平变化，季节分支刻画 24 小时的形状。',
+        '',
+        '所以本题的关键是：**分解要用居中移动平均（窗口 `2m+1`），',
+        '两条分支各解一个最小二乘，而不是只做分解后直接外推**。'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 696 个小时用电负荷（MW），`ctx.season = 24`。',
+      outputSpec: '`number[]` —— 长度必须为 24。',
+
+      hints: [
+        '先跑一次模板：分解做对了，但两条分支都退化成「平移复制」，没有线性映射。',
+        '居中移动平均：窗口取 `2m + 1`，第 i 点取 `[i-m, i+m]` 的均值（边界用可用点）。',
+        '线性映射的拟合：对每个起点 r，输入 `seq[r .. r+L-1]`，目标 `seq[r+L .. r+L+hz-1]`，',
+        '累加出 `A = XᵀX`（L×L）与 `B = XᵀY`（L×hz），对角加 1e-6 的 ridge。',
+        '然后对每个预测步 k 解一个 L 元线性方程组 —— 写一个列主元高斯消元，别用迭代法。',
+        '历史长度不足以构造训练窗口时，退化为「重复最后一个观测值」，不要报错。'
+      ],
+
+      solution: toPredictSource(solDLinear),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  var n = history.length;',
+        '  var m = ctx.season > 1 ? ctx.season : 1;',
+        '  var L = Math.min(2 * m, n);',
+        '  var i, j;',
+        '',
+        '  // 1) 居中移动平均 → 趋势',
+        '  var trend = [];',
+        '  for (i = 0; i < n; i++) {',
+        '    var lo = Math.max(0, i - m), hi = Math.min(n - 1, i + m);',
+        '    var s = 0;',
+        '    for (j = lo; j <= hi; j++) s += history[j];',
+        '    trend.push(s / (hi - lo + 1));',
+        '  }',
+        '',
+        '  // 2) 季节 = 残差',
+        '  var seas = [];',
+        '  for (i = 0; i < n; i++) seas.push(history[i] - trend[i]);',
+        '',
+        '  // TODO: 两条分支现在都只是「平移复制」，没有线性映射。',
+        '  //       请用最小二拟在历史重叠窗口上拟合 L → horizon 的映射，再外推。',
+        '  var out = [];',
+        '  for (var h = 0; h < horizon; h++) {',
+        '    var tIdx = (n + h) % m;',
+        '    out.push(trend[n - 1] + seas[n - L + (h % L)]);',
         '  }',
         '  return out;',
         '}'

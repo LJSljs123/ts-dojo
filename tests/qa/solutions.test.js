@@ -162,6 +162,7 @@ test('数据集元数据与题面声明一致（长度 / 周期 / 频率）', ()
     sunspot: [300, 11, 'Y'],
     demand_shift: [200, 7, 'D'],
     gmv: [160, 7, 'D'],
+    intermittent: [120, 12, 'M'],
   };
   for (const d of datasets) {
     const e = expect[d.id];

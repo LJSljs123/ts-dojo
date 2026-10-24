@@ -56,7 +56,7 @@ node tests/standalone-check.js      # 校验产物与源码一致、无外部引
 
 | 模块 | 能力 |
 |---|---|
-| 题库 | 9 道题（入门→挑战）、难度筛选、**标签筛选**、**搜索**（题号/标题/标签）、**随机一题**（优先未通过）、三条件取交集 |
+| 题库 | 15 道题（入门→挑战）、难度筛选、**标签筛选**、**搜索**（题号/标题/标签）、**随机一题**（优先未通过）、三条件取交集 |
 | 方法库 | **29 个方法卡片 · 4 个层次**（经典统计 13 / 竞赛级方法 3 / 顶会深度学习 9 / 评估方法论 4）；搜索覆盖 name / title / venue / tags / idea，与层筛选、「只看能练的」取交集；展开看核心思想 / 关键式子 / 适用 / 局限；一键「去练这道题」或「检索原文」 |
 | 判题 | 留出 / 滚动回测；与 4 条统计基线比误差；逐测试点 verdict + 指标对比；判题会话隔离（切题不会串成绩） |
 | 学习 | 题面含数学公式与数据说明、折叠提示、通过后解锁参考题解、学习路径时间线 |
@@ -83,7 +83,7 @@ ts-dojo/
 │   ├── css/
 │   │   └── style.css          # 暗色主题（深色底 + 青绿强调色）
 │   └── js/
-│       ├── datasets.js        # 8 条合成数据集（固定种子确定性生成）
+│       ├── datasets.js        # 9 条合成数据集（固定种子确定性生成）
 │       ├── problems.js        # 9 道题（题面 / 参考解 / 模板 / 评分参数）
 │       ├── methods.js         # 29 条方法卡片（内容层，只读：文案 / 出处 / 年份已核对）
 │       ├── judge.js           # 判题引擎：指标 + 基线 + 评分 + Worker 沙箱
@@ -106,7 +106,7 @@ ts-dojo/
 ├── tests/
 │   ├── qa/                    # node --test tests/qa/*.test.js（158 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
-│   ├── starter-check.js       # 9 题模板原样提交必须全 WA
+│   ├── starter-check.js       # 15 题模板原样提交必须全 WA
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
 │   └── standalone-check.js    # 单文件产物校验（是否过期 / 有无外部引用 / 是否被截断）
 ├── docs/review-and-plan.md    # 架构审查报告与升级任务分解
@@ -142,6 +142,7 @@ datasets → problems → methods → judge → editor → chart
 | `sunspot` | 太阳黑子相对数 | 个 | Y | 300 | 11 | 约 11 年准周期（周期本身缓慢变化）+ 振幅调制 + 非对称波形 |
 | `demand_shift` | 日需求 | 件 | D | 200 | 7 | 第 110 点附近水平漂移 +24%，之后缓慢增长；弱周周期 + 2% 异常尖峰 |
 | `gmv` | 成交额 GMV | 万元 | D | 160 | 7 | 加速增长（含二次项）+ 弱周周期 + 随水平放大的噪声 + 大促尖峰 |
+| `intermittent` | 备件需求 | 件 | M | 120 | 12 | 约半数月份为零（间歇需求），有需求的月份 20–180 件；随服役期推进需求频率由约 18% 升至约 85%、单次量级放大约 1.2 倍，偶发 3–5 倍大单 |
 
 设计原则：**不要纯正弦**。每条序列都带噪声、异方差、偶发异常点或结构突变，尽量贴近真实业务数据的"脏"。
 
@@ -168,6 +169,12 @@ datasets → problems → methods → judge → editor → chart
 | 7 | 直接多步预测：拒绝误差累积 | 提高 | 多步策略 / 分解 | retail | holdout | 12 | MSE | 0.90 | 60 |
 | 8 | 突变与异常：鲁棒的水平与相位估计 | 提高 | 鲁棒统计 / 水平漂移 | demand_shift | holdout | 20 | MAE | 0.90 | 60 |
 | 9 | 滚动回测：在 4 个时间起点上都要赢 | 挑战 | 滚动回测 / 初始化技巧 | airline | rolling×4 | 12 | MSE | 0.88 | 60 |
+| 10 | Theta 方法：两个笨模型拼赢一个聪明模型 | 提高 | Theta / M3 冠军 / 组合 / 去季节 | retail | holdout | 12 | MSE | 0.70 | 60 |
+| 11 | AR(p) 与 Yule-Walker：不训练的闭式自回归 | 挑战 | 自回归 / Box-Jenkins / Levinson-Durbin / 闭式解 | sunspot | holdout | 8 | MSE | 0.75 | 60 |
+| 12 | 间歇需求：把需求量与需求频率分开估计 | 提高 | 间歇需求 / 零膨胀 / 库存 / Croston / TSB | intermittent | holdout | 12 | MAE | 0.85 | 60 |
+| 13 | 周期图 + 谐波回归：让数据自己说出周期 | 提高 | 频域 / 周期图 / 谐波回归 / 最小二乘 | temperature | holdout | 24 | MSE | 0.75 | 60 |
+| 14 | 组合预测：别把赌注押在一个模型上 | 提高 | 组合 / 中位数 / 稳健 / Bates-Granger | gmv | holdout | 12 | MSE | 0.80 | 60 |
+| 15 | DLinear：一层线性打败一堆 Transformer | 挑战 | 分解 / 线性模型 / AAAI 2023 / 最小二乘 | electricity | holdout | 24 | MSE | 0.70 | 60 |
 
 题目对象字段（`assets/js/problems.js`）：
 
@@ -420,6 +427,15 @@ worker-src blob:; font-src 'self'
 建议：**先用参考解跑一遍 `judge.evaluateSync`，确认 `passed === true` 且分数有合理余量（70~100）**，再发布题目。
 `problems.js` 里现有题目就是这么标定的（参考解以真实函数书写，再用 `toString()` 转成字符串，从而被 `node --check` 与自测脚本覆盖）。
 
+新题还必须同时满足三条硬门槛（`tests/selftest.js` 与 `tests/starter-check.js` 会各自检查一半）：
+
+1. 参考解 `passed === true` 且分数落在 78~96；
+2. 模板原样提交必须 `WA`（不能 `RE` / `TLE`，更不能通过）；
+3. 题目配置的每一条基线单独作为提交都不能通过。
+
+另外：加题后跑一次 `node --test tests/qa/library.test.js` —— 它会校验方法库里每条方法的
+`practice` 引用都指向真实存在的题目（内容层先行、题目后补的过渡期除外，见该文件的白名单注释）。
+
 ### 新增一条数据集
 
 在 `assets/js/datasets.js` 里写一个 `buildXxx(rng)` 生成函数，然后在 `DEFINITIONS` 里登记：
@@ -467,7 +483,7 @@ worker-src blob:; font-src 'self'
 
 ```bash
 node tests/selftest.js        # 判题引擎自测（数据 / 参考解 / 指标 / 评分 / 沙箱 / 切分）
-node tests/starter-check.js   # 模板有效性自证（9 题模板原样提交必须全部不通过）
+node tests/starter-check.js   # 模板有效性自证（15 题模板原样提交必须全部不通过）
 node tests/storage-audit.js   # localStorage 输出安全静态审计（esc() 覆盖率 / 类型守卫）
 node tests/standalone-check.js  # 单文件版是否与源码同步、是否残留外部引用
 node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
@@ -480,7 +496,7 @@ node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，�
 |---|---|
 | `metrics` / `baselines` / `split` / `scoring` | 指标数学、基线逐值手算、留出与滚动切分、评分单调性与边界 |
 | `adversarial` | 非法返回值、死循环、沙箱封禁、跨测试点污染 |
-| `solutions` | 9 题参考解通过、朴素解不可过、可复现性 |
+| `solutions` | 15 题参考解通过、朴素解不可过、可复现性 |
 | `static` | 语法、无 ESM、无外链、脚本顺序与依赖方向、CSS 覆盖率、存储键前缀 |
 | `browser` | 真实浏览器：路由渲染、Worker 判题、XSS 注入、脏数据 |
 | `regressions` | 判题竞态（切题串成绩）、沙箱逃逸、375px 溢出、rolling 窗口不足 |

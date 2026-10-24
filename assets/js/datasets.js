@@ -281,6 +281,38 @@
     return roundAll(values);
   }
 
+  /**
+   * intermittent：120 点月度备件需求（间歇需求 / 零膨胀序列）。
+   * 形态：约半数月份没有需求；有需求的月份 20–180 件；随备件进入服役中后期，
+   * 故障率与单次更换量同步上升（需求频率从约 18% 爬到约 85%，量级再放大约 1.2 倍）；
+   * 偶发 3–5 倍大单。这条序列是 Croston / SBA / TSB 的立足点——
+   * 直接对原序列做平滑会被大量零拉平，必须把「需求量」与「需求间隔」分开。
+   * @param {Object} rng 随机源
+   * @returns {number[]}
+   */
+  function buildIntermittent(rng) {
+    var values = [];
+    var n = 120;
+    var sinceLast = 0;                       // 距上次有需求已过的月数
+    for (var t = 0; t < n; t++) {
+      sinceLast++;
+      // 发生概率随时间上升：备件进入服役中后期，故障率越来越高
+      var p = 0.18 + 0.67 * (t / (n - 1));
+      if (rng.next() >= p) {                 // 本月无需求
+        values.push(0);
+        continue;
+      }
+      // 有需求：基础量 20–180，并随服役期放大约 1.2 倍
+      var growth = 1 + 1.2 * (t / (n - 1));
+      var base = rng.uniform(20, 180) * growth;
+      var catchUp = sinceLast >= 3 ? rng.uniform(1.1, 1.6) : 1;
+      var spike = rng.next() < 0.08 ? rng.uniform(3, 5) : 1;
+      values.push(round(base * catchUp * spike, 1));
+      sinceLast = 0;
+    }
+    return values;
+  }
+
   /* ------------------------------------------------------------------ *
    * 3. 数据集清单
    * ------------------------------------------------------------------ */
@@ -365,6 +397,16 @@
       seed: 909090,
       build: buildGmv,
       desc: '160 点日成交额：加速增长（二次趋势）+ 弱周周期 + 随水平放大的噪声 + 大促尖峰。'
+    },
+    {
+      id: 'intermittent',
+      name: '备件需求（月度）',
+      unit: '件',
+      freq: 'M',
+      season: 12,
+      seed: 17171717,
+      build: buildIntermittent,
+      desc: '120 个月备件需求：约半数月份为零，有需求的月份 20–180 件；随服役期推进，需求频率由约 18% 升至约 85%、单次量级放大约 1.2 倍，偶发 3–5 倍大单。'
     }
   ];
 

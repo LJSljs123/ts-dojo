@@ -17,7 +17,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { ROOT } = require('./helpers/engine');
+const { ROOT, loadEngine } = require('./helpers/engine');
+const PROBLEM_COUNT = loadEngine().problems.length;
 const { launch, findBrowser } = require('./helpers/cdp');
 
 const INDEX_URL = pathToFileURL(path.join(ROOT, 'index.html')).href;
@@ -453,8 +454,8 @@ test('T07 375px：整页不横向溢出，题库标题不再一字一行（卡�
     assert.equal(m.docScroll, 375, '375px 下整页横向溢出：scrollWidth=' + m.docScroll);
     assert.equal(m.cardsDisplay, 'flex', '窄屏必须切到卡片布局');
     assert.equal(m.tableDisplay, 'none', '窄屏应隐藏表格（表格给桌面端用）');
-    assert.ok(m.cardCount === 9, '卡片应为 9 张，实际 ' + m.cardCount);
-    assert.equal(m.prowCount, 9, '桌面表格的 .prow 仍应为 9 行（browser.test.js 依赖）');
+    assert.ok(m.cardCount === PROBLEM_COUNT, '卡片应有 ' + PROBLEM_COUNT + ' 张，实际 ' + m.cardCount);
+    assert.equal(m.prowCount, PROBLEM_COUNT, '桌面表格的 .prow 应等于题目数（browser.test.js 依赖）');
     assert.ok(m.lines > 0 && m.lines <= 3, '标题渲染高度应 ≤3 行，实际 ' + m.lines.toFixed(2) + ' 行');
 
     // 题目页在 375px 下也不能横向溢出
@@ -512,7 +513,7 @@ test('T07 768 / 1280：仍是表格布局，与改造前一致（不回归）', 
         ' · .prow=' + m.rows + ' · 表头=' + m.headDisplay + ' · scrollWidth=' + m.docScroll);
       assert.equal(m.tableDisplay, 'block', width + 'px 应显示表格');
       assert.equal(m.cardsDisplay, 'none', width + 'px 不应显示卡片');
-      assert.equal(m.rows, 9, width + 'px 下 .prow 应为 9');
+      assert.equal(m.rows, PROBLEM_COUNT, width + 'px 下 .prow 应等于题目数');
       assert.notEqual(m.headDisplay, 'none', width + 'px 下表头必须可见');
       assert.ok(m.docScroll <= m.docClient, width + 'px 出现横向溢出：' + m.docScroll);
     } finally {
@@ -628,7 +629,7 @@ test('T09 搜索 / 标签 / 难度三者取交集，默认态仍是 9 行', asyn
   console.log('    默认态行数=' + base + ' · 搜索框初值=' +
     JSON.stringify(await page.evaluate('document.getElementById("searchInput").value')) +
     ' · 标签选中数=' + (await page.evaluate('document.querySelectorAll(".tag-chip.on").length')));
-  assert.equal(base, 9, '默认态必须是 9 行（不得预置搜索词/标签）');
+  assert.equal(base, PROBLEM_COUNT, '默认态必须等于题目总数（不得预置搜索词/标签）');
 
   await setQuery('holt');
   const holt = await count();
@@ -661,7 +662,7 @@ test('T09 搜索 / 标签 / 难度三者取交集，默认态仍是 9 行', asyn
   await sleep(200);
   const cleared = await count();
   console.log('    点「清除筛选」→ ' + cleared + ' 行');
-  assert.equal(cleared, 9, '清除筛选后应回到 9 行');
+  assert.equal(cleared, PROBLEM_COUNT, '清除筛选后应回到题目总数');
 
   // 难度「入门」→ 2 行
   await page.evaluate('document.querySelector(".chip[data-filter=\\"入门\\"]").click()');
@@ -683,7 +684,7 @@ test('T09 搜索 / 标签 / 难度三者取交集，默认态仍是 9 行', asyn
     '(function(){var b=document.querySelector("#btnClearFilters");if(b)b.click();})()'
   );
   await sleep(200);
-  assert.equal(await count(), 9);
+  assert.equal(await count(), PROBLEM_COUNT);
 });
 
 /* ================================================================== *
