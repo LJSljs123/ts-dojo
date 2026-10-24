@@ -11,8 +11,19 @@
 
 ## 一、如何运行
 
+**方式 A（推荐，最不容易出问题）：单文件版**
+
 ```
-直接双击 ts-dojo/index.html
+双击 ts-dojo-standalone.html
+```
+
+它把 CSS 与 17 个脚本全部内联成一个 300KB 的 HTML，**不依赖任何相对路径**。
+所以无论是双击打开、丢进 http 服务器、还是被塞进 iframe / `srcdoc` / 预览面板里，都能正常渲染。
+
+**方式 B：模块化版**
+
+```
+直接双击 index.html
 ```
 
 或用任意静态服务器（可选，非必需）：
@@ -22,9 +33,21 @@ python -m http.server 8080
 # 然后访问 http://localhost:8080
 ```
 
-浏览器要求：Chrome / Edge / Firefox / Safari 近三年版本（需要 `Proxy`、`Worker`、`canvas`、`localStorage`）。
+模块化版有 17 个 `<script src>` + 1 个样式表，**必须保证 assets 目录随行**。
+如果它白屏，页面会自己显示「启动失败」面板并给出原因（脚本被拦截 / 资源 404 / 旧缓存），不会再无声无息。
+
+浏览器要求：Chrome / Edge / Firefox / Safari 近三年版本（需要 `Worker`、`canvas`、`localStorage`、`Proxy`）。
 
 首次进入会有一个简短引导，说明「写 `predict` 函数 → 提交 → 打败基线得分 → 解锁题解」。
+
+### 改了源码后如何更新单文件版
+
+```bash
+node tools/build-standalone.js      # 重新生成 ts-dojo-standalone.html
+node tests/standalone-check.js      # 校验产物与源码一致、无外部引用、脚本未截断
+```
+
+`tests/standalone-check.js` 会在产物过期时直接报「内容不一致」，避免发布一个旧版本。
 
 ---
 
@@ -42,6 +65,7 @@ python -m http.server 8080
 | 窄屏 | ≤640px 自动切换**卡片式列表**（标题正常换行，不再挤成一字一行）、题目页上下堆叠、触控目标 ≥40px |
 | 可访问性 | 弹层焦点陷阱 + ESC 关闭 + 焦点恢复、结果面板 `aria-live`、编辑器错误 `aria-describedby`、路由切换更新标题并聚焦主区 |
 | 存储 | 跨标签页 `storage` 事件同步（后写不再覆盖先写）、配额超限提示并降级为内存态、脏数据静默归一化 |
+| 分发 | **单文件版**（300KB，零外部引用，可嵌 iframe/srcdoc）；模块化版带**启动自检**，白屏会显示具体原因 |
 
 ---
 
@@ -49,7 +73,10 @@ python -m http.server 8080
 
 ```
 ts-dojo/
-├── index.html                 # 页面骨架 + 顶部栏 + script 加载顺序
+├── index.html                 # 模块化入口（含 CSP + 启动自检 + script 加载顺序）
+├── ts-dojo-standalone.html    # 单文件版（由 tools/build-standalone.js 生成，勿手改）
+├── tools/
+│   └── build-standalone.js    # 把 CSS / 17 个 js 内联成单文件
 ├── assets/
 │   ├── css/
 │   │   └── style.css          # 暗色主题（深色底 + 青绿强调色）
@@ -76,7 +103,8 @@ ts-dojo/
 │   ├── qa/                    # node --test tests/qa/*.test.js（151 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
 │   ├── starter-check.js       # 9 题模板原样提交必须全 WA
-│   └── storage-audit.js       # localStorage 输出安全静态审计
+│   ├── storage-audit.js       # localStorage 输出安全静态审计
+│   └── standalone-check.js    # 单文件产物校验（是否过期 / 有无外部引用 / 是否被截断）
 ├── docs/review-and-plan.md    # 架构审查报告与升级任务分解
 └── README.md
 ```
@@ -374,6 +402,7 @@ worker-src blob:; font-src 'self'
 node tests/selftest.js        # 判题引擎自测（数据 / 参考解 / 指标 / 评分 / 沙箱 / 切分）
 node tests/starter-check.js   # 模板有效性自证（9 题模板原样提交必须全部不通过）
 node tests/storage-audit.js   # localStorage 输出安全静态审计（esc() 覆盖率 / 类型守卫）
+node tests/standalone-check.js  # 单文件版是否与源码同步、是否残留外部引用
 node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
 ```
 

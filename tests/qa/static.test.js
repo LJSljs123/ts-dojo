@@ -76,7 +76,8 @@ test('无 Math.random（数据集必须确定性可复现）', () => {
 });
 
 test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末尾', () => {
-  const order = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
+  // 去掉 ?v= 缓存破坏参数后再比较，版本号变化不应影响顺序断言
+  const order = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1].split('?')[0]);
   assert.deepEqual(order, [
     'assets/js/datasets.js',
     'assets/js/problems.js',

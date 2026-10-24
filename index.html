@@ -5,23 +5,91 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!--
   CSP：在浏览器网络层再加一道闸，与 judge.js 的 Worker 沙箱互补。
-    default-src 'none'   默认什么都不许（白名单制）
-    script-src  'self' 'unsafe-inline' 'unsafe-eval' blob:
-                         本地脚本 + 内联脚本 + 判题必需的 new Function + Blob Worker；
-                         不含 http(s)，所以外链脚本一律加载不了
-    style-src   'self' 'unsafe-inline'   样式表 + 内联 style（结果条/进度条宽度是内联的）
-    img-src     'self' data:             图标/内联图
-    connect-src 'none'   fetch / XHR / WebSocket / sendBeacon 全部禁止 —— 即使 JS 层出现未知逃逸，请求也发不出去
-    worker-src  blob:    判题 Worker 由 Blob URL 创建
-    font-src    'self'   只用系统字体，无远程字体
-  实测（无头 Edge / file:// 双击）：上面这条指令**不需要**额外补 file: —— 本地脚本、内联 style、
-  Blob Worker、new Function、canvas 全部正常，5 个路由无异常。若将来换内核后 file:// 白屏，
-  优先怀疑 script-src 的 'self' 对 file: 的匹配，可临时补 file: 并在提交说明里记录原因。
+    default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data:
+                         默认放行同源资源（不用 'none'：页面可能被嵌到预览面板/iframe 里，
+                         过于严格的 default-src 在部分 webview 中会把自身脚本一起拦掉 → 白屏）
+    script-src  同源 + 内联 + new Function（判题必需）+ Blob Worker；不含远程 http(s)
+    style-src   同源 + 内联 style（结果条/进度条宽度是内联的）
+    img-src     同源 + data: + blob:
+    connect-src 'none'   ★ 真正的安全关键：fetch / XHR / WebSocket / sendBeacon 全部禁止，
+                         即使 JS 层出现未知逃逸，请求也发不出去
+    worker-src  同源 + blob:   判题 Worker 由 Blob URL 创建
+  说明：预览服务器可能额外下发自己的 CSP 响应头，多条策略会**同时生效取交集**，
+  所以这里不再使用 default-src 'none'（交集后容易把自身资源也拦掉）。
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; worker-src blob:; font-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; worker-src 'self' blob:; font-src 'self' data:">
 <title>时序竞技场 TSOJ · 时间序列预测在线判题</title>
 <meta name="description" content="时序竞技场 TSOJ：写 predict 函数、提交、打败统计基线得分并解锁题解的纯前端时间序列预测判题平台。">
-<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/style.css?v=2.1.0">
+
+<!-- 启动自检：脚本被拦 / 加载失败 / 1.5s 内没渲染出内容 → 直接把原因显示出来，绝不留白屏 -->
+<script>
+(function () {
+  'use strict';
+  var ERRORS = [];
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function panel(title, detail) {
+    var old = document.getElementById('bootFail');
+    if (old) {
+      var ul = document.getElementById('bootFailDetail');
+      if (ul) ul.innerHTML += '<li>' + esc(detail) + '</li>';
+      return;
+    }
+    if (!document.body) return;
+    var box = document.createElement('div');
+    box.id = 'bootFail';
+    box.setAttribute('style', 'position:fixed;inset:0;z-index:99999;padding:32px;background:#0d1117;color:#e6edf3;font:13px/1.8 ui-monospace,Consolas,monospace;overflow:auto');
+    box.innerHTML =
+      '<h2 style="margin:0 0 12px;font:600 16px/1.4 system-ui;color:#ff9b9b">' + esc(title) + '</h2>' +
+      '<p style="margin:0 0 10px;color:#9aa7b6">页面没能正常启动。浏览器给出的原因：</p>' +
+      '<ul id="bootFailDetail" style="margin:0 0 18px;padding-left:20px;color:#ffb4b4">' +
+      '<li>' + esc(detail) + '</li></ul>' +
+      '<p style="margin:0 0 6px;color:#9aa7b6">常见原因与处理：</p>' +
+      '<ol style="margin:0;padding-left:20px;color:#c9d4e0">' +
+      '<li>脚本被安全策略或广告拦截插件拦了 —— 换 Edge / Chrome 直接打开 index.html</li>' +
+      '<li>通过 http 打开时服务器没正确返回 assets 目录 —— 检查 17 个 js 是否都是 200</li>' +
+      '<li>拿到的是旧缓存 —— 按 Ctrl+F5 强制刷新</li></ol>';
+    document.body.appendChild(box);
+  }
+  window.addEventListener('error', function (e) {
+    var msg;
+    if (e && e.target && e.target.tagName === 'SCRIPT') {
+      msg = '脚本无法加载：' + (e.target.src || '(未知)');
+    } else {
+      msg = (e && e.message) ? e.message : '未知脚本错误';
+      if (e && e.lineno) msg += '（第 ' + e.lineno + ' 行）';
+    }
+    ERRORS.push(msg);
+    panel('启动失败', msg);
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e && e.reason;
+    ERRORS.push('未处理的 Promise 异常：' + ((r && r.message) || r));
+  });
+  window.addEventListener('load', function () {
+    // 脚本全被拦：load 后 TSJ 仍不存在，立刻报（不用等）
+    if (typeof window.TSJ === 'undefined') {
+      panel('启动失败', '脚本全部被拦截：window.TSJ 未定义（多半是 CSP 或广告拦截插件所致）');
+      return;
+    }
+    // 否则给渲染留出时间：每 500ms 看一次，最多 8 秒
+    var tries = 0;
+    var timer = setInterval(function () {
+      var v = document.getElementById('view');
+      if (v && v.innerHTML.replace(/\s+/g, '').length > 0) { clearInterval(timer); return; }
+      tries++;
+      if (tries < 16) return;
+      clearInterval(timer);
+      panel('启动失败', '脚本已加载，但 8 秒内没有渲染出任何内容' +
+        (ERRORS.length ? '：' + ERRORS[0] : '（无错误信息）'));
+    }, 500);
+  });
+})();
+</script>
 </head>
 <body>
 
@@ -66,22 +134,23 @@
 <!-- 经典 script 按顺序加载，全部挂到 window.TSJ 命名空间
      应用层顺序固定：util → core → schema → store → storage → ui → a11y → views → problem → pages → boards → app.js
      （app.js 必须最后，末尾同步 init()） -->
-<script src="assets/js/datasets.js"></script>
-<script src="assets/js/problems.js"></script>
-<script src="assets/js/judge.js"></script>
-<script src="assets/js/editor.js"></script>
-<script src="assets/js/chart.js"></script>
-<script src="assets/js/app/util.js"></script>
-<script src="assets/js/app/core.js"></script>
-<script src="assets/js/app/schema.js"></script>
-<script src="assets/js/app/store.js"></script>
-<script src="assets/js/app/storage.js"></script>
-<script src="assets/js/app/ui.js"></script>
-<script src="assets/js/app/a11y.js"></script>
-<script src="assets/js/app/views.js"></script>
-<script src="assets/js/app/problem.js"></script>
-<script src="assets/js/app/pages.js"></script>
-<script src="assets/js/app/boards.js"></script>
-<script src="assets/js/app.js"></script>
+<noscript><p style="padding:24px;color:#ff9b9b;font:14px system-ui">本页面需要 JavaScript：请在浏览器设置中启用后刷新。</p></noscript>
+<script src="assets/js/datasets.js?v=2.1.0"></script>
+<script src="assets/js/problems.js?v=2.1.0"></script>
+<script src="assets/js/judge.js?v=2.1.0"></script>
+<script src="assets/js/editor.js?v=2.1.0"></script>
+<script src="assets/js/chart.js?v=2.1.0"></script>
+<script src="assets/js/app/util.js?v=2.1.0"></script>
+<script src="assets/js/app/core.js?v=2.1.0"></script>
+<script src="assets/js/app/schema.js?v=2.1.0"></script>
+<script src="assets/js/app/store.js?v=2.1.0"></script>
+<script src="assets/js/app/storage.js?v=2.1.0"></script>
+<script src="assets/js/app/ui.js?v=2.1.0"></script>
+<script src="assets/js/app/a11y.js?v=2.1.0"></script>
+<script src="assets/js/app/views.js?v=2.1.0"></script>
+<script src="assets/js/app/problem.js?v=2.1.0"></script>
+<script src="assets/js/app/pages.js?v=2.1.0"></script>
+<script src="assets/js/app/boards.js?v=2.1.0"></script>
+<script src="assets/js/app.js?v=2.1.0"></script>
 </body>
 </html>
