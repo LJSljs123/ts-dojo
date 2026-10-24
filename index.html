@@ -52,23 +52,36 @@
   </div>
 </header>
 
-<!-- ============ 视图容器 ============ -->
-<main id="view" class="view" role="main"></main>
+<!-- ============ 视图容器 ============
+     tabindex="-1"：路由切换后把焦点交给 #view，读屏用户能感知「内容已更新」 -->
+<main id="view" class="view" role="main" tabindex="-1"></main>
 
-<!-- ============ 引导 / 弹层 ============ -->
-<div id="overlay" class="overlay hidden" role="dialog" aria-modal="true"></div>
+<!-- ============ 引导 / 弹层 ============
+     role/aria-modal 由 app/a11y.js 在打开时再确认一次；关闭后焦点回到 #view -->
+<div id="overlay" class="overlay hidden" role="dialog" aria-modal="true" tabindex="-1"></div>
+
+<!-- ============ 轻提示（aria-live 播报，不打断操作） ============ -->
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <!-- 经典 script 按顺序加载，全部挂到 window.TSJ 命名空间
-     应用层顺序固定：core → store → ui → views → app.js（app.js 必须最后，末尾同步 init()） -->
+     应用层顺序固定：util → core → schema → store → storage → ui → a11y → views → problem → pages → boards → app.js
+     （app.js 必须最后，末尾同步 init()） -->
 <script src="assets/js/datasets.js"></script>
 <script src="assets/js/problems.js"></script>
 <script src="assets/js/judge.js"></script>
 <script src="assets/js/editor.js"></script>
 <script src="assets/js/chart.js"></script>
+<script src="assets/js/app/util.js"></script>
 <script src="assets/js/app/core.js"></script>
+<script src="assets/js/app/schema.js"></script>
 <script src="assets/js/app/store.js"></script>
+<script src="assets/js/app/storage.js"></script>
 <script src="assets/js/app/ui.js"></script>
+<script src="assets/js/app/a11y.js"></script>
 <script src="assets/js/app/views.js"></script>
+<script src="assets/js/app/problem.js"></script>
+<script src="assets/js/app/pages.js"></script>
+<script src="assets/js/app/boards.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
 </html>

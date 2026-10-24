@@ -1,5 +1,5 @@
 /**
- * chart.js —— 纯 Canvas 折线图
+ * chart.js —— 纯 Canvas 折线图 + 指针悬停读数
  *
  * drawSeries(canvas, { values, testStart, predictions, height, unit })
  *   - values      完整序列（历史 + 测试区间）
@@ -7,8 +7,11 @@
  *   - predictions 预测值数组（从 testStart 开始，与测试区间重叠绘制）
  *   - height      CSS 高度（px），宽度自适应父容器
  *
- * 特性：devicePixelRatio 适配、3~5 条水平网格线 + y 轴刻度、虚线预测、窗口 resize 自动重绘。
- * 挂载点：window.TSJ.drawSeries
+ * 画完会把几何信息挂到 canvas.__tsjGeom（xOf / yOf / n / testStart / values / predictions / padL / padR），
+ * 供 attachChartHover 做「最近索引」反查 —— 这样 hover 逻辑不需要知道任何绘制细节。
+ *
+ * 特性：devicePixelRatio 适配、水平网格线 + y 轴刻度、虚线预测、窗口 resize 自动重绘、指针悬停十字线 + tooltip。
+ * 挂载点：window.TSJ.drawSeries / TSJ.attachChartHover
  */
 (function (global) {
   'use strict';
@@ -23,8 +26,12 @@
     history: '#3fb6a8',
     band: 'rgba(45, 212, 191, 0.09)',
     bandEdge: 'rgba(45, 212, 191, 0.35)',
+    bandEdgeHot: 'rgba(45, 212, 191, 0.75)',
     predict: '#a5b4fc',
-    actual: '#8a97a8'
+    actual: '#8a97a8',
+    cross: 'rgba(165, 180, 252, 0.55)',
+    tipBg: 'rgba(8, 12, 17, 0.94)',
+    tipBorder: 'rgba(139, 156, 255, 0.45)'
   };
 
   var PAD = { left: 52, right: 14, top: 12, bottom: 20 };
@@ -59,7 +66,7 @@
   }
 
   /**
-   * 真正的绘制过程。
+   * 真正的绘制过程。绘制结束时把几何信息写入 canvas.__tsjGeom。
    * @param {HTMLCanvasElement} canvas 画布
    * @param {Object} opts 配置
    */
@@ -88,7 +95,10 @@
     var plotW = Math.max(1, cssWidth - PAD.left - PAD.right);
     var plotH = Math.max(1, height - PAD.top - PAD.bottom);
     var n = values.length;
-    if (n === 0) return;
+    if (n === 0) {
+      canvas.__tsjGeom = null;
+      return;
+    }
 
     // ---- 值域 ----
     var min = Infinity;
@@ -130,8 +140,9 @@
       return PAD.top + plotH - ((v - yMin) / ySpan) * plotH;
     }
 
-    // ---- 测试区间高亮带 ----
     var testStart = (typeof opts.testStart === 'number') ? opts.testStart : n;
+
+    // ---- 测试区间高亮带 ----
     if (testStart < n) {
       var bx = xOf(Math.max(0, testStart));
       ctx.fillStyle = COLOR.band;
@@ -238,6 +249,199 @@
         ctx.fill();
       }
     }
+
+    // ---- 几何信息（hover 反查用）----
+    canvas.__tsjGeom = {
+      xOf: xOf,
+      yOf: yOf,
+      n: n,
+      testStart: testStart,
+      values: values,
+      predictions: preds,
+      padL: PAD.left,
+      padR: PAD.right,
+      plotW: plotW,
+      plotH: plotH,
+      height: height,
+      width: cssWidth,
+      span: span
+    };
+  }
+
+  /**
+   * 在已绘制的图上叠加「十字线 + tooltip」。
+   * @param {HTMLCanvasElement} canvas 画布
+   * @param {Object} g canvas.__tsjGeom
+   * @param {number} idx 最近索引
+   */
+  function drawHover(canvas, g, idx) {
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    var dpr = global.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    var x = g.xOf(idx);
+    var v = g.values[idx];
+    var y = g.yOf(v);
+    var inTest = idx >= g.testStart;
+    var pIdx = idx - g.testStart;
+    var hasPred = g.predictions && pIdx >= 0 && pIdx < g.predictions.length;
+    var predVal = hasPred ? g.predictions[pIdx] : null;
+
+    // 测试区间描边加重（让「哪一段是考你的」一眼可见）
+    if (g.testStart < g.n) {
+      var bx = g.xOf(Math.max(0, g.testStart));
+      ctx.strokeStyle = inTest ? COLOR.bandEdgeHot : COLOR.bandEdge;
+      ctx.lineWidth = inTest ? 2 : 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(Math.round(bx) + 0.5, PAD.top);
+      ctx.lineTo(Math.round(bx) + 0.5, PAD.top + g.plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // 十字线
+    ctx.strokeStyle = COLOR.cross;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(Math.round(x) + 0.5, PAD.top);
+    ctx.lineTo(Math.round(x) + 0.5, PAD.top + g.plotH);
+    ctx.moveTo(PAD.left, Math.round(y) + 0.5);
+    ctx.lineTo(PAD.left + g.plotW, Math.round(y) + 0.5);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 真值点
+    ctx.fillStyle = COLOR.actual;
+    ctx.beginPath();
+    ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 预测点
+    if (hasPred) {
+      ctx.fillStyle = COLOR.predict;
+      ctx.beginPath();
+      ctx.arc(x, g.yOf(predVal), 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // tooltip
+    var lines = [
+      '#' + idx + (inTest ? ' · 测试区间' : ' · 历史'),
+      '真值 ' + axisLabel(v, g.span)
+    ];
+    if (hasPred) {
+      lines.push('预测 ' + axisLabel(predVal, g.span));
+      lines.push('差值 ' + (predVal - v >= 0 ? '+' : '') + axisLabel(predVal - v, g.span));
+    }
+
+    ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+    var boxW = 0;
+    var i;
+    for (i = 0; i < lines.length; i++) boxW = Math.max(boxW, ctx.measureText(lines[i]).width);
+    boxW += 16;
+    var boxH = lines.length * 15 + 10;
+    var bxPos = x + 12;
+    if (bxPos + boxW > PAD.left + g.plotW) bxPos = x - 12 - boxW;
+    if (bxPos < PAD.left) bxPos = PAD.left + 2;
+    var byPos = Math.max(PAD.top, Math.min(y - boxH / 2, PAD.top + g.plotH - boxH));
+
+    ctx.fillStyle = COLOR.tipBg;
+    ctx.strokeStyle = COLOR.tipBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bxPos, byPos, boxW, boxH, 6);
+    else ctx.rect(bxPos, byPos, boxW, boxH);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    for (i = 0; i < lines.length; i++) {
+      ctx.fillStyle = i === 0 ? '#c8d4e0' : (i === 3 ? COLOR.predict : '#a5b2c1');
+      ctx.fillText(lines[i], bxPos + 8, byPos + 6 + i * 15);
+    }
+    return { index: idx, lines: lines, values: { actual: v, predicted: predVal } };
+  }
+
+  /**
+   * 给图表挂上指针悬停读数。
+   * 返回的 destroy() 必须被调用（路由切换时），否则 pointermove 监听会累积。
+   *
+   * @param {HTMLCanvasElement} canvas 画布
+   * @returns {{destroy: Function, index: Function}} 句柄
+   */
+  function attachChartHover(canvas) {
+    if (!canvas || typeof canvas.addEventListener !== 'function') {
+      return { destroy: function () {}, index: function () { return -1; }, tip: function () { return null; } };
+    }
+    var idx = -1;
+    var destroyed = false;
+    /** 最近一次 tooltip 的内容（供测试与调试读取；移出画布后为 null） */
+    var lastTip = null;
+
+    /** 重绘：先画基础图，再叠加 hover 层。 */
+    function redraw() {
+      if (destroyed) return;
+      var opts = canvas.__tsjChart;
+      if (!opts) return;
+      paint(canvas, opts);
+      var g = canvas.__tsjGeom;
+      if (!g || g.n === 0 || idx < 0 || idx >= g.n) {
+        lastTip = null;
+        return;
+      }
+      lastTip = drawHover(canvas, g, idx);
+    }
+
+    /** 指针移动：找最近索引。 */
+    function onMove(ev) {
+      var g = canvas.__tsjGeom;
+      if (!g || g.n === 0) return;
+      var rect = canvas.getBoundingClientRect();
+      var x = ev.clientX - rect.left;
+      var lo = g.padL - 6;
+      var hi = g.padL + g.plotW + 6;
+      if (x < lo || x > hi) {
+        if (idx !== -1) { idx = -1; redraw(); }
+        return;
+      }
+      var raw = g.n <= 1 ? 0 : ((x - g.padL) / g.plotW) * (g.n - 1);
+      var next = Math.round(raw);
+      if (next < 0) next = 0;
+      if (next > g.n - 1) next = g.n - 1;
+      if (next !== idx) { idx = next; redraw(); }
+    }
+
+    /** 指针离开：隐藏十字线。 */
+    function onLeave() {
+      if (idx === -1) return;
+      idx = -1;
+      redraw();
+    }
+
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerleave', onLeave);
+    canvas.addEventListener('pointercancel', onLeave);
+
+    return {
+      destroy: function () {
+        if (destroyed) return;
+        destroyed = true;
+        canvas.removeEventListener('pointermove', onMove);
+        canvas.removeEventListener('pointerleave', onLeave);
+        canvas.removeEventListener('pointercancel', onLeave);
+        idx = -1;
+        // 把 hover 层擦掉，只留基础图
+        var opts = canvas.__tsjChart;
+        if (opts) paint(canvas, opts);
+      },
+      index: function () { return idx; },
+      /** 当前 tooltip 内容：{ index, lines, values } 或 null */
+      tip: function () { return lastTip; }
+    };
   }
 
   /**
@@ -263,9 +467,14 @@
   }
 
   TSJ.drawSeries = drawSeries;
+  TSJ.attachChartHover = attachChartHover;
   TSJ.redrawCharts = redrawAll;
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { drawSeries: drawSeries, redrawCharts: redrawAll };
+    module.exports = {
+      drawSeries: drawSeries,
+      attachChartHover: attachChartHover,
+      redrawCharts: redrawAll
+    };
   }
 })(typeof globalThis !== 'undefined' ? globalThis : this);

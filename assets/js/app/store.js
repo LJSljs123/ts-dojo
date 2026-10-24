@@ -1,19 +1,21 @@
 /**
- * assets/js/app/store.js —— 应用状态与派生数据
+ * assets/js/app/store.js —— 应用状态、派生数据与写盘策略
  *
- * 加载顺序：core → store → ui → views → app.js
+ * 加载顺序：core → store → storage → ui → a11y → views → pages → app.js
  * 挂载点：window.TSJ.appStore
  *
  * 分工：
- *   - `state` 是所有可变状态的**唯一**持有者（含判题会话令牌）；
+ *   - `state` 是所有可变状态的**唯一**持有者（含判题会话令牌、图表 hover 句柄、题库筛选条件）；
  *   - 派生量（累计分 / 等级 / 每题统计 / 参考解分数）都是纯函数，输入只来自 state；
- *   - 后续里程碑（进度导出/导入、清空）在这里扩展，读写一律走 core 的 STORE 常量。
+ *   - 写盘一律走 save*()：**先读盘、再合并、后写回**，避免两个标签页「后写覆盖先写」；
+ *   - 导入 / 导出 / 清空在 app/storage.js，这里只提供合并所需的纯函数。
  */
 (function (global) {
   'use strict';
 
   var TSJ = global.TSJ || (global.TSJ = {});
   var core = TSJ.appCore;
+  var schema = TSJ.appSchema;
   var problems = TSJ.problems;
 
   /**
@@ -30,6 +32,10 @@
     drafts: {},
     submissions: [],
     filter: '全部',
+    /** 题库搜索词（T09）：默认空串 —— 默认态必须无预置搜索词，否则题库不是 9 行 */
+    query: '',
+    /** 题库标签筛选（T09）：默认 null 表示「全部标签」 */
+    tag: null,
     editor: null,
     activeProblem: null,
     /** 单调递增的判题会话令牌 */
@@ -39,22 +45,52 @@
     /** 当前判题会话句柄（含 abort()），路由切换时用来 terminate 旧 Worker */
     session: null,
     lastResult: null,
-    refScores: null
+    refScores: null,
+    /** 当前页图表 hover 句柄（T08）：路由切换必须 destroy()，否则监听会累积 */
+    chartHover: null,
+    /** 编辑器字号（T10）：12 / 13 / 14 */
+    edFont: 13,
+    /** 本地存储是否可用（配额不足时为 false，界面降级为内存态） */
+    storageOk: true
   };
+
+  /** 外部变更回调（storage 事件触发，由 app 层注册用于重渲染当前视图） */
+  var externalHandler = null;
+
+  /**
+   * 注册「存储被其它标签页改写」回调。
+   * @param {Function} fn function(kind:string)
+   */
+  function onExternalChange(fn) {
+    externalHandler = typeof fn === 'function' ? fn : null;
+  }
 
   /** 从 localStorage 装载状态（读出的数据一律视为不可信：先守卫、再归一化）。 */
   function loadState() {
     state.progress = core.readNormalized(
-      core.STORE.progress, {}, core.isPlainObject, core.normalizeProgress);
+      core.STORE.progress, {}, core.isPlainObject, schema.normalizeProgress);
     state.drafts = core.readNormalized(
-      core.STORE.drafts, {}, core.isPlainObject, core.normalizeDrafts);
+      core.STORE.drafts, {}, core.isPlainObject, schema.normalizeDrafts);
     state.submissions = core.readNormalized(
-      core.STORE.submissions, [], core.isArrayValue, core.normalizeSubmissions);
+      core.STORE.submissions, [], core.isArrayValue, schema.normalizeSubmissions);
     var savedFilter = core.readJSON(core.STORE.filter, '全部', function (v) {
       return typeof v === 'string';
     });
     var allowed = ['全部'].concat(core.DIFFS);
     state.filter = allowed.indexOf(savedFilter) >= 0 ? savedFilter : '全部';
+
+    // 存储格式版本：缺失时补写当前版本（旧数据本身已由归一化兼容，无需迁移）
+    var savedSchema = core.readJSON(core.STORE.schema, 0, function (v) {
+      return typeof v === 'number';
+    });
+    if (savedSchema !== core.CURRENT_SCHEMA) core.writeJSON(core.STORE.schema, core.CURRENT_SCHEMA);
+
+    var font = core.readJSON(core.STORE.edFont, 13, function (v) {
+      return typeof v === 'number';
+    });
+    state.edFont = (font === 12 || font === 13 || font === 14) ? font : 13;
+    // 装载后回写一次归一化结果：保证「界面字号」与「存储值」始终一致（首次运行也会落盘）
+    core.writeJSON(core.STORE.edFont, state.edFont);
   }
 
   /** 累计等级分 = 各题历史最高分之和。 */
@@ -131,8 +167,164 @@
       ' · 预测 ' + p.horizon + ' 步 · 需要打败最优基线（阈值 ' + p.threshold + '）';
   }
 
+  /* ---------- 写盘策略 ---------- */
+
+  /**
+   * 合并两份进度表（本地写盘用）：同一题取更优记录，不重复累加 attempts。
+   * @param {Object} disk 盘上的进度
+   * @param {Object} mem 内存里的进度
+   * @returns {Object}
+   */
+  function mergeProgressForWrite(disk, mem) {
+    var out = {};
+    var id;
+    for (id in disk) {
+      if (Object.prototype.hasOwnProperty.call(disk, id)) out[id] = disk[id];
+    }
+    for (id in mem) {
+      if (!Object.prototype.hasOwnProperty.call(mem, id)) continue;
+      var a = out[id];
+      var b = mem[id];
+      if (!a) { out[id] = b; continue; }
+      out[id] = {
+        best: Math.max(core.toScore(a.best), core.toScore(b.best)),
+        passed: a.passed === true || b.passed === true,
+        attempts: Math.max(core.toCount(a.attempts), core.toCount(b.attempts)),
+        lastVerdict: core.toTime(b.lastAt) >= core.toTime(a.lastAt) ? b.lastVerdict : a.lastVerdict,
+        lastAt: Math.max(core.toTime(a.lastAt), core.toTime(b.lastAt))
+      };
+    }
+    return out;
+  }
+
+  /**
+   * 合并两份进度表（导入用）：best = max(旧,新)、attempts = 旧+新、passed = 或。
+   * @param {Object} oldP 现有进度
+   * @param {Object} newP 导入的进度
+   * @returns {Object}
+   */
+  function mergeProgressForImport(oldP, newP) {
+    var out = {};
+    var id;
+    for (id in oldP) {
+      if (Object.prototype.hasOwnProperty.call(oldP, id)) out[id] = oldP[id];
+    }
+    for (id in newP) {
+      if (!Object.prototype.hasOwnProperty.call(newP, id)) continue;
+      var a = out[id];
+      var b = newP[id];
+      if (!a) { out[id] = b; continue; }
+      var newer = core.toTime(b.lastAt) >= core.toTime(a.lastAt) ? b : a;
+      out[id] = {
+        best: Math.max(core.toScore(a.best), core.toScore(b.best)),
+        passed: a.passed === true || b.passed === true,
+        attempts: core.toCount(a.attempts) + core.toCount(b.attempts),
+        lastVerdict: newer.lastVerdict,
+        lastAt: Math.max(core.toTime(a.lastAt), core.toTime(b.lastAt))
+      };
+    }
+    return out;
+  }
+
+  /**
+   * 合并提交记录：按 id 去重（新的覆盖旧的），按时间倒序，截断到 120 条。
+   * @param {Array} oldList 现有记录
+   * @param {Array} newList 新记录
+   * @returns {Array}
+   */
+  function mergeSubmissions(oldList, newList) {
+    var seen = {};
+    var out = [];
+    var i;
+    var src = (newList || []).concat(oldList || []);
+    for (i = 0; i < src.length; i++) {
+      var s = src[i];
+      if (!s || !s.id || seen[s.id]) continue;
+      seen[s.id] = true;
+      out.push(s);
+    }
+    out.sort(function (x, y) { return y.at - x.at; });
+    if (out.length > core.MAX_SUBMISSIONS) out.length = core.MAX_SUBMISSIONS;
+    return out;
+  }
+
+  /** 写进度：先读盘合并，再写回（避免覆盖其它标签页刚写入的记录）。 */
+  function saveProgress() {
+    var disk = schema.normalizeProgress(core.readJSON(core.STORE.progress, {}, core.isPlainObject));
+    state.progress = mergeProgressForWrite(disk, state.progress);
+    var ok = core.writeJSON(core.STORE.progress, state.progress);
+    state.storageOk = ok;
+    return ok;
+  }
+
+  /** 写草稿：草稿是「本机最新意图」，直接整表写回。 */
+  function saveDrafts() {
+    var ok = core.writeJSON(core.STORE.drafts, state.drafts);
+    state.storageOk = ok;
+    return ok;
+  }
+
+  /** 写提交记录：先读盘合并去重，再写回。 */
+  function saveSubmissions() {
+    var disk = schema.normalizeSubmissions(core.readJSON(core.STORE.submissions, [], core.isArrayValue));
+    state.submissions = mergeSubmissions(disk, state.submissions);
+    var ok = core.writeJSON(core.STORE.submissions, state.submissions);
+    state.storageOk = ok;
+    return ok;
+  }
+
+  /** 保存编辑器字号。 */
+  function saveEdFont(size) {
+    state.edFont = (size === 12 || size === 13 || size === 14) ? size : 13;
+    return core.writeJSON(core.STORE.edFont, state.edFont);
+  }
+
+  /**
+   * 外部（其它标签页）改写存储后重新装载。
+   * @returns {boolean} 是否真的读到了变化
+   */
+  function reloadFromStorage() {
+    var before = '';
+    var after = '';
+    try {
+      before = JSON.stringify([state.progress, state.drafts, state.submissions]);
+    } catch (e) {
+      before = '';
+    }
+    state.progress = core.readNormalized(
+      core.STORE.progress, {}, core.isPlainObject, schema.normalizeProgress);
+    state.drafts = core.readNormalized(
+      core.STORE.drafts, {}, core.isPlainObject, schema.normalizeDrafts);
+    state.submissions = core.readNormalized(
+      core.STORE.submissions, [], core.isArrayValue, schema.normalizeSubmissions);
+    try {
+      after = JSON.stringify([state.progress, state.drafts, state.submissions]);
+    } catch (e) {
+      after = '';
+    }
+    return before !== after;
+  }
+
+  /** 清空内存态（清空进度后调用；storage 侧由 app/storage.js 负责删除键）。 */
+  function resetState() {
+    state.progress = {};
+    state.drafts = {};
+    state.submissions = [];
+    state.filter = '全部';
+    state.query = '';
+    state.tag = null;
+    state.lastResult = null;
+    state.refScores = null;
+  }
+
+  /** 触发外部变更回调（storage 事件用）。 */
+  function notifyExternal(kind) {
+    if (externalHandler) externalHandler(kind);
+  }
+
   TSJ.appStore = {
     state: state,
+    onExternalChange: onExternalChange,
     loadState: loadState,
     totalScore: totalScore,
     levelOf: levelOf,
@@ -140,6 +332,16 @@
     updateScoreChip: updateScoreChip,
     setActiveNav: setActiveNav,
     computeRefScores: computeRefScores,
-    pathSummary: pathSummary
+    pathSummary: pathSummary,
+    mergeProgressForWrite: mergeProgressForWrite,
+    mergeProgressForImport: mergeProgressForImport,
+    mergeSubmissions: mergeSubmissions,
+    saveProgress: saveProgress,
+    saveDrafts: saveDrafts,
+    saveSubmissions: saveSubmissions,
+    saveEdFont: saveEdFont,
+    reloadFromStorage: reloadFromStorage,
+    resetState: resetState,
+    notifyExternal: notifyExternal
   };
 })(typeof window !== 'undefined' ? window : this);

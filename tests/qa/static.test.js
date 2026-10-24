@@ -14,8 +14,13 @@ const { spawnSync } = require('node:child_process');
 const { ROOT, JS_DIR } = require('./helpers/engine');
 
 const JS_FILES = ['datasets', 'problems', 'judge', 'editor', 'chart', 'app'].map((n) => path.join(JS_DIR, n + '.js'));
-/** app 层 5 个文件（拆分后）：core → store → ui → views → app.js */
-const APP_FILES = ['core', 'store', 'ui', 'views'].map((n) => path.join(JS_DIR, 'app', n + '.js'))
+/**
+ * app 层文件（顺序即加载顺序）：util → core → schema → store → storage → ui → a11y
+ *   → views → problem → pages → boards → app.js
+ * T05–T11 把应用层从 1470 行涨到约 2900 行，按职责继续拆分以守住每文件 ≤350 行的可维护性上限。
+ */
+const APP_NAMES = ['util', 'core', 'schema', 'store', 'storage', 'ui', 'a11y', 'views', 'problem', 'pages', 'boards'];
+const APP_FILES = APP_NAMES.map((n) => path.join(JS_DIR, 'app', n + '.js'))
   .concat([path.join(JS_DIR, 'app.js')]);
 /** 全部参与静态审计的脚本（顺序即 index.html 的加载顺序） */
 const ALL_JS = JS_FILES.slice(0, 5).concat(APP_FILES);
@@ -35,7 +40,7 @@ test('node --check：所有 js 语法合法（含 tests/selftest.js）', () => {
   }
 });
 
-test('app 层 5 个文件都 ≤350 行（可维护性上限）', () => {
+test('app 层 12 个文件都 ≤350 行（可维护性上限）', () => {
   const over = appLineCounts.filter(([, n]) => n > 350).map(([f, n]) => f + '=' + n);
   assert.deepEqual(over, [], '以下文件超过 350 行：' + over.join(', '));
 });
@@ -78,10 +83,17 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/judge.js',
     'assets/js/editor.js',
     'assets/js/chart.js',
+    'assets/js/app/util.js',
     'assets/js/app/core.js',
+    'assets/js/app/schema.js',
     'assets/js/app/store.js',
+    'assets/js/app/storage.js',
     'assets/js/app/ui.js',
+    'assets/js/app/a11y.js',
     'assets/js/app/views.js',
+    'assets/js/app/problem.js',
+    'assets/js/app/pages.js',
+    'assets/js/app/boards.js',
     'assets/js/app.js',
   ]);
   // 每个文件必须真实存在
@@ -100,8 +112,12 @@ test('依赖方向：引擎层不得引用 app 层；app 层只能引用**更早
     assert.ok(!/TSJ\.app(Core|Store|Ui|Views)?\b/.test(src), path.basename(f) + ' 反向依赖了应用层');
     assert.ok(!/TSJ\.renderProblem|TSJ\.route\b/.test(src), path.basename(f) + ' 反向依赖了应用层');
   }
-  // 2) app 层按 core → store → ui → views → app.js 加载，每个文件只能引用排在自己前面的命名空间
-  const namespaces = ['TSJ.appCore', 'TSJ.appStore', 'TSJ.appUi', 'TSJ.appViews', 'TSJ.app'];
+  // 2) app 层按固定顺序加载，每个文件只能引用排在自己前面的命名空间
+  const namespaces = [
+    'TSJ.appUtil', 'TSJ.appCore', 'TSJ.appSchema', 'TSJ.appStore', 'TSJ.appStorage',
+    'TSJ.appUi', 'TSJ.appA11y', 'TSJ.appViews', 'TSJ.appProblem', 'TSJ.appPages',
+    'TSJ.appBoards', 'TSJ.app',
+  ];
   APP_FILES.forEach((file, idx) => {
     const src = read(file);
     for (let j = idx + 1; j < namespaces.length; j++) {
@@ -179,7 +195,7 @@ test('localStorage：键名统一 tsoj:*，且没有未捕获的 JSON.parse', ()
   assert.ok(wBody.indexOf('try') > 0 && wBody.indexOf('catch') > 0, 'writeJSON 缺少 try/catch');
 });
 
-test('localStorage：init 装载三个键时都传了类型守卫 + 归一化函数', () => {
+test('localStorage：init 装载三个键时都传了类型守卫 + 归一化函数（归一化在 app/schema.js）', () => {
   const flat = appAll.replace(/\s+/g, ' ');
   const cases = [
     ['progress', '{}', 'isPlainObject', 'normalizeProgress'],
@@ -189,7 +205,7 @@ test('localStorage：init 装载三个键时都传了类型守卫 + 归一化函
   for (const [key, empty, guard, norm] of cases) {
     const re = new RegExp(
       'readNormalized\\( ?(?:core\\.)?STORE\\.' + key + ', ' + empty.replace(/[{}[\]]/g, '\\$&') +
-      ', (?:core\\.)?' + guard + ', (?:core\\.)?' + norm
+      ', (?:core\\.)?' + guard + ', (?:core\\.|schema\\.)?' + norm
     );
     assert.match(flat, re, key + ' 的装载缺少类型守卫或归一化');
   }

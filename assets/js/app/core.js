@@ -1,19 +1,20 @@
 /**
- * assets/js/app/core.js —— 应用层基础件：存储读写、字段归一化、转义与格式化、防抖
+ * assets/js/app/core.js —— 存储读写、校验哈希、类型守卫与基础归一化
  *
- * 加载顺序：core → store → ui → views → app.js（经典 script，无模块系统）
+ * 加载顺序：util → core → schema → store → storage → ui → a11y → views → problem → pages → app.js
  * 挂载点：window.TSJ.appCore
  *
  * 设计约定：
- *   1. 本文件不依赖 app 层其它文件（只依赖 TSJ.findProblem），因此永远可以最先加载；
+ *   1. 本文件不依赖 app 层其它文件，因此永远可以最早加载（util 除外）；
  *   2. localStorage 在 file:// 下属于**共享的不透明源**，读出的内容一律视为不可信输入：
- *      先过类型守卫，再逐字段归一化，必要时静默回写；
- *   3. 拼进 innerHTML 的文本一律走 esc()。
+ *      先过类型守卫，再逐字段归一化（归一化函数在 app/schema.js），必要时静默回写；
+ *   3. 写失败（配额不足 / 隐私模式）必须能被 UI 感知：writeJSON 返回布尔值并触发 onWriteError。
  */
 (function (global) {
   'use strict';
 
   var TSJ = global.TSJ || (global.TSJ = {});
+  var util = TSJ.appUtil;
 
   /** 难度档位（顺序即展示顺序） */
   var DIFFS = ['入门', '普及', '提高', '挑战'];
@@ -22,20 +23,32 @@
   /** 判题模式 → 中文名 */
   var MODE_LABEL = { holdout: '留出法', rolling: '滚动回测' };
 
+  /** 当前存储格式版本；导入时 schema 高于此值一律拒绝（低版本按白名单归一化后接受） */
+  var CURRENT_SCHEMA = 1;
+  /** 单条提交记录里代码快照的截断上限（20KB） */
+  var CODE_LIMIT = 20 * 1024;
+  /** 提交记录保留条数 */
+  var MAX_SUBMISSIONS = 120;
+  /** 单条提交记录里逐测试点明细的上限 */
+  var MAX_CASES = 32;
+  /** 所有存储键的公共前缀：清空进度只删这个前缀的键 */
+  var STORAGE_PREFIX = 'tsoj:';
+
   /**
    * localStorage 键名（统一 tsoj: 前缀；禁止在别处硬编码键名字面量）。
-   *   tsoj:progress     { [problemId]: { best, passed, attempts, lastVerdict, lastAt } }
-   *   tsoj:drafts       { [problemId]: code }
-   *   tsoj:submissions  [ { at, problemId, title, score, verdict, passed, metric } ]
-   *   tsoj:onboarded    true
-   *   tsoj:filter       难度筛选值
+   *   progress      { [problemId]: { best, passed, attempts, lastVerdict, lastAt } }
+   *   drafts        { [problemId]: code }
+   *   submissions   [ { id, at, problemId, title, score, verdict, passed, metric, code, cases, degraded } ]
+   *   onboarded     true / filter 难度筛选值 / schema 版本号 / edFont 编辑器字号
    */
   var STORE = {
     progress: 'tsoj:progress',
     drafts: 'tsoj:drafts',
     submissions: 'tsoj:submissions',
     onboarded: 'tsoj:onboarded',
-    filter: 'tsoj:filter'
+    filter: 'tsoj:filter',
+    schema: 'tsoj:schema',
+    edFont: 'tsoj:edFont'
   };
 
   /* ---------- 1. 类型守卫 ---------- */
@@ -50,13 +63,37 @@
   }
 
   /* ---------- 2. 存储读写 ---------- */
+  /** 写失败回调（由 app 层注册，用来弹「本地存储已满」提示）。 */
+  var writeErrorHandler = null;
+  /** 上次写失败的时间戳，用于给提示节流 */
+  var lastWriteErrorAt = 0;
+
+  /**
+   * 注册写失败回调。
+   * @param {Function} fn function(quotaExceeded:boolean, key:string)
+   */
+  function onWriteError(fn) {
+    writeErrorHandler = typeof fn === 'function' ? fn : null;
+  }
+
+  /**
+   * 判断异常是否为「配额不足」。
+   * @param {*} e 捕获到的异常
+   * @returns {boolean}
+   */
+  function isQuotaError(e) {
+    if (!e) return false;
+    var name = String(e.name || '');
+    return name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      e.code === 22 || e.code === 1014;
+  }
+
   /**
    * 读取 JSON，异常或类型不符时返回兜底值。
    *
-   * 安全约定：localStorage 在 file:// 下属于**共享的不透明源**，同目录任意本地页面都能写入，
-   * 因此读出的内容必须视为「不可信输入」：
+   * 安全约定：读出的内容必须视为「不可信输入」：
    *   1. 非法 JSON → 丢弃并静默重写为兜底值；
-   *   2. 通过 guard 的类型守卫 → 不通过则丢弃并静默重写为兜底值。
+   *   2. 类型守卫不通过 → 丢弃并静默重写为兜底值。
    *
    * @param {string} key 键
    * @param {*} fallback 兜底值
@@ -89,16 +126,53 @@
     return val;
   }
 
-  /** 写入 JSON，静默失败（隐私模式 / 配额不足）。 */
+  /**
+   * 写入 JSON。失败时返回 false 并通知 app 层（配额不足 → 「进度未保存」）。
+   * 不抛异常：存储不可用不应打断判题主流程，内存态继续工作。
+   *
+   * @param {string} key 键
+   * @param {*} value 值
+   * @returns {boolean} 是否真的落盘
+   */
   function writeJSON(key, value) {
+    var text;
     try {
-      global.localStorage.setItem(key, JSON.stringify(value));
+      text = JSON.stringify(value);
     } catch (e) {
-      /* 忽略：不影响主流程 */
+      return false;   // 循环引用等：不写，内存态继续
+    }
+    try {
+      global.localStorage.setItem(key, text);
+      return true;
+    } catch (e) {
+      var now = Date.now();
+      if (writeErrorHandler && now - lastWriteErrorAt > 1200) {
+        lastWriteErrorAt = now;
+        writeErrorHandler(isQuotaError(e), key);
+      }
+      return false;
     }
   }
 
-  /* ---------- 3. 字段归一化（storage → 可信内存值） ---------- */
+  /* ---------- 3. 校验哈希（FNV-1a 32 位，用于导入文件的完整性校验） ---------- */
+  /**
+   * 计算字符串的 FNV-1a 32 位哈希，返回 8 位小写十六进制。
+   * @param {string} str 输入
+   * @returns {string} 形如 "1a2b3c4d"
+   */
+  function fnv1a(str) {
+    var s = String(str == null ? '' : str);
+    var h = 0x811c9dc5;
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    var hex = h.toString(16);
+    while (hex.length < 8) hex = '0' + hex;
+    return hex;
+  }
+
+  /* ---------- 4. 字段归一化（storage → 可信内存值的基础件） ---------- */
   /** 归一化分数：只接受有限数值，夹到 0..100 的整数。 */
   function toScore(v) {
     var n = Number(v);
@@ -125,73 +199,17 @@
     return typeof v === 'string' ? v : '';
   }
 
-  /** 允许出现在提交记录里的 verdict 取值 */
-  var VERDICTS = ['AC', 'WA', 'RE', 'TLE'];
-
-  /**
-   * 归一化进度表：只保留「纯对象」记录，并把每个字段强制成安全类型。
-   *
-   * `passed` 额外做一致性校验：必须同时满足「记录里标记为 true」与「最高分达到该题通过线」。
-   * 否则一条被篡改成 `{best: "<img ...>", passed: true}` 的记录会在界面上显示成
-   * 「已通过 · 最高分 0」并解锁题解 —— 归一化后 best=0，passed 自然回落为 false。
-   *
-   * @param {*} raw readJSON 读出的原始值
-   * @returns {Object} { [problemId]: { best, passed, attempts, lastVerdict, lastAt } }
-   */
-  function normalizeProgress(raw) {
-    var out = {};
-    if (!isPlainObject(raw)) return out;
-    var ids = Object.keys(raw);
-    for (var i = 0; i < ids.length; i++) {
-      var id = ids[i];
-      var rec = raw[id];
-      if (!isPlainObject(rec)) continue;
-      var best = toScore(rec.best);
-      var passLine = 60;
-      var prob = TSJ.findProblem(id);
-      if (prob && prob.passScore > 0) passLine = prob.passScore;
-      out[id] = {
-        best: best,
-        passed: rec.passed === true && best >= passLine,
-        attempts: toCount(rec.attempts),
-        lastVerdict: toText(rec.lastVerdict),
-        lastAt: toTime(rec.lastAt)
-      };
-    }
-    return out;
+  /** 归一化指标值：有限数值保留，其余变 null（渲染时显示「—」）。 */
+  function toMetric(v) {
+    if (v === null || v === undefined || v === '') return null;
+    var n = Number(v);
+    return isFinite(n) ? n : null;
   }
 
-  /** 归一化草稿表：只保留字符串值（代码），其余丢弃。 */
-  function normalizeDrafts(raw) {
-    var out = {};
-    if (!isPlainObject(raw)) return out;
-    var ids = Object.keys(raw);
-    for (var i = 0; i < ids.length; i++) {
-      var code = raw[ids[i]];
-      if (typeof code === 'string') out[ids[i]] = code;
-    }
-    return out;
-  }
-
-  /** 归一化提交记录：必须是数组，逐项校验并强制类型。 */
-  function normalizeSubmissions(raw) {
-    var out = [];
-    if (!isArrayValue(raw)) return out;
-    for (var i = 0; i < raw.length; i++) {
-      var s = raw[i];
-      if (!isPlainObject(s)) continue;
-      var verdict = toText(s.verdict).toUpperCase();
-      out.push({
-        at: toTime(s.at),
-        problemId: toText(s.problemId),
-        title: toText(s.title),
-        score: toScore(s.score),
-        verdict: VERDICTS.indexOf(verdict) >= 0 ? verdict : 'WA',
-        passed: s.passed === true,
-        metric: toText(s.metric)
-      });
-    }
-    return out;
+  /** 截断代码快照：超过 20KB 时硬截断（保证存储不被单条记录撑爆）。 */
+  function truncateCode(v) {
+    var s = toText(v);
+    return s.length > CODE_LIMIT ? s.slice(0, CODE_LIMIT) : s;
   }
 
   /**
@@ -222,78 +240,37 @@
     return normalized;
   }
 
-  /* ---------- 4. 通用工具 ---------- */
-  /** querySelector 简写（建议总传入 root，把查询限制在 #view 内）。 */
-  function $(sel, root) {
-    return (root || document).querySelector(sel);
-  }
-
-  /** HTML 转义。 */
-  function esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  /** 数字格式化（用于指标展示）。 */
-  function fmtNum(v) {
-    if (v === null || v === undefined || !isFinite(v)) return '—';
-    var a = Math.abs(v);
-    if (a >= 10000) return v.toFixed(0);
-    if (a >= 100) return v.toFixed(1);
-    if (a >= 1) return v.toFixed(2);
-    if (a === 0) return '0';
-    return v.toFixed(4);
-  }
-
-  /** 时间格式化：YYYY-MM-DD HH:mm。非法时间戳返回占位符。 */
-  function fmtTime(ts) {
-    if (!isFinite(ts) || ts <= 0) return '—';
-    var d = new Date(ts);
-    /** 补零。 */
-    function pad(n) { return n < 10 ? '0' + n : String(n); }
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
-      ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-  }
-
-  /** 简单防抖。 */
-  function debounce(fn, wait) {
-    var timer = 0;
-    return function () {
-      var args = arguments;
-      var self = this;
-      if (timer) global.clearTimeout(timer);
-      timer = global.setTimeout(function () {
-        timer = 0;
-        fn.apply(self, args);
-      }, wait);
-    };
-  }
-
   TSJ.appCore = {
     DIFFS: DIFFS,
     DIFF_CLASS: DIFF_CLASS,
     MODE_LABEL: MODE_LABEL,
     STORE: STORE,
+    STORAGE_PREFIX: STORAGE_PREFIX,
+    CURRENT_SCHEMA: CURRENT_SCHEMA,
+    CODE_LIMIT: CODE_LIMIT,
+    MAX_SUBMISSIONS: MAX_SUBMISSIONS,
+    MAX_CASES: MAX_CASES,
     isPlainObject: isPlainObject,
     isArrayValue: isArrayValue,
     readJSON: readJSON,
     writeJSON: writeJSON,
+    onWriteError: onWriteError,
+    isQuotaError: isQuotaError,
+    fnv1a: fnv1a,
     readNormalized: readNormalized,
     toScore: toScore,
     toCount: toCount,
     toTime: toTime,
     toText: toText,
-    VERDICTS: VERDICTS,
-    normalizeProgress: normalizeProgress,
-    normalizeDrafts: normalizeDrafts,
-    normalizeSubmissions: normalizeSubmissions,
-    $: $,
-    esc: esc,
-    fmtNum: fmtNum,
-    fmtTime: fmtTime,
-    debounce: debounce
+    toMetric: toMetric,
+    truncateCode: truncateCode,
+    // util 的工具在这里再导出一份：调用点统一写 core.esc / core.$ / core.fmtTime，少一层命名空间记忆
+    $: util.$,
+    $$: util.$$,
+    esc: util.esc,
+    fmtNum: util.fmtNum,
+    fmtTime: util.fmtTime,
+    fmtDateStamp: util.fmtDateStamp,
+    debounce: util.debounce
   };
 })(typeof window !== 'undefined' ? window : this);

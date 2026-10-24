@@ -20,8 +20,13 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-/** app 层源码（拆分后：core → store → ui → views → app.js，按加载顺序拼接后整体审计） */
-const APP_FILES = ['app/core.js', 'app/store.js', 'app/ui.js', 'app/views.js', 'app.js'];
+/** app 层源码（按加载顺序拼接后整体审计）：util → core → schema → store → storage → ui → a11y
+ *  → views → problem → pages → boards → app.js */
+const APP_FILES = [
+  'app/util.js', 'app/core.js', 'app/schema.js', 'app/store.js', 'app/storage.js',
+  'app/ui.js', 'app/a11y.js', 'app/views.js', 'app/problem.js', 'app/pages.js',
+  'app/boards.js', 'app.js',
+];
 const SRC = APP_FILES
   .map((rel) => fs.readFileSync(path.join(ROOT, 'assets', 'js', rel), 'utf8'))
   .join('\n');
@@ -141,7 +146,7 @@ function loadRe(key, empty, guard, norm) {
   const e = empty.replace(/[{}[\]]/g, '\\$&');
   return new RegExp(
     'readNormalized\\(\\s*(?:core\\.)?STORE\\.' + key + ',\\s*' + e +
-    ',\\s*(?:core\\.)?' + guard + ',\\s*(?:core\\.)?' + norm
+    ',\\s*(?:core\\.)?' + guard + ',\\s*(?:core\\.|schema\\.)?' + norm
   );
 }
 check(loadRe('progress', '{}', 'isPlainObject', 'normalizeProgress').test(SRC), 'progress 用 isPlainObject 守卫');

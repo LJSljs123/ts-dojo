@@ -1,7 +1,7 @@
 /**
- * assets/js/app/ui.js —— 通用渲染件：Markdown、结果面板、预测曲线、判题按钮态、分栏拖拽
+ * assets/js/app/ui.js —— 通用渲染件：Markdown、结果面板、逐测试点、预测曲线、判题按钮态、分栏拖拽
  *
- * 加载顺序：core → store → ui → views → app.js；挂载点 TSJ.appUi。
+ * 加载顺序：core → store → storage → ui → a11y → views → pages → app.js；挂载点 TSJ.appUi。
  * 约定：所有 DOM 查询限定在 `#view` 作用域内（`$('#x', view)`）—— 旧实现用全局
  * `$('#btnSolution')` / `$('#resultPanel')`，路由切换后会摸到新页面的节点。
  */
@@ -34,6 +34,7 @@
     var listTag = null;
     var i = 0;
 
+    /** 关闭当前列表。 */
     function closeList() { if (listTag) { out.push('</' + listTag + '>'); listTag = null; } }
 
     /** 判断一行是否开启新块。 */
@@ -130,7 +131,39 @@
     }
   }
 
-  /* ---------- 3. 结果面板 ---------- */
+  /* ---------- 3. 逐测试点列表（结果面板与提交详情共用） ---------- */
+  /** verdict → 迷你标签 class */
+  function verdictMiniClass(v) {
+    return v === 'AC' ? 'vm-ac' : v === 'RE' ? 'vm-re' : v === 'TLE' ? 'vm-tle' : 'vm-wa';
+  }
+
+  /**
+   * 渲染逐测试点列表。
+   * @param {Array} cases 测试点数组（judge 的 res.cases 或落盘的 cases 快照）
+   * @param {boolean} withOrigin 是否显示「（origin #N）」
+   * @returns {string} HTML
+   */
+  function renderCaseList(cases, withOrigin) {
+    var list = core.isArrayValue(cases) ? cases : [];
+    if (list.length === 0) return '';
+    var html = ['<div class="cases">'];
+    for (var i = 0; i < list.length; i++) {
+      var cs = list[i] || {};
+      var vm = verdictMiniClass(cs.verdict);
+      html.push('<div class="case">\n  <span class="verdict-mini ' + vm + '">' + esc(cs.verdict) + '</span>');
+      html.push('  <span class="case-idx">测试点 ' + (i + 1) +
+        (withOrigin && list.length > 1 ? '（origin #' + esc(core.toCount(cs.index) + 1) + '）' : '') + '</span>');
+      html.push('  <span class="case-metric">你 ' + fmtNum(cs.yourMetric) +
+        ' / 基线 ' + fmtNum(cs.bestBaseline) + '</span>');
+      html.push('  <span class="case-score">' + esc(core.toScore(cs.score)) + '</span>');
+      if (cs.error) html.push('  <span class="case-err">' + esc(cs.error) + '</span>');
+      html.push('</div>');
+    }
+    html.push('</div>');
+    return html.join('\n');
+  }
+
+  /* ---------- 4. 结果面板 ---------- */
   /** 渲染「前置守卫」提示（数据不足 / 沙箱不可用 / 已取消）。 这类报告不进入评分流程，因此不显示任何分数与逐测试点。 */
   function renderGuardNotice(res) {
     var view = $('#view');
@@ -173,13 +206,13 @@
     var circumference = 2 * Math.PI * 30;
     var offset = circumference * (1 - Math.max(0, Math.min(100, res.score)) / 100);
 
-    html.push('<div class="result-head">\n  <div class="ring-wrap">' + '\n' + '    <svg class="ring" viewBox="0 0 72 72" aria-hidden="true">');
+    html.push('<div class="result-head">\n  <div class="ring-wrap">\n    <svg class="ring" viewBox="0 0 72 72" aria-hidden="true">');
     html.push('      <circle class="ring-bg" cx="36" cy="36" r="30"></circle>');
     html.push('      <circle class="ring-fg' + ringClass + '" cx="36" cy="36" r="30" ' +
       'stroke-dasharray="' + circumference.toFixed(2) + '" ' +
       'stroke-dashoffset="' + offset.toFixed(2) + '"></circle>');
-    html.push('    </svg>' + '\n' + '    <div class="ring-label"><b>' + esc(res.score) + '</b><span>SCORE</span></div>');
-    html.push('  </div>\n  <div class="result-summary">' + '\n' + '    <div class="verdict ' + verdictClass + '">' + verdictText + '</div>');
+    html.push('    </svg>\n    <div class="ring-label"><b>' + esc(res.score) + '</b><span>SCORE</span></div>');
+    html.push('  </div>\n  <div class="result-summary">\n    <div class="verdict ' + verdictClass + '">' + verdictText + '</div>');
     html.push('    <div class="result-sub">' + esc(res.metricLabel || '') + ' · ' +
       (res.cases.length > 1 ? res.cases.length + ' 个测试点取平均' : '单测试点') + '</div>');
     html.push('    <div class="result-sub dim">通过线 ' + p.passScore + ' 分 · 阈值 ' +
@@ -201,26 +234,7 @@
     }
 
     // ---- 逐测试点 ----
-    if (res.cases.length > 0) {
-      html.push('<div class="cases">');
-      for (var c = 0; c < res.cases.length; c++) {
-        var cs = res.cases[c];
-        var vm = cs.verdict === 'AC' ? 'vm-ac'
-          : cs.verdict === 'RE' ? 'vm-re'
-            : cs.verdict === 'TLE' ? 'vm-tle' : 'vm-wa';
-        html.push('<div class="case">' + '\n' + '  <span class="verdict-mini ' + vm + '">' + esc(cs.verdict) + '</span>');
-        html.push('  <span class="case-idx">测试点 ' + (c + 1) +
-          (res.cases.length > 1 ? '（origin #' + esc(cs.index + 1) + '）' : '') + '</span>');
-        html.push('  <span class="case-metric">你 ' + fmtNum(cs.yourMetric) +
-          ' / 基线 ' + fmtNum(cs.bestBaseline) + '</span>');
-        html.push('  <span class="case-score">' + esc(cs.score) + '</span>');
-        if (cs.error) {
-          html.push('  <span class="case-err">' + esc(cs.error) + '</span>');
-        }
-        html.push('</div>');
-      }
-      html.push('</div>');
-    }
+    if (res.cases.length > 0) html.push(renderCaseList(res.cases, true));
 
     // ---- 指标对比条（以最后一个测试点为例）----
     if (res.cases.length > 0 && isFinite(res.cases[res.cases.length - 1].yourMetric)) {
@@ -247,20 +261,18 @@
       html.push('<div class="bars">');
       html.push('  <div class="bars-title">指标对比 · ' + esc(res.metricLabel || '') +
         '（越短越好，黄色为最优基线）</div>');
-
-      // 你的
       html.push('  <div class="bar-row">\n    <span class="bar-label mine">你的预测</span>');
       html.push('    <span class="bar-track"><span class="bar-fill mine" style="width:' +
         Math.min(100, (values.__mine / maxVal) * 100).toFixed(1) + '%"></span></span>');
-      html.push('    <span class="bar-val">' + fmtNum(values.__mine) + '</span>' + '\n' + '  </div>');
+      html.push('    <span class="bar-val">' + fmtNum(values.__mine) + '</span>\n  </div>');
 
       for (var n = 0; n < names.length; n++) {
         var nm = names[n];
         var isBest = nm === last.baselineName;
-        html.push('  <div class="bar-row">' + '\n' + '    <span class="bar-label">' + esc(judge.baselineLabels[nm] || nm) + '</span>');
+        html.push('  <div class="bar-row">\n    <span class="bar-label">' + esc(judge.baselineLabels[nm] || nm) + '</span>');
         html.push('    <span class="bar-track"><span class="bar-fill' + (isBest ? ' best' : '') +
           '" style="width:' + Math.min(100, (values[nm] / maxVal) * 100).toFixed(1) + '%"></span></span>');
-        html.push('    <span class="bar-val">' + fmtNum(values[nm]) + '</span>' + '\n' + '  </div>');
+        html.push('    <span class="bar-val">' + fmtNum(values[nm]) + '</span>\n  </div>');
       }
       html.push('</div>');
     }
@@ -268,7 +280,7 @@
     host.innerHTML = html.join('\n');
   }
 
-  /** 把最后一个测试点的预测画到预览图上。 */
+  /** 把最后一个测试点的预测画到预览图上（hover 绑定由 views 负责，paint 后几何信息自动更新）。 */
   function paintPrediction(res, p, ds) {
     if (!res || !res.cases || res.cases.length === 0) return;
     var last = res.cases[res.cases.length - 1];
@@ -284,7 +296,7 @@
     });
   }
 
-  /* ---------- 4. 左右分栏拖拽 ---------- */
+  /* ---------- 5. 左右分栏拖拽 ---------- */
   /** 绑定左右分栏拖拽。 */
   function bindSplitter(view) {
     var layout = $('#problemLayout', view);
@@ -327,6 +339,8 @@
     md: md,
     canSubmit: canSubmit,
     setBusy: setBusy,
+    verdictMiniClass: verdictMiniClass,
+    renderCaseList: renderCaseList,
     renderGuardNotice: renderGuardNotice,
     renderResult: renderResult,
     paintPrediction: paintPrediction,

@@ -28,7 +28,24 @@ python -m http.server 8080
 
 ---
 
-## 二、目录结构
+## 二、功能一览
+
+| 模块 | 能力 |
+|---|---|
+| 题库 | 9 道题（入门→挑战）、难度筛选、**标签筛选**、**搜索**（题号/标题/标签）、**随机一题**（优先未通过）、三条件取交集 |
+| 判题 | 留出 / 滚动回测；与 4 条统计基线比误差；逐测试点 verdict + 指标对比；判题会话隔离（切题不会串成绩） |
+| 学习 | 题面含数学公式与数据说明、折叠提示、通过后解锁参考题解、学习路径时间线 |
+| 进度 | 每题最高分 / 通过状态 / 草稿自动保存；**进度导出为 JSON、导入合并、一键清空**（换机器不丢记录） |
+| 复盘 | **提交详情页**：当时提交的代码快照（语法高亮）+ 逐测试点结果，刷新后仍可访问 |
+| 图表 | 数据预览（历史 / 测试区间 / 你的预测三色）；**hover 十字线 + tooltip**（真值 / 预测 / 差值） |
+| 编辑器 | 语法高亮、行号、Tab 缩进、括号自动配对、**括号匹配高亮**、**字号 12/13/14**、`Ctrl/Cmd+S` 存草稿、`Ctrl/Cmd+Enter` 运行；**>800 行自动降级**关闭实时高亮保证输入流畅 |
+| 窄屏 | ≤640px 自动切换**卡片式列表**（标题正常换行，不再挤成一字一行）、题目页上下堆叠、触控目标 ≥40px |
+| 可访问性 | 弹层焦点陷阱 + ESC 关闭 + 焦点恢复、结果面板 `aria-live`、编辑器错误 `aria-describedby`、路由切换更新标题并聚焦主区 |
+| 存储 | 跨标签页 `storage` 事件同步（后写不再覆盖先写）、配额超限提示并降级为内存态、脏数据静默归一化 |
+
+---
+
+## 三、目录结构
 
 ```
 ts-dojo/
@@ -40,31 +57,43 @@ ts-dojo/
 │       ├── datasets.js        # 8 条合成数据集（固定种子确定性生成）
 │       ├── problems.js        # 9 道题（题面 / 参考解 / 模板 / 评分参数）
 │       ├── judge.js           # 判题引擎：指标 + 基线 + 评分 + Worker 沙箱
-│       ├── editor.js          # 自研代码编辑器（高亮 / 行号 / 缩进 / 快捷键）
-│       ├── chart.js           # Canvas 折线图（历史 / 测试区间 / 预测）
-│       ├── app.js             # 应用外壳：路由 / 判题会话 / 提交记录·排行榜·学习路径 / init()
-│       └── app/               # 应用层（经典 script，顺序 core → store → ui → views → app.js）
-│           ├── core.js        #   STORE 键名、存储读写、字段归一化、esc/fmt/debounce
-│           ├── store.js       #   state（含判题令牌）+ 派生量（总分 / 等级 / 每题统计 / 参考解分）
+│       ├── editor.js          # 自研代码编辑器（高亮 / 行号 / 缩进 / 括号匹配 / 字号）
+│       ├── chart.js           # Canvas 折线图（历史 / 测试区间 / 预测 / hover tooltip）
+│       ├── app.js             # 应用外壳：路由 / 判题会话 / 落盘 / init()
+│       └── app/               # 应用层（经典 script，顺序见下）
+│           ├── util.js        #   $/$$、debounce、truncate 等无状态工具
+│           ├── core.js        #   STORE 键名、存储读写、字段归一化、esc/fmt
+│           ├── schema.js      #   localStorage 数据的归一化与类型守卫
+│           ├── store.js       #   state（含判题令牌）+ 派生量 + 合并写盘策略
+│           ├── storage.js     #   进度导出 / 导入 / 清空、跨标签页 storage 同步
 │           ├── ui.js          #   Markdown、结果面板、预测曲线、按钮态、分栏拖拽
-│           └── views.js       #   题库页 / 题目页 / 题解 / 引导弹层
+│           ├── a11y.js        #   焦点陷阱、ESC 关闭、aria-live、焦点恢复
+│           ├── views.js       #   题库页（搜索 / 标签 / 难度 / 随机一题 / 卡片列表）
+│           ├── problem.js     #   题目页、编辑器装配、题解弹层、引导弹层
+│           ├── pages.js       #   提交记录、提交详情、排行榜、学习路径
+│           └── boards.js      #   排行榜与学习路径的共享渲染片段
 ├── tests/
-│   ├── qa/                    # node --test tests/qa/*.test.js（132 条）
+│   ├── qa/                    # node --test tests/qa/*.test.js（151 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
 │   ├── starter-check.js       # 9 题模板原样提交必须全 WA
 │   └── storage-audit.js       # localStorage 输出安全静态审计
+├── docs/review-and-plan.md    # 架构审查报告与升级任务分解
 └── README.md
 ```
 
 加载顺序（`index.html` 末尾，顺序不可调换）：
 
 ```
-datasets.js → problems.js → judge.js → editor.js → chart.js → app.js
+datasets → problems → judge → editor → chart
+  → app/util → app/core → app/schema → app/store → app/storage
+  → app/ui → app/a11y → app/views → app/problem → app/pages → app/boards → app.js
 ```
+
+依赖方向严格单向（`tests/qa/static.test.js` 会检查）：任何模块都不得引用排在它**后面**的命名空间。
 
 ---
 
-## 三、数据集：教学用合成序列
+## 四、数据集：教学用合成序列
 
 > **所有序列都是教学用合成数据，由固定种子的确定性伪随机数（mulberry32）在运行时生成，可复现。**
 > 同一份代码在任何机器、任何时间、任何浏览器上生成的数字完全一致。
@@ -90,7 +119,7 @@ datasets.js → problems.js → judge.js → editor.js → chart.js → app.js
 
 ---
 
-## 四、题目设计
+## 五、题目设计
 
 学习路径（由易到难，知识点逐层叠加）：
 
@@ -133,7 +162,7 @@ datasets.js → problems.js → judge.js → editor.js → chart.js → app.js
 
 ---
 
-## 五、用户代码接口
+## 六、用户代码接口
 
 每道题只需要实现一个函数：
 
@@ -157,7 +186,7 @@ new Function('history', 'horizon', 'ctx', code + '\n;return predict(history, hor
 
 ---
 
-## 六、判题与评分
+## 七、判题与评分
 
 ### 指标（`judge.metrics`）
 
@@ -217,7 +246,7 @@ function scoreForRatio(ratio, threshold, passScore) {
 
 ---
 
-## 七、沙箱与安全
+## 八、沙箱与安全
 
 用户代码在 **Blob URL 创建的 Web Worker** 中执行（`file://` 下无法加载独立 worker 文件，因此必须用 Blob）：
 
@@ -226,12 +255,12 @@ var url = URL.createObjectURL(new Blob([WORKER_SOURCE], { type: 'application/jav
 var worker = new Worker(url);
 ```
 
-### 7.1 口径：这是「隔离执行环境」，**不是**安全边界
+### 8.1 口径：这是「隔离执行环境」，**不是**安全边界
 
 本项目的目标是**防止误用**（用户自己写出死循环、误用 `fetch`、误改全局），不是对抗刻意构造的攻击者。
 同机同浏览器里能跑任意页面脚本的攻击者，仍然可以通过侧信道等方式推断信息 —— 不要把它当成安全沙箱。
 
-### 7.2 三层防护（缺一不可）
+### 8.2 三层防护（缺一不可）
 
 **第 1 层：Worker 内的能力遮蔽（judge.js 的 `WORKER_SOURCE`）**
 
@@ -273,7 +302,7 @@ worker-src blob:; font-src 'self'
 - 路由切换时作废会话令牌并 `abort()` 旧 Worker，**不留后台计算**；
 - 旧会话的回调首行校验「令牌 + 题目 id」，不匹配就整段丢弃（不碰 DOM、不写存储）。
 
-### 7.3 无 Worker 时：拒绝提交，而不是降级
+### 8.3 无 Worker 时：拒绝提交，而不是降级
 
 若环境禁止创建 Worker（隐私设置 / 旧内核 / 策略限制），`judge.evaluate()` 返回 `{ refused: true, reason }`，
 **不会**降级到主线程执行 —— 降级意味着 `while(true){}` 直接锁死页面且没有任何超时保护。
@@ -281,7 +310,7 @@ worker-src blob:; font-src 'self'
 
 `judge.evaluateSync()`（同线程）只用于**可信代码**：参考解评分与排行榜虚拟选手，永不用于用户提交。
 
-### 7.4 数据不足时：显式报错，不静默缩水
+### 8.4 数据不足时：显式报错，不静默缩水
 
 滚动回测题需要 `len >= horizon + windows × originStep` 个数据点。不满足时 `judge.evaluate()` 返回
 `{ dataError: true, message }`，UI 在结果面板显示提示且**不显示任何分数** ——
@@ -289,7 +318,7 @@ worker-src blob:; font-src 'self'
 
 ---
 
-## 八、如何扩展
+## 九、如何扩展
 
 ### 新增一道题
 
@@ -339,7 +368,7 @@ worker-src blob:; font-src 'self'
 
 ---
 
-## 九、自测
+## 十、自测
 
 ```bash
 node tests/selftest.js        # 判题引擎自测（数据 / 参考解 / 指标 / 评分 / 沙箱 / 切分）
@@ -347,6 +376,19 @@ node tests/starter-check.js   # 模板有效性自证（9 题模板原样提交�
 node tests/storage-audit.js   # localStorage 输出安全静态审计（esc() 覆盖率 / 类型守卫）
 node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
 ```
+
+**测试规模：151 条用例，0 skip**（其中约 60 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
+找不到浏览器时自动 skip，并在输出里注明「未验证」，不假装通过）。
+
+| 测试文件 | 关注点 |
+|---|---|
+| `metrics` / `baselines` / `split` / `scoring` | 指标数学、基线逐值手算、留出与滚动切分、评分单调性与边界 |
+| `adversarial` | 非法返回值、死循环、沙箱封禁、跨测试点污染 |
+| `solutions` | 9 题参考解通过、朴素解不可过、可复现性 |
+| `static` | 语法、无 ESM、无外链、脚本顺序与依赖方向、CSS 覆盖率、存储键前缀 |
+| `browser` | 真实浏览器：路由渲染、Worker 判题、XSS 注入、脏数据 |
+| `regressions` | 判题竞态（切题串成绩）、沙箱逃逸、375px 溢出、rolling 窗口不足 |
+| `features` | 导出/导入/清空、提交详情、窄屏卡片、图表 tooltip、搜索筛选、字号与括号、焦点陷阱 |
 
 `selftest.js` 覆盖内容：
 
@@ -400,15 +442,25 @@ P9 是唯一的例外形态：平均分 79 高于通过线，但窗口 1 只有 
 
 ---
 
-## 十、localStorage 键名
+## 十一、localStorage 键名
 
 | 键 | 内容 |
 |---|---|
 | `tsoj:progress` | `{ [problemId]: { best, passed, attempts, lastVerdict, lastAt } }` |
 | `tsoj:drafts` | `{ [problemId]: code }` 代码草稿（输入 400ms 防抖保存） |
-| `tsoj:submissions` | `[{ at, problemId, title, score, verdict, passed, metric }]`（最多 120 条） |
+| `tsoj:submissions` | `[{ id, at, problemId, title, score, verdict, passed, metric, code, cases, degraded }]`（最多 120 条，`code` 截断 20KB） |
 | `tsoj:onboarded` | 是否已看过引导 |
 | `tsoj:filter` | 题库页难度筛选 |
+| `tsoj:schema` | 存储格式版本（当前 `1`，用于导入时拒绝过新文件） |
+| `tsoj:edFont` | 编辑器字号（12 / 13 / 14） |
+
+### 进度导出 / 导入
+
+- 导出文件结构：`{ schema, app:'tsoj', exportedAt, data:{ progress, drafts, submissions }, hash }`，
+  `hash` 是 `data` 的 FNV-1a 校验，用于识别「手改过的文件」。
+- 导入校验顺序：JSON 合法 → `app === 'tsoj'` → `schema <= 当前` → `hash` 匹配 → 字段白名单归一化。
+  任一失败都给出具体原因，且**不动现有数据**。
+- 合并策略：`best = max`、`attempts` 相加、`passed` 取或、提交记录按 `id` 去重后按时间倒序截 120 条。
 
 ### 读取约定（把 storage 当不可信输入）
 
@@ -426,16 +478,18 @@ P9 是唯一的例外形态：平均分 79 高于通过线，但窗口 1 只有 
    `title` / `problemId` / `metric` / `at` …），数字字段先做 `Number()` 归一。
    这样即使 storage 里被塞入 `<img src=x onerror=...>`，也只会以文本形式显示。
 
-清空方式：浏览器 DevTools → Application → Local Storage → 删除 `tsoj:*`。
+清空方式：提交记录页顶部「清空进度」按钮（二次确认，只删 `tsoj:*` 前缀键），
+或浏览器 DevTools → Application → Local Storage → 删除 `tsoj:*`。
 
 ---
 
-## 十一、已知限制
+## 十二、已知限制
 
 1. **沙箱不是安全边界**。它是"防误用"级别的隔离执行环境（能力遮蔽 + CSP + 超时终止），目标是拦住误用与常见逃逸（`delete` 封禁、原型链取回、`eval` / `Function` 构造器），但**不对抗**刻意构造的侧信道攻击。请不要把不可信代码当成真正的安全威胁模型来跑。
 2. **Worker 不可用时禁止提交**（不再降级到主线程）：`evaluate` 返回 `refused: true`，UI 置灰按钮并提示原因。
 3. **滚动回测的逐点判定较严**：任一窗口 `score < passScore` 就判 `WA`，即使平均分很高。这是有意为之（"长期可复现的能力"），但也意味着 P9 的容错空间最小。
 4. **判题在主线程做结构化克隆**：每个测试点都会把训练窗口（最多 ~700 个数字）传给 Worker，数据量很小，不影响性能。
-5. **图表为手绘 Canvas**：只画折线 + 网格 + 测试区间高亮带，没有缩放 / 悬浮提示等交互。
-6. **编辑器为自研轻量实现**：语法高亮是单遍正则扫描，覆盖 JS 常用词法（注释 / 字符串 / 数字 / 关键字 / 内置名），不做 AST 级分析；`Ctrl+Z` 依赖浏览器对 `setRangeText` 的原生撤销栈，个别浏览器上连续 Tab 缩进的撤销粒度可能较粗。
-7. **难度 / 通过率是本地统计**：没有后端，排行榜里的"参考解法"是本地虚拟选手（分数由参考实现实时计算），"通过率"在无本地提交时显示题目自带的静态值。
+5. **图表为手绘 Canvas**：折线 + 网格 + 测试区间高亮带 + hover 十字线与 tooltip；**没有缩放/平移**，也没有图例交互（切换某条线显隐）。
+6. **编辑器为自研轻量实现**：语法高亮是单遍正则扫描，覆盖 JS 常用词法（注释 / 字符串 / 数字 / 关键字 / 内置名），不做 AST 级分析；支持括号匹配高亮、字号切换、`Ctrl+S` 存草稿；**超过 800 行自动关闭实时高亮**（只留行号与纯文本）以保证输入流畅。`Ctrl+Z` 依赖浏览器对 `setRangeText` 的原生撤销栈，个别浏览器上连续 Tab 缩进的撤销粒度可能较粗。
+7. **窄屏只做「可用」不做「精致」**：≤640px 切卡片式列表与上下堆叠，触控目标 ≥40px，但没有针对手机的专门交互（如滑动手势、底部工具栏）。
+8. **无后端**：排行榜与通过率都是本地统计 —— 排行榜里的"参考解法"是本地虚拟选手（分数由参考实现实时计算），"通过率"在无本地提交时显示题目自带的静态值；跨设备只能靠导出/导入 JSON 手动同步。
