@@ -7,6 +7,7 @@
  *
  * 路由表：
  *   #/problems            题库（搜索 / 标签 / 难度）
+ *   #/methods             方法库（29 条方法卡片，按 4 个层次检索）
  *   #/problem/<id>        题目页（题面 + 编辑器）
  *   #/submission/<id>     提交详情（代码快照 + 逐测试点）
  *   #/submissions         提交记录（含导出 / 导入 / 清空）
@@ -25,6 +26,7 @@
   var views = TSJ.appViews;
   var problem = TSJ.appProblem;
   var pages = TSJ.appPages;
+  var library = TSJ.appLibrary;
   var boards = TSJ.appBoards;
   var judge = TSJ.judge;
 
@@ -83,6 +85,10 @@
       store.setActiveNav('path');
       boards.renderPath();
       a11y.setTitle('学习路径');
+    } else if (view === 'methods') {
+      store.setActiveNav('methods');
+      library.renderMethods();
+      a11y.setTitle('方法库');
     } else {
       store.setActiveNav('problems');
       views.renderProblemList();

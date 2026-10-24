@@ -200,12 +200,17 @@ test('【缺陷 P2】localStorage 被写入恶意字段时，进度/提交记录
   // file:// 下 localStorage 属于 opaque origin，同目录其它本地页面可写入。
   // app.js 里 rec.best / s.score 未转义就拼进 innerHTML（renderProblem / renderPath / renderSubmissions）。
   const payload = '<img src=x onerror=window.__pwn=1>';
+  /*
+   * 脏草稿故意用「与上一条用例无关的题目 id」：上一条用例在编辑器里 input 过一次，
+   * 它的 400ms 防抖写盘可能在本用例覆盖存储之后才落地（同一个 key 会互相污染），
+   * 用独立 id 才能稳定断言「非字符串草稿被丢弃」这一条行为本身。
+   */
   await page.evaluate(
     `(function(){
       window.__pwn = 0;
       localStorage.setItem('tsoj:progress', JSON.stringify({'p1-naive':{best:'${payload}',passed:true,attempts:1}}));
       localStorage.setItem('tsoj:submissions', JSON.stringify([{at:1,problemId:'p1-naive',title:'${payload}',score:'${payload}',verdict:'AC',passed:true,metric:'${payload}'}]));
-      localStorage.setItem('tsoj:drafts', JSON.stringify({'p1-naive': 42}));
+      localStorage.setItem('tsoj:drafts', JSON.stringify({'p9-rolling-challenge': 42}));
     })()`
   );
   await page.send('Page.reload');
@@ -242,7 +247,9 @@ test('【缺陷 P2】localStorage 被写入恶意字段时，进度/提交记录
   const parsed = JSON.parse(stored.progress || '{}');
   assert.equal(typeof parsed['p1-naive'].best, 'number', 'progress.best 未被归一化为数字：' + JSON.stringify(parsed));
   assert.equal(parsed['p1-naive'].best, 0);
-  assert.equal(stored.drafts, '{}', 'drafts 里的非字符串值未被丢弃：' + stored.drafts);
+  const parsedDrafts = JSON.parse(stored.drafts || '{}');
+  assert.equal(parsedDrafts['p9-rolling-challenge'], undefined,
+    'drafts 里的非字符串值未被丢弃：' + stored.drafts);
 });
 
 test('localStorage 脏数据（非法 JSON）不影响启动', async (t) => {

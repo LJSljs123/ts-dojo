@@ -5,6 +5,7 @@
 - **无需安装任何东西**：双击 `index.html` 即可使用（`file://` 协议下完整可用）。
 - **无外部依赖**：不引 CDN、不引外部字体、不引图片、不引 npm 包。图标是内联 SVG，字体是系统字体栈。
 - **无构建步骤**：纯 HTML + CSS + 原生 JavaScript（ES2019），经典 `<script>` 顺序加载，全部挂在全局命名空间 `window.TSJ` 上。
+- **方法库：29 个方法 / 4 个层次**，可检索、可展开、可跳题 —— 把「题库」从 9 道练习扩成一条有文献脉络的训练场。
 - **隔离执行环境判题**：用户代码在 `Blob URL` 创建的 Web Worker 中执行，单次 1500ms / 整题 8000ms 超时保护，网络与 DOM 类 API 全部封禁；无 Worker 时**拒绝提交**而不是降级卡死页面。
 
 ---
@@ -17,7 +18,7 @@
 双击 ts-dojo-standalone.html
 ```
 
-它把 CSS 与 17 个脚本全部内联成一个 300KB 的 HTML，**不依赖任何相对路径**。
+它把 CSS 与 19 个脚本全部内联成一个约 346KB 的 HTML，**不依赖任何相对路径**。
 所以无论是双击打开、丢进 http 服务器、还是被塞进 iframe / `srcdoc` / 预览面板里，都能正常渲染。
 
 **方式 B：模块化版**
@@ -33,7 +34,7 @@ python -m http.server 8080
 # 然后访问 http://localhost:8080
 ```
 
-模块化版有 17 个 `<script src>` + 1 个样式表，**必须保证 assets 目录随行**。
+模块化版有 19 个 `<script src>` + 1 个样式表，**必须保证 assets 目录随行**。
 如果它白屏，页面会自己显示「启动失败」面板并给出原因（脚本被拦截 / 资源 404 / 旧缓存），不会再无声无息。
 
 浏览器要求：Chrome / Edge / Firefox / Safari 近三年版本（需要 `Worker`、`canvas`、`localStorage`、`Proxy`）。
@@ -56,6 +57,7 @@ node tests/standalone-check.js      # 校验产物与源码一致、无外部引
 | 模块 | 能力 |
 |---|---|
 | 题库 | 9 道题（入门→挑战）、难度筛选、**标签筛选**、**搜索**（题号/标题/标签）、**随机一题**（优先未通过）、三条件取交集 |
+| 方法库 | **29 个方法卡片 · 4 个层次**（经典统计 13 / 竞赛级方法 3 / 顶会深度学习 9 / 评估方法论 4）；搜索覆盖 name / title / venue / tags / idea，与层筛选、「只看能练的」取交集；展开看核心思想 / 关键式子 / 适用 / 局限；一键「去练这道题」或「检索原文」 |
 | 判题 | 留出 / 滚动回测；与 4 条统计基线比误差；逐测试点 verdict + 指标对比；判题会话隔离（切题不会串成绩） |
 | 学习 | 题面含数学公式与数据说明、折叠提示、通过后解锁参考题解、学习路径时间线 |
 | 进度 | 每题最高分 / 通过状态 / 草稿自动保存；**进度导出为 JSON、导入合并、一键清空**（换机器不丢记录） |
@@ -65,7 +67,7 @@ node tests/standalone-check.js      # 校验产物与源码一致、无外部引
 | 窄屏 | ≤640px 自动切换**卡片式列表**（标题正常换行，不再挤成一字一行）、题目页上下堆叠、触控目标 ≥40px |
 | 可访问性 | 弹层焦点陷阱 + ESC 关闭 + 焦点恢复、结果面板 `aria-live`、编辑器错误 `aria-describedby`、路由切换更新标题并聚焦主区 |
 | 存储 | 跨标签页 `storage` 事件同步（后写不再覆盖先写）、配额超限提示并降级为内存态、脏数据静默归一化 |
-| 分发 | **单文件版**（300KB，零外部引用，可嵌 iframe/srcdoc）；模块化版带**启动自检**，白屏会显示具体原因 |
+| 分发 | **单文件版**（约 346KB，零外部引用，可嵌 iframe/srcdoc）；模块化版带**启动自检**，白屏会显示具体原因 |
 
 ---
 
@@ -76,13 +78,14 @@ ts-dojo/
 ├── index.html                 # 模块化入口（含 CSP + 启动自检 + script 加载顺序）
 ├── ts-dojo-standalone.html    # 单文件版（由 tools/build-standalone.js 生成，勿手改）
 ├── tools/
-│   └── build-standalone.js    # 把 CSS / 17 个 js 内联成单文件
+│   └── build-standalone.js    # 把 CSS / 19 个 js 内联成单文件
 ├── assets/
 │   ├── css/
 │   │   └── style.css          # 暗色主题（深色底 + 青绿强调色）
 │   └── js/
 │       ├── datasets.js        # 8 条合成数据集（固定种子确定性生成）
 │       ├── problems.js        # 9 道题（题面 / 参考解 / 模板 / 评分参数）
+│       ├── methods.js         # 29 条方法卡片（内容层，只读：文案 / 出处 / 年份已核对）
 │       ├── judge.js           # 判题引擎：指标 + 基线 + 评分 + Worker 沙箱
 │       ├── editor.js          # 自研代码编辑器（高亮 / 行号 / 缩进 / 括号匹配 / 字号）
 │       ├── chart.js           # Canvas 折线图（历史 / 测试区间 / 预测 / hover tooltip）
@@ -98,23 +101,26 @@ ts-dojo/
 │           ├── views.js       #   题库页（搜索 / 标签 / 难度 / 随机一题 / 卡片列表）
 │           ├── problem.js     #   题目页、编辑器装配、题解弹层、引导弹层
 │           ├── pages.js       #   提交记录、提交详情、排行榜、学习路径
+│           ├── library.js     #   方法库页（层筛选 / 搜索 / 只看能练的 / 卡片展开）
 │           └── boards.js      #   排行榜与学习路径的共享渲染片段
 ├── tests/
-│   ├── qa/                    # node --test tests/qa/*.test.js（151 条）
+│   ├── qa/                    # node --test tests/qa/*.test.js（158 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
 │   ├── starter-check.js       # 9 题模板原样提交必须全 WA
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
 │   └── standalone-check.js    # 单文件产物校验（是否过期 / 有无外部引用 / 是否被截断）
 ├── docs/review-and-plan.md    # 架构审查报告与升级任务分解
+├── docs/library-spec.md       # v2.2 施工图（方法库 + 高阶新题）
 └── README.md
 ```
 
 加载顺序（`index.html` 末尾，顺序不可调换）：
 
 ```
-datasets → problems → judge → editor → chart
+datasets → problems → methods → judge → editor → chart
   → app/util → app/core → app/schema → app/store → app/storage
-  → app/ui → app/a11y → app/views → app/problem → app/pages → app/boards → app.js
+  → app/ui → app/a11y → app/views → app/problem → app/pages
+  → app/library → app/boards → app.js
 ```
 
 依赖方向严格单向（`tests/qa/static.test.js` 会检查）：任何模块都不得引用排在它**后面**的命名空间。
@@ -190,7 +196,41 @@ datasets → problems → judge → editor → chart
 
 ---
 
-## 六、用户代码接口
+## 六、方法库
+
+`#/methods` 把「时间序列预测」这条线上真正有分量的方法整理成可检索的卡片。数据在 `assets/js/methods.js`
+（**内容层，只读**：文案、出处、年份已逐条核对，页面只负责筛选与渲染）。
+
+### 四层划分（`tier`）
+
+| tier | 名称 | 数量 | 含义 |
+|---|---|---|---|
+| `classic` | 经典统计 | 13 | 教科书与 IJF/JASA/EJOR 一脉：结构简单、可解释，在小数据上极难被打败（朴素法 / 季节朴素 / SES / Holt / Holt-Winters / Theta / ARIMA / ETS / Croston / TSB / PELT / 周期图 / MAPA） |
+| `competition` | 竞赛级方法 | 3 | M3/M4/M5 的实证结论：组合、多尺度聚合、间歇需求的专门处理，往往比换模型更有效 |
+| `deep` | 顶会深度学习 | 9 | ICLR/NeurIPS/AAAI/ICML 一脉（N-BEATS / N-HiTS / DLinear / PatchTST / TimesNet / iTransformer / TFT / DeepAR / Informer），需要训练；卡片标题旁标 `DL` |
+| `eval` | 评估方法论 | 4 | 怎么证明「真的更好」（DM 检验 / MASE / 滚动回测 / Conformal），标 `EVAL` —— 这层最容易出错，也最容易让前三层的努力白费 |
+
+### `runnable` 与 `practice` 的含义
+
+- `runnable: true` —— 能在本平台的纯 JS 沙箱里实现（无训练库、单次调用、1500ms 内跑完）。
+- `runnable: false` —— 需要训练 / 大量协变量 / 多变量输入，只作知识卡片与选型参考，卡片上灰字标注
+  「沙箱跑不了，仅供选型参考」。
+- `practice` —— 指向题库里的对应题目 id（如 `p1-naive`）。有值时展开区出现「去练这道题」，跳到
+  `#/problem/<id>`；为空但 `runnable` 时灰字「暂无对应题目」。**新增题目后必须让 `practice` 指向真实存在的 id**，
+  `tests/qa/library.test.js` 会把这条约束固化成用例。
+
+### 交互
+
+- 搜索匹配 `name` / `title` / `venue` / `tags` / `idea`（大小写不敏感），与层筛选、「只看能练的」**取交集**。
+- 层 chips 上的数量、副标题里的「29 个方法 · 4 个层次 · 13 个可练」都从 `TSJ.methods` **现算**，不写死数字。
+- 卡片默认收起（`aria-expanded="false"`），标题可 Tab 聚焦 + Enter/Space 展开；展开内容按需生成。
+- 「关键式子」按**纯文本**渲染（内含 `*` `+` `Σ`，不走 Markdown），等宽字体 + 保留换行。
+- 「检索原文」不硬编码论文 URL（会失效），统一用 Bing 搜标题，`target="_blank" rel="noopener noreferrer"`。
+- 375px 下整页 `scrollWidth === 375`，展开区两栏改堆叠。
+
+---
+
+## 七、用户代码接口
 
 每道题只需要实现一个函数：
 
@@ -214,7 +254,7 @@ new Function('history', 'horizon', 'ctx', code + '\n;return predict(history, hor
 
 ---
 
-## 七、判题与评分
+## 八、判题与评分
 
 ### 指标（`judge.metrics`）
 
@@ -274,7 +314,7 @@ function scoreForRatio(ratio, threshold, passScore) {
 
 ---
 
-## 八、沙箱与安全
+## 九、沙箱与安全
 
 用户代码在 **Blob URL 创建的 Web Worker** 中执行（`file://` 下无法加载独立 worker 文件，因此必须用 Blob）：
 
@@ -346,7 +386,7 @@ worker-src blob:; font-src 'self'
 
 ---
 
-## 九、如何扩展
+## 十、如何扩展
 
 ### 新增一道题
 
@@ -394,9 +434,36 @@ worker-src blob:; font-src 'self'
 
 要求：**只用传入的 `rng`（不要用 `Math.random`）**，这样序列才是确定性的、可复现的。
 
+### 新增一条方法（方法库）
+
+往 `assets/js/methods.js` 的 `methods` 数组追加一条即可（页面自动多一张卡片，chips 上的数量、副标题的数字都会跟着变）：
+
+```js
+{
+  id: 'kebab-case-id',
+  name: '中文名',
+  title: '论文英文标题',        // 用于「检索原文」，不存 URL（避免失效）
+  venue: '会议/期刊（年份）',
+  year: 2024,
+  authors: '第一作者 et al.',
+  tier: 'classic',              // classic / competition / deep / eval
+  tags: ['标签'],
+  idea: '凭什么有效',
+  formula: '关键式子（纯文本，可为空）',
+  when: '什么时候该用',
+  limit: '什么时候会翻车',
+  runnable: true,               // 能否在纯 JS 沙箱里实现
+  practice: 'p10-xxx'           // 对应题目 id；没有就 null
+}
+```
+
+**加完方法（或加了新题）必须跑 `node --test tests/qa/library.test.js`**：
+它校验 `tier` 合法性、必填字段、层数量，以及每个 `practice` 是否指向**真实存在**的题目 ——
+防止方法库把一个用户点进去就 404 的链接放到卡片上。
+
 ---
 
-## 十、自测
+## 十一、自测
 
 ```bash
 node tests/selftest.js        # 判题引擎自测（数据 / 参考解 / 指标 / 评分 / 沙箱 / 切分）
@@ -406,7 +473,7 @@ node tests/standalone-check.js  # 单文件版是否与源码同步、是否残�
 node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
 ```
 
-**测试规模：151 条用例，0 skip**（其中约 60 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
+**测试规模：158 条用例，0 skip**（其中约 70 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
 找不到浏览器时自动 skip，并在输出里注明「未验证」，不假装通过）。
 
 | 测试文件 | 关注点 |
@@ -418,6 +485,7 @@ node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，�
 | `browser` | 真实浏览器：路由渲染、Worker 判题、XSS 注入、脏数据 |
 | `regressions` | 判题竞态（切题串成绩）、沙箱逃逸、375px 溢出、rolling 窗口不足 |
 | `features` | 导出/导入/清空、提交详情、窄屏卡片、图表 tooltip、搜索筛选、字号与括号、焦点陷阱 |
+| `library` | 方法库：29 条数据完整性、`practice` 引用校验、默认 29 张卡片、搜索/层筛选/只看能练的取交集、跳题、375px 不溢出 |
 
 `selftest.js` 覆盖内容：
 
@@ -471,7 +539,7 @@ P9 是唯一的例外形态：平均分 79 高于通过线，但窗口 1 只有 
 
 ---
 
-## 十一、localStorage 键名
+## 十二、localStorage 键名
 
 | 键 | 内容 |
 |---|---|
@@ -512,7 +580,7 @@ P9 是唯一的例外形态：平均分 79 高于通过线，但窗口 1 只有 
 
 ---
 
-## 十二、已知限制
+## 十三、已知限制
 
 1. **沙箱不是安全边界**。它是"防误用"级别的隔离执行环境（能力遮蔽 + CSP + 超时终止），目标是拦住误用与常见逃逸（`delete` 封禁、原型链取回、`eval` / `Function` 构造器），但**不对抗**刻意构造的侧信道攻击。请不要把不可信代码当成真正的安全威胁模型来跑。
 2. **Worker 不可用时禁止提交**（不再降级到主线程）：`evaluate` 返回 `refused: true`，UI 置灰按钮并提示原因。

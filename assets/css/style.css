@@ -1189,3 +1189,161 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
 /* 视图获得焦点时不画焦点环（内容区本身不接收键盘操作） */
 .view:focus, .view:focus-visible { outline: none; }
 
+/* =========================================================================
+   T12 方法库（#/methods）：只看能练的开关 / 方法卡片 / 展开区 / 出处徽标
+   顺序注意：基础规则必须在 @media 之前（同优先级下后写的规则会覆盖媒体查询）
+   ========================================================================= */
+.switch-row { margin: 0 0 16px; }
+.switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.switch-input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent-2);
+  cursor: pointer;
+}
+
+.mcards { display: flex; flex-direction: column; gap: 10px; }
+
+.mcard {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.mcard:hover { border-color: var(--line-2); }
+.mcard.mcard-open { background: var(--panel-2); border-color: rgba(45, 212, 191, 0.32); }
+
+.mc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+}
+.mc-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text);
+  cursor: pointer;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.mc-title:hover { color: var(--accent); }
+.mc-title::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 7px;
+  color: var(--accent-2);
+  transition: transform 0.15s ease;
+}
+.mcard.mcard-open .mc-title::before { transform: rotate(90deg); }
+
+/* 出处徽标：沿用现有色板（muted + panel-3），不引入新色 */
+.mc-badge {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mc-tier {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 7px;
+}
+.mc-mark {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.mc-more {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.mc-body { border-top: 1px solid var(--line); padding: 13px 14px 14px; }
+.mc-body[hidden] { display: none; }
+.mc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+.mc-col { min-width: 0; }
+.mc-block { margin-bottom: 12px; }
+.mc-block:last-child { margin-bottom: 0; }
+.mc-label {
+  margin-bottom: 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.mc-text { margin: 0; font-size: 12.8px; line-height: 1.75; color: var(--text-dim); }
+/* 式子按纯文本渲染：等宽、保留换行、允许断词（内含 * + Σ，不解析 Markdown） */
+.mc-formula {
+  margin: 0;
+  padding: 9px 11px;
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: #9ee9dc;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.mc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 13px;
+}
+.mc-note { font-size: 12px; color: var(--muted); }
+.mc-practice, .mc-src { flex: 0 0 auto; }
+
+/* 窄屏：标题/徽标各占一行，展开区两栏改堆叠（本块必须在基础规则之后） */
+@media (max-width: 640px) {
+  .mc-head { padding: 10px 12px; gap: 6px; }
+  .mc-title { flex: 1 1 100%; font-size: 13.5px; }
+  .mc-badge {
+    flex: 1 1 100%;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  .mc-body { padding: 12px 12px 13px; }
+  .mc-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .mc-formula { font-size: 11.5px; }
+  .switch-label { font-size: 13px; }
+}
+

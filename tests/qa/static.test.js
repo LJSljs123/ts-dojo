@@ -16,10 +16,11 @@ const { ROOT, JS_DIR } = require('./helpers/engine');
 const JS_FILES = ['datasets', 'problems', 'judge', 'editor', 'chart', 'app'].map((n) => path.join(JS_DIR, n + '.js'));
 /**
  * app 层文件（顺序即加载顺序）：util → core → schema → store → storage → ui → a11y
- *   → views → problem → pages → boards → app.js
+ *   → views → problem → pages → library → boards → app.js
  * T05–T11 把应用层从 1470 行涨到约 2900 行，按职责继续拆分以守住每文件 ≤350 行的可维护性上限。
+ * v2.2 新增 app/library.js（方法库页面），插在 pages 与 boards 之间。
  */
-const APP_NAMES = ['util', 'core', 'schema', 'store', 'storage', 'ui', 'a11y', 'views', 'problem', 'pages', 'boards'];
+const APP_NAMES = ['util', 'core', 'schema', 'store', 'storage', 'ui', 'a11y', 'views', 'problem', 'pages', 'library', 'boards'];
 const APP_FILES = APP_NAMES.map((n) => path.join(JS_DIR, 'app', n + '.js'))
   .concat([path.join(JS_DIR, 'app.js')]);
 /** 全部参与静态审计的脚本（顺序即 index.html 的加载顺序） */
@@ -40,7 +41,7 @@ test('node --check：所有 js 语法合法（含 tests/selftest.js）', () => {
   }
 });
 
-test('app 层 12 个文件都 ≤350 行（可维护性上限）', () => {
+test('app 层 13 个文件都 ≤350 行（可维护性上限）', () => {
   const over = appLineCounts.filter(([, n]) => n > 350).map(([f, n]) => f + '=' + n);
   assert.deepEqual(over, [], '以下文件超过 350 行：' + over.join(', '));
 });
@@ -81,6 +82,7 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
   assert.deepEqual(order, [
     'assets/js/datasets.js',
     'assets/js/problems.js',
+    'assets/js/methods.js',
     'assets/js/judge.js',
     'assets/js/editor.js',
     'assets/js/chart.js',
@@ -94,6 +96,7 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/app/views.js',
     'assets/js/app/problem.js',
     'assets/js/app/pages.js',
+    'assets/js/app/library.js',
     'assets/js/app/boards.js',
     'assets/js/app.js',
   ]);
@@ -117,7 +120,7 @@ test('依赖方向：引擎层不得引用 app 层；app 层只能引用**更早
   const namespaces = [
     'TSJ.appUtil', 'TSJ.appCore', 'TSJ.appSchema', 'TSJ.appStore', 'TSJ.appStorage',
     'TSJ.appUi', 'TSJ.appA11y', 'TSJ.appViews', 'TSJ.appProblem', 'TSJ.appPages',
-    'TSJ.appBoards', 'TSJ.app',
+    'TSJ.appLibrary', 'TSJ.appBoards', 'TSJ.app',
   ];
   APP_FILES.forEach((file, idx) => {
     const src = read(file);
