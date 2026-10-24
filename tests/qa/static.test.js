@@ -1,0 +1,169 @@
+/**
+ * static.test.js —— 静态审计（纯静态、无浏览器）
+ *
+ * 覆盖：语法检查、模块化违规、外部依赖、Math.random、脚本加载顺序、
+ *       CSS class 覆盖率、localStorage 键名与异常处理、编辑器转义。
+ */
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const { ROOT, JS_DIR } = require('./helpers/engine');
+
+const JS_FILES = ['datasets', 'problems', 'judge', 'editor', 'chart', 'app'].map((n) => path.join(JS_DIR, n + '.js'));
+const read = (p) => fs.readFileSync(p, 'utf8');
+const html = read(path.join(ROOT, 'index.html'));
+const css = read(path.join(ROOT, 'assets', 'css', 'style.css'));
+const jsAll = JS_FILES.map(read).join('\n');
+
+test('node --check：所有 js 语法合法（含 tests/selftest.js）', () => {
+  const files = JS_FILES.concat([path.join(ROOT, 'tests', 'selftest.js')]);
+  for (const f of files) {
+    const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
+    assert.equal(r.status, 0, path.basename(f) + ' 语法错误：' + r.stderr);
+  }
+});
+
+test('无 ESM 痕迹：无 import/export、无 type="module"', () => {
+  for (const f of JS_FILES) {
+    const src = read(f);
+    assert.ok(!/^\s*(import|export)\s/m.test(src), path.basename(f) + ' 含 import/export');
+  }
+  assert.equal(html.indexOf('type="module"'), -1, 'index.html 使用了 type="module"');
+  assert.equal(html.indexOf('nomodule'), -1);
+});
+
+test('无外部依赖：没有 http(s):// / //cdn / @import / url() 外链', () => {
+  const check = (name, src) => {
+    const hits = [];
+    const re = /(https?:\/\/|\/\/cdn\.|@import|url\(\s*['"]?(https?:)?\/\/)/g;
+    let m;
+    while ((m = re.exec(src)) !== null) hits.push(m[0] + ' @' + m.index);
+    assert.equal(hits.length, 0, name + ' 含外部引用：' + hits.join(', '));
+  };
+  check('index.html', html);
+  check('style.css', css);
+  check('assets/js/*', jsAll);
+  // 字体只能用系统字体
+  assert.ok(!/@font-face/.test(css), 'style.css 含 @font-face（需要外部字体文件）');
+});
+
+test('无 Math.random（数据集必须确定性可复现）', () => {
+  for (const f of JS_FILES) {
+    assert.equal(read(f).indexOf('Math.random'), -1, path.basename(f) + ' 使用了 Math.random');
+  }
+});
+
+test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末尾', () => {
+  const order = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
+  assert.deepEqual(order, [
+    'assets/js/datasets.js',
+    'assets/js/problems.js',
+    'assets/js/judge.js',
+    'assets/js/editor.js',
+    'assets/js/chart.js',
+    'assets/js/app.js',
+  ]);
+  // 每个文件必须真实存在
+  for (const rel of order) assert.ok(fs.existsSync(path.join(ROOT, rel)), rel + ' 不存在');
+  // app.js 是最后一个脚本，且之后没有 <script>（保证 init() 执行时 #view 已存在）
+  const appIdx = html.indexOf('assets/js/app.js');
+  assert.ok(appIdx > html.indexOf('id="view"'), 'app.js 必须在 #view 之后加载');
+  assert.ok(appIdx < html.indexOf('</body>'), 'app.js 应在 </body> 之前');
+  assert.equal(html.slice(appIdx).indexOf('<script'), -1, 'app.js 之后不应再有 script');
+  // 依赖方向：app.js 依赖 judge/problems/editor/chart，不能反过来
+  assert.ok(!/TSJ\.app|TSJ\.renderProblem/.test(jsAll), '不应存在反向依赖');
+});
+
+test('app.js 在脚本末尾同步 init()（依赖 body 末尾加载，而非 DOMContentLoaded）', () => {
+  const src = read(path.join(JS_DIR, 'app.js'));
+  assert.match(src, /\n\s{2}init\(\);\n/, 'app.js 应在 IIFE 末尾调用 init()');
+  // 记录现状：没有 DOMContentLoaded 监听。当前靠「脚本位于 body 末尾」保证 DOM 就绪，
+  // 若将来把 <script> 移到 <head> 或改成 async，会直接白屏（见报告 P2-3）。
+  assert.equal(src.indexOf('DOMContentLoaded'), -1, '现状为同步 init，若改为 DOMContentLoaded 请同步更新用例');
+});
+
+test('CSS 覆盖率：JS/HTML 里出现的 class 都能在 style.css 找到定义（30+ 个动态 class）', () => {
+  const defined = new Set([...css.matchAll(/\.([A-Za-z_][\w-]*)/g)].map((m) => m[1]));
+  // 仅语义标记、样式由父选择器或 svg 属性负责，允许无独立定义
+  const ALLOW = new Set(['tsj-editor-host', 'brand-logo']);
+
+  const used = new Map();
+  for (const f of JS_FILES.concat([path.join(ROOT, 'index.html')])) {
+    const src = read(f);
+    const name = path.basename(f);
+    for (const m of src.matchAll(/class=\\?["']([^"'\\]*)/g)) {
+      for (const tok of m[1].split(/\s+/)) {
+        if (/^[A-Za-z][A-Za-z0-9_-]*$/.test(tok) && !used.has(tok)) used.set(tok, name);
+      }
+    }
+    for (const m of src.matchAll(/classList\.(?:add|remove|toggle)\(\s*'([A-Za-z][\w-]*)'/g)) {
+      if (!used.has(m[1])) used.set(m[1], name);
+    }
+  }
+  // 运行时拼接的 class（DIFF_CLASS / verdict / vm-* / g1..g3 等）单独补上
+  for (const c of [
+    'chip-on', 'verdict-wa', 'verdict-ac', 'verdict-re', 'verdict-tle',
+    'vm-ac', 'vm-re', 'vm-tle', 'vm-wa', 'diff-ru', 'diff-pu', 'diff-ti', 'diff-ch',
+    'g1', 'g2', 'g3', 'rank-me', 'rank-you', 'warn', 'bad', 'best', 'mine', 'done',
+    'cur', 'on', 'hidden', 'dragging', 'ed-ln-err', 'tok-kw', 'tok-str', 'tok-num', 'tok-com', 'tok-bi',
+  ]) {
+    if (!used.has(c)) used.set(c, 'runtime');
+  }
+
+  assert.ok(used.size >= 30, '抽查的 class 数量太少：' + used.size);
+  const missing = [...used].filter(([c]) => !defined.has(c) && !ALLOW.has(c)).map(([c, f]) => c + '(' + f + ')');
+  assert.deepEqual(missing, [], 'style.css 缺少定义：' + missing.join(', '));
+});
+
+test('localStorage：键名统一 tsoj:*，且没有未捕获的 JSON.parse', () => {
+  const src = read(path.join(JS_DIR, 'app.js'));
+  // 1) STORE 里所有键都以 tsoj: 开头
+  const storeBlock = src.slice(src.indexOf('var STORE = {'), src.indexOf('};', src.indexOf('var STORE = {')));
+  const keys = [...storeBlock.matchAll(/'([^']+)'/g)].map((m) => m[1]).filter((s) => s.indexOf(':') > 0);
+  assert.ok(keys.length >= 5, '应至少有 5 个存储键');
+  for (const k of keys) assert.match(k, /^tsoj:/, '键名未统一前缀：' + k);
+  // 2) 不存在硬编码键的直接读写（必须走 STORE 常量）
+  assert.equal(/localStorage\.(get|set|remove)Item\(\s*['"]/.test(src), false, '存在硬编码 localStorage 键');
+  // 3) 所有 JSON.parse 都在 try 里
+  assert.ok(src.indexOf('JSON.parse') > 0);
+  const fnStart = src.indexOf('function readJSON');
+  const fnBody = src.slice(fnStart, src.indexOf('\n  }', fnStart));
+  assert.ok(fnBody.indexOf('try') > 0 && fnBody.indexOf('catch') > 0, 'readJSON 缺少 try/catch');
+  assert.ok(/return fallback/.test(fnBody), 'readJSON 异常时应返回兜底值');
+  // 4) 写失败（隐私模式/配额）必须静默
+  const wStart = src.indexOf('function writeJSON');
+  const wBody = src.slice(wStart, src.indexOf('\n  }', wStart));
+  assert.ok(wBody.indexOf('try') > 0 && wBody.indexOf('catch') > 0, 'writeJSON 缺少 try/catch');
+});
+
+test('编辑器转义：<script> / </code> / <img onerror> 不会破坏高亮层结构', () => {
+  const editor = require(path.join(JS_DIR, 'editor.js'));
+  const payloads = [
+    '<script>alert(1)</script>',
+    '</code></pre><img src=x onerror=alert(1)>',
+    'var s = "</code>";',
+    "var s = '<script>';",
+    '`</code>`',
+    '<svg onload=alert(1)>',
+  ];
+  for (const p of payloads) {
+    const out = editor.highlightCode(p);
+    assert.equal(out.indexOf('<script'), -1, '出现了裸 <script：' + p);
+    assert.equal(out.indexOf('</code>'), -1, '出现了裸 </code>：' + p);
+    assert.equal(out.indexOf('<img'), -1, '出现了裸 <img：' + p);
+    assert.equal(out.indexOf('<svg'), -1, '出现了裸 <svg：' + p);
+    // 所有 < 必须属于我们自己生成的 span 标签
+    const tags = [...out.matchAll(/<[^>]*>/g)].map((m) => m[0]);
+    for (const t of tags) assert.match(t, /^<(\/)?span( class="tok-[a-z]+")?>$/, '出现了非预期标签：' + t);
+  }
+});
+
+test('编辑器 escapeHtml 覆盖 & < >（文本节点安全）', () => {
+  const editor = require(path.join(JS_DIR, 'editor.js'));
+  assert.equal(editor.escapeHtml('<&>'), '&lt;&amp;&gt;');
+  assert.equal(editor.escapeHtml('"quoted"'), '"quoted"'); // 文本节点无需转引号，已由调用方保证不在属性位
+});

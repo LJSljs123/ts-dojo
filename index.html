@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>时序竞技场 TSOJ · 时间序列预测在线判题</title>
+<meta name="description" content="时序竞技场 TSOJ：写 predict 函数、提交、打败统计基线得分并解锁题解的纯前端时间序列预测判题平台。">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<!-- ============ 顶部固定栏 ============ -->
+<header class="topbar">
+  <a class="brand" href="#/problems" aria-label="时序竞技场 TSOJ 首页">
+    <svg class="brand-logo" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="1.6" y="1.6" width="20.8" height="20.8" rx="6.4" stroke="currentColor" stroke-width="1.3" opacity="0.5"/>
+      <path d="M5 15.6l3.5-3.9 3 2.3L18.6 7.2" stroke="currentColor" stroke-width="1.7"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="18.6" cy="7.2" r="1.7" fill="currentColor"/>
+    </svg>
+    <span class="brand-text">时序竞技场 <b>TSOJ</b></span>
+  </a>
+
+  <nav class="nav" id="nav" aria-label="主导航">
+    <a href="#/problems" data-nav="problems">题库</a>
+    <a href="#/submissions" data-nav="submissions">提交记录</a>
+    <a href="#/ranking" data-nav="ranking">排行榜</a>
+    <a href="#/path" data-nav="path">学习路径</a>
+  </nav>
+
+  <div class="topbar-right">
+    <div class="score-chip" id="scoreChip" title="累计等级分 = 各题历史最高分之和">
+      <span class="lv" id="lvText">Lv.1</span>
+      <span class="pts" id="ptsText">0 分</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ 视图容器 ============ -->
+<main id="view" class="view" role="main"></main>
+
+<!-- ============ 引导 / 弹层 ============ -->
+<div id="overlay" class="overlay hidden" role="dialog" aria-modal="true"></div>
+
+<!-- 经典 script 按顺序加载，全部挂到 window.TSJ 命名空间 -->
+<script src="assets/js/datasets.js"></script>
+<script src="assets/js/problems.js"></script>
+<script src="assets/js/judge.js"></script>
+<script src="assets/js/editor.js"></script>
+<script src="assets/js/chart.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,174 @@
+/**
+ * helpers/cdp.js —— 用本机 Edge/Chrome 无头模式 + CDP 做真实浏览器冒烟
+ *
+ * 只依赖 Node 内置能力（child_process / fetch / WebSocket），不装任何 npm 包。
+ * 找不到浏览器或连不上 CDP 时，调用方应跳过（返回 null），并在报告里明确写「未验证」。
+ */
+'use strict';
+
+const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const CANDIDATES = [
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+];
+
+function findBrowser() {
+  for (const p of CANDIDATES) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * 启动无头浏览器并连上第一个 page target。
+ * @param {string} url 要打开的 file:// URL
+ * @param {{timeout?: number}} [opts]
+ * @returns {Promise<{send: Function, on: Function, close: Function, exceptions: Array, logs: Array}|null>}
+ */
+async function launch(url, opts) {
+  const exe = findBrowser();
+  if (!exe) return null;
+  const port = 9400 + Math.floor(Math.random() * 200);
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tsoj-cdp-'));
+  const proc = spawn(
+    exe,
+    [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-extensions',
+      '--remote-debugging-port=' + port,
+      '--user-data-dir=' + profile,
+      '--allow-file-access-from-files',
+      url,
+    ],
+    { stdio: 'ignore' }
+  );
+
+  const deadline = Date.now() + (opts && opts.timeout ? opts.timeout : 15000);
+  let target = null;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch('http://127.0.0.1:' + port + '/json/list');
+      const list = await res.json();
+      target = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
+      if (target) break;
+    } catch (e) {
+      /* 还没起来 */
+    }
+    await sleep(200);
+  }
+  if (!target) {
+    try { proc.kill(); } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  const ws = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    ws.addEventListener('open', resolve, { once: true });
+    ws.addEventListener('error', reject, { once: true });
+    setTimeout(() => reject(new Error('CDP 连接超时')), 10000);
+  });
+
+  let seq = 0;
+  const pending = new Map();
+  const exceptions = [];
+  const logs = [];
+  const handlers = new Map();
+
+  ws.addEventListener('message', (ev) => {
+    let msg;
+    try {
+      msg = JSON.parse(ev.data);
+    } catch (e) {
+      return;
+    }
+    if (msg.id && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id);
+      pending.delete(msg.id);
+      if (msg.error) reject(new Error(msg.error.message + ' / ' + JSON.stringify(msg.error)));
+      else resolve(msg.result);
+      return;
+    }
+    if (msg.method === 'Runtime.exceptionThrown') {
+      const d = msg.params.exceptionDetails || {};
+      exceptions.push((d.exception && d.exception.description) || d.text || 'unknown');
+    }
+    if (msg.method === 'Runtime.consoleAPICalled') {
+      logs.push({
+        type: msg.params.type,
+        text: (msg.params.args || []).map((a) => a.value !== undefined ? String(a.value) : (a.description || a.type)).join(' '),
+      });
+    }
+    if (msg.method === 'Log.entryAdded') {
+      const e = msg.params.entry || {};
+      logs.push({ type: e.level, text: e.text || '' });
+      if (e.level === 'error') exceptions.push(e.text || '');
+    }
+    const hs = handlers.get(msg.method);
+    if (hs) hs.forEach((fn) => fn(msg.params));
+  });
+
+  function send(method, params) {
+    const id = ++seq;
+    return new Promise((resolve, reject) => {
+      pending.set(id, { resolve, reject });
+      ws.send(JSON.stringify({ id, method, params: params || {} }));
+    });
+  }
+
+  await send('Runtime.enable');
+  await send('Log.enable');
+  await send('Page.enable');
+
+  /**
+   * 在页面里求值。
+   * @param {string} expression JS 表达式
+   * @param {boolean} [awaitPromise] 是否等待 Promise
+   * @returns {Promise<*>} 值的 JSON 形式
+   */
+  async function evaluate(expression, awaitPromise) {
+    const r = await send('Runtime.evaluate', {
+      expression,
+      awaitPromise: !!awaitPromise,
+      returnByValue: true,
+      allowUnsafeEvalBlockedByCSP: true,
+    });
+    if (r.exceptionDetails) {
+      const d = r.exceptionDetails;
+      throw new Error('页面内求值异常：' + ((d.exception && d.exception.description) || d.text));
+    }
+    return r.result.value;
+  }
+
+  return {
+    send,
+    evaluate,
+    exceptions,
+    logs,
+    on(method, fn) {
+      if (!handlers.has(method)) handlers.set(method, []);
+      handlers.get(method).push(fn);
+    },
+    close() {
+      try { ws.close(); } catch (e) { /* ignore */ }
+      try { proc.kill(); } catch (e) { /* ignore */ }
+      try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+    },
+  };
+}
+
+module.exports = { launch, findBrowser };
