@@ -4,20 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!--
-  CSP：在浏览器网络层再加一道闸，与 judge.js 的 Worker 沙箱互补。
-    default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data:
-                         默认放行同源资源（不用 'none'：页面可能被嵌到预览面板/iframe 里，
-                         过于严格的 default-src 在部分 webview 中会把自身脚本一起拦掉 → 白屏）
-    script-src  同源 + 内联 + new Function（判题必需）+ Blob Worker；不含远程 http(s)
-    style-src   同源 + 内联 style（结果条/进度条宽度是内联的）
-    img-src     同源 + data: + blob:
-    connect-src 'none'   ★ 真正的安全关键：fetch / XHR / WebSocket / sendBeacon 全部禁止，
-                         即使 JS 层出现未知逃逸，请求也发不出去
-    worker-src  同源 + blob:   判题 Worker 由 Blob URL 创建
-  说明：预览服务器可能额外下发自己的 CSP 响应头，多条策略会**同时生效取交集**，
-  所以这里不再使用 default-src 'none'（交集后容易把自身资源也拦掉）。
+  CSP：只保留「网络封锁」这一条，不限制资源来源。
+    为什么不用 default-src / script-src 白名单：
+      预览面板、文档阅读器这类宿主会把 HTML 塞进 <iframe srcdoc> 渲染，
+      此时文档处于「不透明源」，'self' 匹配不到任何 URL —— 连页面自己的 17 个脚本
+      都会被一起拦掉，表现为整页白屏（已实测复现）。
+    保留什么：
+      connect-src 'none'   fetch / XHR / WebSocket / sendBeacon 全部禁止。
+                           这才是防「用户代码把数据外传」的关键，且不影响资源加载。
+    安全边界在哪：
+      真正跑不可信代码的是 judge.js 里的 Web Worker（能力遮蔽 + 原型链冻结 + 超时终止），
+      CSP 只是网络层的兜底，不是唯一防线。
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; worker-src 'self' blob:; font-src 'self' data:">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'none'">
 <title>时序竞技场 TSOJ · 时间序列预测在线判题</title>
 <meta name="description" content="时序竞技场 TSOJ：写 predict 函数、提交、打败统计基线得分并解锁题解的纯前端时间序列预测判题平台。">
 <link rel="stylesheet" href="assets/css/style.css?v=2.1.0">

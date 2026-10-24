@@ -239,3 +239,24 @@ test('编辑器 escapeHtml 覆盖 & < >（文本节点安全）', () => {
   assert.equal(editor.escapeHtml('<&>'), '&lt;&amp;&gt;');
   assert.equal(editor.escapeHtml('"quoted"'), '"quoted"'); // 文本节点无需转引号，已由调用方保证不在属性位
 });
+
+test('meta CSP 只做网络封锁：不得含 default-src / script-src / \'self\'（srcdoc 下会拦掉自身脚本）', () => {
+  const m = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/);
+  assert.ok(m, 'index.html 必须声明 meta CSP');
+  const policy = m[1];
+
+  // 这一条是「防数据外传」的核心，必须保留
+  assert.match(policy, /connect-src 'none'/, 'meta CSP 必须禁止 connect-src');
+
+  /*
+   * 回归背景（真实事故）：预览面板把 HTML 塞进 <iframe srcdoc> 渲染，
+   * 此时文档处于「不透明源」，CSP 的 'self' 匹配不到任何 URL —— 页面自己的 17 个
+   * 外部脚本会全部被拦掉，表现为整页白屏（连样式表也一起挂）。
+   * 所以这里禁止出现任何基于来源的白名单指令。
+   */
+  assert.equal(policy.indexOf("'self'"), -1,
+    "meta CSP 不能出现 'self'：srcdoc/不透明源下会拦掉页面自身的脚本与样式");
+  assert.equal(/default-src/.test(policy), false, 'meta CSP 不能有 default-src（会连带限制脚本/样式来源）');
+  assert.equal(/script-src/.test(policy), false, 'meta CSP 不能有 script-src（同上）');
+  assert.equal(/style-src/.test(policy), false, 'meta CSP 不能有 style-src（同上）');
+});
