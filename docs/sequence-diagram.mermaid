@@ -1,0 +1,19 @@
+sequenceDiagram
+participant U as User
+participant V as appLab
+participant R as LabRunner
+participant A as LabAdapter
+participant J as judge
+participant S as ExperimentStore
+U->>V: 运行(config)
+V->>V: schema 校验并冻结配置
+V->>R: run(config, ++labToken)
+loop 每个 origin（token 有效）
+  R->>J: buildTestPoints / 当前 point
+  R->>A: forecast(point,h,params)
+  A->>J: baselines 或 runInProcess(可信参考解)
+  R->>R: metrics + 训练内残差区间；下一 tick 让出
+end
+R-->>V: 最新 token 的 Result（旧结果整段丢弃）
+V->>S: save(最近20组)
+V->>V: 更新图表/摘要/对比；路由离开则 Scope.destroy + cancel

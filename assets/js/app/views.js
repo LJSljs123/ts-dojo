@@ -73,6 +73,7 @@
     html.push('  <input type="search" class="search-input" id="searchInput" placeholder="搜索题号 / 标题 / 标签"' +
       ' aria-label="搜索题目" value="' + esc(st.query) + '">');
     html.push('  <button type="button" class="btn btn-random" id="btnRandom" title="优先从还没通过的题目里抽一题">随机一题</button>');
+    html.push('  <button type="button" class="btn" id="btnTagToggle" aria-expanded="true" aria-controls="tagCloud">标签筛选</button>');
     html.push('  <button type="button" class="btn btn-clear" id="btnClearFilters" hidden>清除筛选</button>');
     html.push('</div>');
 
@@ -85,7 +86,7 @@
     }
     html.push('</div>');
 
-    html.push('<div class="tag-cloud" role="group" aria-label="按标签筛选">');
+    html.push('<div class="tag-cloud" id="tagCloud" role="group" aria-label="按标签筛选">');
     var tags = allTags();
     for (var g = 0; g < tags.length; g++) {
       var tagOn = st.tag === tags[g] ? ' on' : '';
@@ -134,6 +135,21 @@
 
     var btnRandom = $('#btnRandom', view);
     if (btnRandom) btnRandom.addEventListener('click', goRandom);
+
+    // 标签云在窄屏默认折叠，保证首屏先给「继续做题」入口；桌面默认展开
+    var tagCloud = $('#tagCloud', view);
+    var tagToggle = $('#btnTagToggle', view);
+    if (tagCloud && tagToggle) {
+      var narrow = !!(global.matchMedia && global.matchMedia('(max-width: 640px)').matches);
+      function setTagCloud(open) {
+        tagCloud.hidden = !open;
+        tagToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+      setTagCloud(!narrow);
+      tagToggle.addEventListener('click', function () {
+        setTagCloud(tagCloud.hidden);
+      });
+    }
 
     var btnClear = $('#btnClearFilters', view);
     if (btnClear) btnClear.addEventListener('click', clearFilters);

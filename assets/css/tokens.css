@@ -1,0 +1,133 @@
+/* =========================================================================
+   v3 设计令牌（Design Tokens）
+   - 只放变量，不放业务样式；html:root 优先级高于旧 style.css 的 :root，
+     因此可以安全地按「tokens → 旧样式 → 组件 → 页面」顺序加载并覆盖旧硬编码色。
+   - light 主题挂在 html[data-theme="light"]；system 由 app/theme.js 解析。
+   ========================================================================= */
+
+html:root {
+  color-scheme: dark;
+
+  /* 背景与表面 */
+  --v3-bg:        #0a0e13;
+  --v3-bg-2:      #0e141b;
+  --v3-panel:     #121a23;
+  --v3-panel-2:   #0f151d;
+  --v3-panel-3:   #17212c;
+  --v3-line:      #222c37;
+  --v3-line-2:    #334154;
+  --v3-shadow:    0 10px 30px rgba(0, 0, 0, 0.35);
+  --v3-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.28);
+
+  /* 文本 */
+  --v3-text:      #e6edf5;
+  --v3-text-dim:  #b3c0d0;
+  --v3-muted:     #8b98a9;
+
+  /* 品牌与状态 */
+  --v3-accent:      #2dd4bf;
+  --v3-accent-2:    #22b8a6;
+  --v3-accent-soft: rgba(45, 212, 191, 0.14);
+  --v3-indigo:      #8b9cff;
+  --v3-violet:      #c084fc;
+  --v3-ok:          #34d399;
+  --v3-warn:        #f5b942;
+  --v3-err:         #f87171;
+
+  /* 图表语义色：全站固定，不只靠颜色区分 */
+  --v3-chart-history: #7dd3fc;
+  --v3-chart-actual:  #34d399;
+  --v3-chart-pred:    #2dd4bf;
+  --v3-chart-baseline:#f5b942;
+  --v3-chart-interval:rgba(125, 211, 252, 0.16);
+  --v3-chart-grid:    rgba(147, 165, 183, 0.18);
+  --v3-chart-axis:    #8b98a9;
+
+  /* 字体与节奏 */
+  --v3-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+  --v3-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+
+  --v3-fs-body: 16px;
+  --v3-fs-sm: 13px;
+  --v3-fs-xs: 12px;
+  --v3-fs-h1: 30px;
+  --v3-fs-h2: 22px;
+  --v3-fs-h3: 17px;
+
+  --v3-space-1: 4px;
+  --v3-space-2: 8px;
+  --v3-space-3: 12px;
+  --v3-space-4: 16px;
+  --v3-space-5: 24px;
+  --v3-space-6: 32px;
+
+  --v3-radius-sm: 8px;
+  --v3-radius: 12px;
+  --v3-radius-lg: 18px;
+
+  --v3-max: 1280px;
+  --v3-topbar-h: 60px;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+
+  --v3-bg:        #f5f7fa;
+  --v3-bg-2:      #eef2f7;
+  --v3-panel:     #ffffff;
+  --v3-panel-2:   #f8fafc;
+  --v3-panel-3:   #eef2f7;
+  --v3-line:      #d8e0ea;
+  --v3-line-2:    #b9c6d6;
+  --v3-shadow:    0 10px 28px rgba(15, 23, 42, 0.10);
+  --v3-shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.08);
+
+  --v3-text:      #16202c;
+  --v3-text-dim:  #3d4c5e;
+  --v3-muted:     #64748b;
+
+  --v3-accent:      #0f766e;
+  --v3-accent-2:    #115e59;
+  --v3-accent-soft: rgba(15, 118, 110, 0.12);
+  --v3-indigo:      #4f46e5;
+  --v3-violet:      #7c3aed;
+  --v3-ok:          #047857;
+  --v3-warn:        #b45309;
+  --v3-err:         #b91c1c;
+
+  --v3-chart-history: #0369a1;
+  --v3-chart-actual:  #047857;
+  --v3-chart-pred:    #0f766e;
+  --v3-chart-baseline:#b45309;
+  --v3-chart-interval:rgba(3, 105, 161, 0.12);
+  --v3-chart-grid:    rgba(100, 116, 139, 0.24);
+  --v3-chart-axis:    #475569;
+}
+
+/* 让旧变量跟随新令牌，减少“半新半旧”的色板 */
+html:root {
+  --bg:        var(--v3-bg);
+  --bg-2:      var(--v3-bg-2);
+  --panel:     var(--v3-panel);
+  --panel-2:   var(--v3-panel-2);
+  --panel-3:   var(--v3-panel-3);
+  --line:      var(--v3-line);
+  --line-2:    var(--v3-line-2);
+  --text:      var(--v3-text);
+  --text-dim:  var(--v3-text-dim);
+  --muted:     var(--v3-muted);
+  --accent:    var(--v3-accent);
+  --accent-2:  var(--v3-accent-2);
+  --accent-soft: var(--v3-accent-soft);
+  --ok:        var(--v3-ok);
+  --warn:      var(--v3-warn);
+  --err:       var(--v3-err);
+  --indigo:    var(--v3-indigo);
+  --purple:    var(--v3-violet);
+  --topbar-h:  var(--v3-topbar-h);
+  --radius:    var(--v3-radius);
+  --sans:      var(--v3-sans);
+  --mono:      var(--v3-mono);
+}

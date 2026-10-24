@@ -64,9 +64,16 @@ test('浏览器可用性检查（无浏览器则跳过）', (t) => {
   assert.ok(page, 'CDP 连接失败');
 });
 
-test('file:// 首屏：无未捕获异常，题库页渲染出全部题目', async (t) => {
+test('file:// 首屏：无未捕获异常，工作台渲染；题库页渲染出全部题目', async (t) => {
   if (!page) return t.skip('无浏览器');
-  // 不再需要 sleep(400)：cdp.launch() 内置 waitReady()，拿到 page 时 TSJ.findProblem 已可调用
+  // v3.0 起默认路由是 #/ 工作台；题库行数改为显式进入 #/problems 后断言
+  const home = await page.evaluate(
+    '(function(){return {title:document.title, view:document.querySelector("#view").innerHTML.length, h1:(document.querySelector("#view h1")||{}).textContent};})()'
+  );
+  assert.ok(home.view > 500, '工作台内容过少，疑似渲染失败');
+  assert.match(String(home.h1), /看数据|工作台/, '首屏应为工作台，实际 H1：' + home.h1);
+
+  await goto('#/problems');
   const info = await page.evaluate(
     '(function(){return {title:document.title, rows:document.querySelectorAll(".prow").length, view:document.querySelector("#view").innerHTML.length, onboarded: !!document.querySelector(".modal")};})()'
   );

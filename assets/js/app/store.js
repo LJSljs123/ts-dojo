@@ -133,11 +133,12 @@
 
   /** 高亮当前导航项。 */
   function setActiveNav(name) {
-    var links = document.querySelectorAll('#nav a');
+    var links = document.querySelectorAll('#nav a, #drawerNav a');
     for (var i = 0; i < links.length; i++) {
       var isOn = links[i].getAttribute('data-nav') === name;
-      if (isOn) links[i].classList.add('on');
-      else links[i].classList.remove('on');
+      links[i].classList.toggle('on', isOn);
+      if (isOn) links[i].setAttribute('aria-current', 'page');
+      else links[i].removeAttribute('aria-current');
     }
   }
 

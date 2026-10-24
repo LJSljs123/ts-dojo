@@ -29,6 +29,12 @@
   var library = TSJ.appLibrary;
   var boards = TSJ.appBoards;
   var judge = TSJ.judge;
+  var lifecycle = TSJ.appLifecycle;
+  var theme = TSJ.appTheme;
+  var dashboard = TSJ.appDashboard;
+  var learn = TSJ.appLearn;
+  var methodDetail = TSJ.appMethodDetail;
+  var lab = TSJ.appLab;
 
   var $ = core.$;
   var esc = core.esc;
@@ -41,10 +47,15 @@
   /* ---------- 1. 路由 ---------- */
   /** 解析 hash 并渲染对应视图。 */
   function route() {
-    var hash = global.location.hash || '#/problems';
+    var hash = global.location.hash || '#/';
     var path = hash.replace(/^#\/?/, '');
     var parts = path.split('/').filter(function (s) { return s.length > 0; });
-    var view = parts[0] || 'problems';
+    var view = parts[0] || 'dashboard';
+
+    // 路由级生命周期：新 Scope 建立前先销毁旧页面的监听 / 图表 / 定时器
+    var scope = lifecycle.createScope('route');
+    if (state.routeScope && typeof state.routeScope.destroy === 'function') state.routeScope.destroy();
+    state.routeScope = scope;
 
     // 切换路由前销毁旧编辑器与旧图表 hover 句柄（否则 pointermove 监听会累积）
     if (state.editor && typeof state.editor.destroy === 'function') state.editor.destroy();
@@ -67,7 +78,7 @@
     if (view === 'problem' && parts[1]) {
       var p = TSJ.findProblem(decodeURIComponent(parts[1]));
       store.setActiveNav('problems');
-      problem.renderProblem(parts[1]);
+      problem.renderProblem(parts[1], scope);
       a11y.setTitle(p ? p.title : '题目不存在');
     } else if (view === 'submission' && parts[1]) {
       store.setActiveNav('submissions');
@@ -85,10 +96,25 @@
       store.setActiveNav('path');
       boards.renderPath();
       a11y.setTitle('学习路径');
+    } else if (view === 'methods' && parts[1]) {
+      store.setActiveNav('methods');
+      methodDetail.render(decodeURIComponent(parts[1]), scope);
     } else if (view === 'methods') {
       store.setActiveNav('methods');
       library.renderMethods();
       a11y.setTitle('方法库');
+    } else if (view === 'learn' && parts[1]) {
+      store.setActiveNav('learn');
+      learn.renderModule(decodeURIComponent(parts[1]), scope);
+    } else if (view === 'learn') {
+      store.setActiveNav('learn');
+      learn.renderMap(scope);
+    } else if (view === 'lab') {
+      store.setActiveNav('lab');
+      lab.render(scope);
+    } else if (view === 'dashboard') {
+      store.setActiveNav('dashboard');
+      dashboard.render(scope);
     } else {
       store.setActiveNav('problems');
       views.renderProblemList();
@@ -222,6 +248,55 @@
   }
 
   /* ---------- 3. 启动 ---------- */
+  /** 绑定主题切换与移动端抽屉（只绑一次，挂在应用级 Scope 上）。 */
+  function bindShell() {
+    var rootScope = lifecycle.createScope('app');
+    state.appScope = rootScope;
+
+    theme.init();
+    var btn = $('#btnTheme');
+    function paintTheme() {
+      if (!btn) return;
+      var mode = theme.get();
+      btn.textContent = mode === 'system' ? '主题：跟随系统' : (mode === 'dark' ? '主题：深色' : '主题：浅色');
+      btn.setAttribute('aria-pressed', theme.resolved() === 'light' ? 'true' : 'false');
+    }
+    paintTheme();
+    theme.onChange(paintTheme);
+    rootScope.own(theme.watchSystem());
+
+    if (btn) {
+      rootScope.listen(btn, 'click', function () {
+        theme.toggle();
+        paintTheme();
+      });
+    }
+
+    var menu = $('#btnMenu');
+    var drawer = $('#drawerNav');
+    function closeDrawer() {
+      if (!drawer || !menu) return;
+      drawer.classList.remove('open');
+      menu.setAttribute('aria-expanded', 'false');
+    }
+    if (menu && drawer) {
+      rootScope.listen(menu, 'click', function () {
+        var open = drawer.classList.toggle('open');
+        menu.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      rootScope.listen(drawer, 'click', function (ev) {
+        if (ev.target && ev.target.tagName === 'A') closeDrawer();
+      });
+      rootScope.listen(doc(), 'keydown', function (ev) {
+        if (ev.key === 'Escape') closeDrawer();
+      });
+    }
+
+    global.addEventListener('hashchange', route);
+  }
+
+  function doc() { return global.document; }
+
   /** 应用初始化。 */
   function init() {
     // 读出的数据一律视为不可信：先过类型守卫（不合法则丢弃并静默重写），再逐字段归一化
@@ -241,9 +316,9 @@
     store.onExternalChange(function () { route(); });
     storage.bindStorageSync();
 
-    global.addEventListener('hashchange', route);
+    bindShell();
 
-    if (!global.location.hash) global.location.hash = '#/problems';
+    if (!global.location.hash) global.location.hash = '#/';
     route();
     store.updateScoreChip();
 

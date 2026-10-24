@@ -21,6 +21,142 @@
 <meta name="description" content="时序竞技场 TSOJ：写 predict 函数、提交、打败统计基线得分并解锁题解的纯前端时间序列预测判题平台。">
 <style>
 /* =========================================================================
+   v3 设计令牌（Design Tokens）
+   - 只放变量，不放业务样式；html:root 优先级高于旧 style.css 的 :root，
+     因此可以安全地按「tokens → 旧样式 → 组件 → 页面」顺序加载并覆盖旧硬编码色。
+   - light 主题挂在 html[data-theme="light"]；system 由 app/theme.js 解析。
+   ========================================================================= */
+
+html:root {
+  color-scheme: dark;
+
+  /* 背景与表面 */
+  --v3-bg:        #0a0e13;
+  --v3-bg-2:      #0e141b;
+  --v3-panel:     #121a23;
+  --v3-panel-2:   #0f151d;
+  --v3-panel-3:   #17212c;
+  --v3-line:      #222c37;
+  --v3-line-2:    #334154;
+  --v3-shadow:    0 10px 30px rgba(0, 0, 0, 0.35);
+  --v3-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.28);
+
+  /* 文本 */
+  --v3-text:      #e6edf5;
+  --v3-text-dim:  #b3c0d0;
+  --v3-muted:     #8b98a9;
+
+  /* 品牌与状态 */
+  --v3-accent:      #2dd4bf;
+  --v3-accent-2:    #22b8a6;
+  --v3-accent-soft: rgba(45, 212, 191, 0.14);
+  --v3-indigo:      #8b9cff;
+  --v3-violet:      #c084fc;
+  --v3-ok:          #34d399;
+  --v3-warn:        #f5b942;
+  --v3-err:         #f87171;
+
+  /* 图表语义色：全站固定，不只靠颜色区分 */
+  --v3-chart-history: #7dd3fc;
+  --v3-chart-actual:  #34d399;
+  --v3-chart-pred:    #2dd4bf;
+  --v3-chart-baseline:#f5b942;
+  --v3-chart-interval:rgba(125, 211, 252, 0.16);
+  --v3-chart-grid:    rgba(147, 165, 183, 0.18);
+  --v3-chart-axis:    #8b98a9;
+
+  /* 字体与节奏 */
+  --v3-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+  --v3-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+
+  --v3-fs-body: 16px;
+  --v3-fs-sm: 13px;
+  --v3-fs-xs: 12px;
+  --v3-fs-h1: 30px;
+  --v3-fs-h2: 22px;
+  --v3-fs-h3: 17px;
+
+  --v3-space-1: 4px;
+  --v3-space-2: 8px;
+  --v3-space-3: 12px;
+  --v3-space-4: 16px;
+  --v3-space-5: 24px;
+  --v3-space-6: 32px;
+
+  --v3-radius-sm: 8px;
+  --v3-radius: 12px;
+  --v3-radius-lg: 18px;
+
+  --v3-max: 1280px;
+  --v3-topbar-h: 60px;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+
+  --v3-bg:        #f5f7fa;
+  --v3-bg-2:      #eef2f7;
+  --v3-panel:     #ffffff;
+  --v3-panel-2:   #f8fafc;
+  --v3-panel-3:   #eef2f7;
+  --v3-line:      #d8e0ea;
+  --v3-line-2:    #b9c6d6;
+  --v3-shadow:    0 10px 28px rgba(15, 23, 42, 0.10);
+  --v3-shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.08);
+
+  --v3-text:      #16202c;
+  --v3-text-dim:  #3d4c5e;
+  --v3-muted:     #64748b;
+
+  --v3-accent:      #0f766e;
+  --v3-accent-2:    #115e59;
+  --v3-accent-soft: rgba(15, 118, 110, 0.12);
+  --v3-indigo:      #4f46e5;
+  --v3-violet:      #7c3aed;
+  --v3-ok:          #047857;
+  --v3-warn:        #b45309;
+  --v3-err:         #b91c1c;
+
+  --v3-chart-history: #0369a1;
+  --v3-chart-actual:  #047857;
+  --v3-chart-pred:    #0f766e;
+  --v3-chart-baseline:#b45309;
+  --v3-chart-interval:rgba(3, 105, 161, 0.12);
+  --v3-chart-grid:    rgba(100, 116, 139, 0.24);
+  --v3-chart-axis:    #475569;
+}
+
+/* 让旧变量跟随新令牌，减少“半新半旧”的色板 */
+html:root {
+  --bg:        var(--v3-bg);
+  --bg-2:      var(--v3-bg-2);
+  --panel:     var(--v3-panel);
+  --panel-2:   var(--v3-panel-2);
+  --panel-3:   var(--v3-panel-3);
+  --line:      var(--v3-line);
+  --line-2:    var(--v3-line-2);
+  --text:      var(--v3-text);
+  --text-dim:  var(--v3-text-dim);
+  --muted:     var(--v3-muted);
+  --accent:    var(--v3-accent);
+  --accent-2:  var(--v3-accent-2);
+  --accent-soft: var(--v3-accent-soft);
+  --ok:        var(--v3-ok);
+  --warn:      var(--v3-warn);
+  --err:       var(--v3-err);
+  --indigo:    var(--v3-indigo);
+  --purple:    var(--v3-violet);
+  --topbar-h:  var(--v3-topbar-h);
+  --radius:    var(--v3-radius);
+  --sans:      var(--v3-sans);
+  --mono:      var(--v3-mono);
+}
+
+</style>
+<style>
+/* =========================================================================
    时序竞技场 TSOJ —— 暗色主题样式表
    设计原则：深色底 + 单一青绿强调色，层次靠明度与细边框，不使用花哨渐变。
    ========================================================================= */
@@ -1371,6 +1507,618 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
 
 
 </style>
+<style>
+/* =========================================================================
+   v3 组件层（components.css）
+   只定义可复用组件与状态，不定义具体页面布局；页面布局在 pages-v3.css。
+   命名约定：ds-* 通用组件；wk-* 工作台外壳；chart-v2-* 图表。
+   ========================================================================= */
+
+body {
+  font-size: var(--v3-fs-body);
+  line-height: 1.68;
+  background:
+    radial-gradient(1200px 520px at 78% -10%, rgba(45, 212, 191, 0.08), transparent 60%),
+    var(--v3-bg);
+  color: var(--v3-text);
+}
+
+html[data-theme="light"] body {
+  background:
+    radial-gradient(1100px 480px at 80% -12%, rgba(15, 118, 110, 0.08), transparent 62%),
+    var(--v3-bg);
+}
+
+/* ---------- 外壳与导航 ---------- */
+.wk-shell { min-height: 100vh; }
+
+.wk-topbar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--v3-topbar-h);
+  display: flex;
+  align-items: center;
+  gap: var(--v3-space-4);
+  padding: 0 var(--v3-space-5);
+  background: color-mix(in srgb, var(--v3-panel) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--v3-line);
+  z-index: 40;
+}
+
+.wk-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--v3-text);
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.wk-brand b { color: var(--v3-accent); font-weight: 800; }
+.wk-brand svg { color: var(--v3-accent); }
+
+.wk-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.wk-nav::-webkit-scrollbar { display: none; }
+
+.wk-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--v3-text-dim);
+  font-size: var(--v3-fs-sm);
+  white-space: nowrap;
+}
+.wk-nav a:hover { background: var(--v3-panel-3); color: var(--v3-text); }
+.wk-nav a[aria-current="page"] {
+  color: var(--v3-accent);
+  background: var(--v3-accent-soft);
+  font-weight: 650;
+}
+
+.wk-actions { display: inline-flex; align-items: center; gap: var(--v3-space-2); }
+
+.wk-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--v3-line);
+  border-radius: 999px;
+  background: var(--v3-panel-2);
+  color: var(--v3-text-dim);
+  font-size: var(--v3-fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.wk-score b { color: var(--v3-text); }
+
+.wk-menu-btn { display: none; }
+
+.wk-drawer {
+  position: fixed;
+  inset: var(--v3-topbar-h) 0 auto 0;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--v3-space-3) var(--v3-space-4) var(--v3-space-5);
+  background: var(--v3-panel);
+  border-bottom: 1px solid var(--v3-line);
+  box-shadow: var(--v3-shadow);
+  z-index: 39;
+}
+.wk-drawer.open { display: flex; }
+.wk-drawer a {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: var(--v3-radius-sm);
+  color: var(--v3-text-dim);
+}
+.wk-drawer a[aria-current="page"] { color: var(--v3-accent); background: var(--v3-accent-soft); }
+
+.wk-main {
+  max-width: var(--v3-max);
+  margin: 0 auto;
+  padding: calc(var(--v3-topbar-h) + var(--v3-space-5)) var(--v3-space-6) var(--v3-space-6);
+}
+.wk-main:focus { outline: none; }
+
+/* ---------- 通用组件 ---------- */
+.ds-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--v3-line-2);
+  border-radius: 10px;
+  background: var(--v3-panel-2);
+  color: var(--v3-text);
+  font-size: var(--v3-fs-sm);
+  font-weight: 550;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+.ds-btn:hover { background: var(--v3-panel-3); border-color: var(--v3-accent); }
+.ds-btn:active { transform: translateY(1px); }
+.ds-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+.ds-btn-primary {
+  background: var(--v3-accent);
+  border-color: var(--v3-accent);
+  color: #04211f;
+}
+html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
+.ds-btn-primary:hover { background: var(--v3-accent-2); border-color: var(--v3-accent-2); }
+.ds-btn-ghost { background: transparent; }
+.ds-btn-sm { min-height: 32px; padding: 0 10px; font-size: var(--v3-fs-xs); }
+
+.ds-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ds-field > span {
+  color: var(--v3-text-dim);
+  font-size: var(--v3-fs-xs);
+  font-weight: 600;
+}
+.ds-field select,
+.ds-field input,
+.ds-field textarea {
+  min-height: 40px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--v3-line-2);
+  border-radius: 10px;
+  background: var(--v3-panel-2);
+  color: var(--v3-text);
+  font: inherit;
+  font-size: var(--v3-fs-sm);
+}
+.ds-field select:focus-visible,
+.ds-field input:focus-visible,
+.ds-field textarea:focus-visible { border-color: var(--v3-accent); }
+
+.ds-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--v3-line-2);
+  border-radius: 999px;
+  background: var(--v3-panel-2);
+  color: var(--v3-text-dim);
+  font-size: var(--v3-fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ds-badge-ok    { color: var(--v3-ok);    border-color: color-mix(in srgb, var(--v3-ok) 45%, transparent); }
+.ds-badge-warn  { color: var(--v3-warn);  border-color: color-mix(in srgb, var(--v3-warn) 45%, transparent); }
+.ds-badge-err   { color: var(--v3-err);   border-color: color-mix(in srgb, var(--v3-err) 45%, transparent); }
+.ds-badge-accent{ color: var(--v3-accent);border-color: color-mix(in srgb, var(--v3-accent) 45%, transparent); }
+
+.ds-card {
+  border: 1px solid var(--v3-line);
+  border-radius: var(--v3-radius);
+  background: var(--v3-panel);
+  box-shadow: var(--v3-shadow-sm);
+  padding: var(--v3-space-5);
+}
+.ds-card-title { margin: 0 0 var(--v3-space-2); font-size: var(--v3-fs-h3); }
+.ds-card-sub { margin: 0 0 var(--v3-space-4); color: var(--v3-muted); font-size: var(--v3-fs-sm); }
+
+.ds-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--v3-line);
+  border-radius: var(--v3-radius);
+  background: var(--v3-panel);
+}
+.ds-table { width: 100%; border-collapse: collapse; font-size: var(--v3-fs-sm); }
+.ds-table th,
+.ds-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--v3-line); white-space: nowrap; }
+.ds-table th { color: var(--v3-text-dim); font-size: var(--v3-fs-xs); text-transform: none; }
+.ds-table tr:last-child td { border-bottom: 0; }
+.ds-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.ds-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v3-space-3);
+  align-items: flex-start;
+  padding: var(--v3-space-5);
+  border: 1px dashed var(--v3-line-2);
+  border-radius: var(--v3-radius);
+  background: var(--v3-panel-2);
+  color: var(--v3-text-dim);
+}
+.ds-empty strong { color: var(--v3-text); }
+
+.ds-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--v3-line-2);
+  background: var(--v3-panel);
+  color: var(--v3-text);
+  box-shadow: var(--v3-shadow);
+  font-size: var(--v3-fs-sm);
+}
+.ds-toast.ok  { border-color: color-mix(in srgb, var(--v3-ok) 55%, transparent); }
+.ds-toast.err { border-color: color-mix(in srgb, var(--v3-err) 55%, transparent); }
+
+.ds-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 100;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--v3-accent);
+  color: #04211f;
+}
+.ds-skip-link:focus { left: 12px; }
+
+/* hidden 属性必须战胜弹性布局，否则折叠筛选会失效 */
+[hidden] { display: none !important; }
+
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--v3-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 1024px) {
+  .wk-main { padding-left: var(--v3-space-4); padding-right: var(--v3-space-4); }
+}
+
+@media (max-width: 860px) {
+  .wk-nav { display: none; }
+  .wk-menu-btn { display: inline-flex; }
+  .wk-score { display: inline-flex; min-height: 32px; padding: 0 8px; font-size: var(--v3-fs-xs); }
+  .wk-topbar { gap: var(--v3-space-2); padding: 0 var(--v3-space-3); }
+  .wk-brand-text { display: none; }
+}
+
+@media (max-width: 640px) {
+  .wk-main {
+    padding-left: var(--v3-space-4);
+    padding-right: var(--v3-space-4);
+  }
+  .ds-card { padding: var(--v3-space-4); }
+  .ds-btn { width: 100%; }
+  .wk-actions .ds-btn { width: auto; }
+}
+
+</style>
+<style>
+/* =========================================================================
+   v3 页面布局（pages-v3.css）
+   覆盖工作台 / 课程 / 方法详情 / 实验室 / 图表。旧页面类不在此重定义，避免冲突。
+   ========================================================================= */
+
+.wk-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 1fr);
+  gap: var(--v3-space-5);
+  align-items: stretch;
+  margin-bottom: var(--v3-space-5);
+}
+
+.wk-hero-main {
+  padding: var(--v3-space-6);
+  border: 1px solid var(--v3-line);
+  border-radius: var(--v3-radius-lg);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--v3-accent) 12%, transparent), transparent 55%),
+    var(--v3-panel);
+  box-shadow: var(--v3-shadow-sm);
+}
+.wk-hero-main h1 {
+  margin: 0 0 var(--v3-space-3);
+  font-size: var(--v3-fs-h1);
+  line-height: 1.25;
+}
+.wk-hero-main p {
+  margin: 0 0 var(--v3-space-4);
+  max-width: 62ch;
+  color: var(--v3-text-dim);
+}
+.wk-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--v3-space-3);
+  color: var(--v3-accent);
+  font-size: var(--v3-fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.wk-cta-row { display: flex; flex-wrap: wrap; gap: var(--v3-space-3); }
+
+.wk-side-stack { display: grid; gap: var(--v3-space-4); align-content: start; }
+
+.wk-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--v3-space-4);
+  margin-bottom: var(--v3-space-5);
+}
+.wk-metric {
+  padding: var(--v3-space-4);
+  border: 1px solid var(--v3-line);
+  border-radius: var(--v3-radius);
+  background: var(--v3-panel);
+}
+.wk-metric span { display: block; color: var(--v3-muted); font-size: var(--v3-fs-xs); }
+.wk-metric b {
+  display: block;
+  margin-top: 6px;
+  font-size: 24px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.wk-metric small { color: var(--v3-text-dim); font-size: var(--v3-fs-xs); }
+
+.wk-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--v3-space-5);
+  margin-bottom: var(--v3-space-5);
+}
+.wk-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--v3-space-4);
+}
+
+.wk-list { display: grid; gap: var(--v3-space-3); }
+.wk-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--v3-space-3);
+  padding: var(--v3-space-3) var(--v3-space-4);
+  border: 1px solid var(--v3-line);
+  border-radius: var(--v3-radius-sm);
+  background: var(--v3-panel-2);
+}
+.wk-list-item:hover { border-color: var(--v3-accent); }
+.wk-list-main { min-width: 0; }
+.wk-list-main b { display: block; font-size: var(--v3-fs-sm); }
+.wk-list-main span { color: var(--v3-muted); font-size: var(--v3-fs-xs); }
+
+/* ---------- 课程 ---------- */
+.course-map { display: grid; gap: var(--v3-space-4); }
+.course-module {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: var(--v3-space-4);
+  padding: var(--v3-space-5);
+  border: 1px solid var(--v3-line);
+  border-radius: var(--v3-radius);
+  background: var(--v3-panel);
+}
+.course-num {
+  display: grid;
+  place-items: center;
+  width: 52px; height: 52px;
+  border-radius: 16px;
+  background: var(--v3-accent-soft);
+  color: var(--v3-accent);
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.course-module h3 { margin: 0 0 6px; font-size: var(--v3-fs-h3); }
+.course-module p { margin: 0 0 var(--v3-space-3); color: var(--v3-text-dim); }
+.course-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.course-article { max-width: 860px; }
+.course-article h1 { font-size: var(--v3-fs-h1); line-height: 1.3; margin: 0 0 var(--v3-space-3); }
+.course-article h2 {
+  margin: var(--v3-space-6) 0 var(--v3-space-3);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--v3-line);
+  font-size: var(--v3-fs-h2);
+}
+.course-article h3 { margin: var(--v3-space-5) 0 var(--v3-space-2); font-size: var(--v3-fs-h3); }
+.course-article p { margin: 0 0 var(--v3-space-3); }
+.course-article ul, .course-article ol { margin: 0 0 var(--v3-space-4); padding-left: 22px; }
+.course-article li { margin-bottom: 6px; }
+.course-article blockquote {
+  margin: 0 0 var(--v3-space-4);
+  padding: var(--v3-space-3) var(--v3-space-4);
+  border-left: 3px solid var(--v3-accent);
+  background: var(--v3-panel-2);
+  color: var(--v3-text-dim);
+  border-radius: 0 var(--v3-radius-sm) var(--v3-radius-sm) 0;
+}
+.course-article code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--v3-panel-3);
+  font-size: 0.92em;
+}
+.course-article pre {
+  overflow-x: auto;
+  margin: 0 0 var(--v3-space-4);
+  padding: var(--v3-space-4);
+  border: 1px solid var(--v3-line);
+  border-radius: var(--v3-radius-sm);
+  background: var(--v3-panel-2);
+}
+.course-article pre code { background: none; padding: 0; }
+
+.md-ref a {
+  color: var(--v3-accent);
+  font-weight: 700;
+  text-decoration: none;
+  padding: 0 1px;
+}
+.md-ref a:hover { text-decoration: underline; }
+
+.lab-metric {
+  width: 14px; height: 14px;
+  accent-color: var(--v3-accent);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.md-formula {
+  overflow-x: auto;
+  margin: 0 0 var(--v3-space-4);
+  padding: var(--v3-space-4);
+  border: 1px solid var(--v3-line);
+  border-left: 3px solid var(--v3-indigo);
+  border-radius: var(--v3-radius-sm);
+  background: var(--v3-panel-2);
+  font-family: var(--v3-mono);
+  font-size: var(--v3-fs-sm);
+  white-space: pre;
+}
+.md-note {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 var(--v3-space-4);
+  padding: var(--v3-space-3) var(--v3-space-4);
+  border: 1px solid color-mix(in srgb, var(--v3-warn) 40%, transparent);
+  border-radius: var(--v3-radius-sm);
+  background: color-mix(in srgb, var(--v3-warn) 8%, transparent);
+  color: var(--v3-text-dim);
+  font-size: var(--v3-fs-sm);
+}
+
+.course-panel {
+  margin: var(--v3-space-5) 0;
+  padding: var(--v3-space-5);
+  border: 1px solid var(--v3-line);
+  border-radius: var(--v3-radius);
+  background: var(--v3-panel);
+}
+.course-panel h3 { margin-top: 0; }
+.course-refs { display: grid; gap: 6px; padding-left: 18px; }
+.course-refs a { word-break: break-all; }
+
+.crumb { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--v3-space-3); color: var(--v3-muted); font-size: var(--v3-fs-xs); }
+.crumb a { color: var(--v3-text-dim); }
+
+/* ---------- 方法详情 ---------- */
+.method-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: var(--v3-space-5);
+  align-items: start;
+}
+.method-aside { display: grid; gap: var(--v3-space-4); position: sticky; top: calc(var(--v3-topbar-h) + 16px); }
+.method-section { margin-bottom: var(--v3-space-5); }
+.method-section h2 { font-size: var(--v3-fs-h2); margin: var(--v3-space-5) 0 var(--v3-space-3); }
+.method-facts { display: grid; gap: 8px; }
+.method-fact { display: flex; justify-content: space-between; gap: 10px; font-size: var(--v3-fs-sm); }
+.method-fact span { color: var(--v3-muted); }
+.method-fact b { text-align: right; }
+
+/* ---------- 实验室 ---------- */
+.lab-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: var(--v3-space-5);
+  align-items: start;
+}
+.lab-config { display: grid; gap: var(--v3-space-3); position: sticky; top: calc(var(--v3-topbar-h) + 16px); }
+.lab-config-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--v3-space-3); }
+.lab-actions { display: flex; flex-wrap: wrap; gap: var(--v3-space-2); margin-top: var(--v3-space-2); }
+.lab-results { display: grid; gap: var(--v3-space-5); }
+.lab-status { display: flex; flex-wrap: wrap; gap: var(--v3-space-3); align-items: center; color: var(--v3-text-dim); font-size: var(--v3-fs-sm); }
+.lab-history { display: grid; gap: var(--v3-space-2); }
+.lab-history-item {
+  display: flex; justify-content: space-between; gap: 10px; align-items: center;
+  padding: 8px 10px; border: 1px solid var(--v3-line); border-radius: var(--v3-radius-sm);
+  background: var(--v3-panel-2); font-size: var(--v3-fs-xs);
+}
+.lab-history-item button { background: none; border: 0; color: var(--v3-accent); cursor: pointer; font: inherit; padding: 0; }
+
+/* ---------- 图表 ---------- */
+.chart-v2 { display: grid; gap: var(--v3-space-3); }
+.chart-v2-head { display: flex; flex-wrap: wrap; gap: var(--v3-space-3); justify-content: space-between; align-items: baseline; }
+.chart-v2-head h3 { margin: 0; font-size: var(--v3-fs-h3); }
+.chart-v2-legend { display: flex; flex-wrap: wrap; gap: var(--v3-space-3); color: var(--v3-text-dim); font-size: var(--v3-fs-xs); }
+.chart-v2-legend i { display: inline-block; width: 18px; height: 0; margin-right: 6px; vertical-align: middle; border-top-width: 2px; border-top-style: solid; }
+.chart-v2-canvas-wrap { position: relative; width: 100%; }
+.chart-v2-canvas-wrap canvas { display: block; width: 100%; touch-action: pan-y; }
+.chart-v2-tip {
+  position: absolute;
+  z-index: 5;
+  min-width: 150px;
+  padding: 8px 10px;
+  border: 1px solid var(--v3-line-2);
+  border-radius: var(--v3-radius-sm);
+  background: var(--v3-panel);
+  box-shadow: var(--v3-shadow);
+  color: var(--v3-text);
+  font-size: var(--v3-fs-xs);
+  pointer-events: none;
+}
+.chart-v2-tip b { font-variant-numeric: tabular-nums; }
+.chart-v2-summary { color: var(--v3-text-dim); font-size: var(--v3-fs-sm); }
+.chart-v2-empty {
+  display: grid; place-items: center; min-height: 140px;
+  border: 1px dashed var(--v3-line-2); border-radius: var(--v3-radius-sm);
+  color: var(--v3-muted); font-size: var(--v3-fs-sm); text-align: center; padding: var(--v3-space-4);
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 1024px) {
+  .wk-hero { grid-template-columns: 1fr; }
+  .method-layout { grid-template-columns: 1fr; }
+  .method-aside { position: static; }
+  .lab-layout { grid-template-columns: 1fr; }
+  .lab-config { position: static; }
+  .wk-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 768px) {
+  .wk-grid-2 { grid-template-columns: 1fr; }
+  .wk-grid-3 { grid-template-columns: 1fr; }
+  .course-module { grid-template-columns: 1fr; }
+  .course-num { width: 44px; height: 44px; font-size: 17px; }
+}
+
+@media (max-width: 640px) {
+  .wk-hero-main { padding: var(--v3-space-5); }
+  .lab-config-row { grid-template-columns: 1fr; }
+  .wk-list-item { align-items: flex-start; flex-direction: column; }
+}
+
+</style>
 
 <!-- 启动自检：脚本被拦 / 加载失败 / 1.5s 内没渲染出内容 → 直接把原因显示出来，绝不留白屏 -->
 <script>
@@ -1444,8 +2192,8 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
 <body>
 
 <!-- ============ 顶部固定栏 ============ -->
-<header class="topbar">
-  <a class="brand" href="#/problems" aria-label="时序竞技场 TSOJ 首页">
+<header class="topbar wk-topbar">
+  <a class="brand wk-brand" href="#/" aria-label="时序竞技场 TSOJ 工作台">
     <svg class="brand-logo" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <rect x="1.6" y="1.6" width="20.8" height="20.8" rx="6.4" stroke="currentColor" stroke-width="1.3" opacity="0.5"/>
       <path d="M5 15.6l3.5-3.9 3 2.3L18.6 7.2" stroke="currentColor" stroke-width="1.7"
@@ -1455,25 +2203,42 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
     <span class="brand-text">时序竞技场 <b>TSOJ</b></span>
   </a>
 
-  <nav class="nav" id="nav" aria-label="主导航">
+  <nav class="nav wk-nav" id="nav" aria-label="主导航">
+    <a href="#/" data-nav="dashboard">工作台</a>
     <a href="#/problems" data-nav="problems">题库</a>
     <a href="#/methods" data-nav="methods">方法库</a>
+    <a href="#/learn" data-nav="learn">课程</a>
+    <a href="#/lab" data-nav="lab">实验室</a>
     <a href="#/submissions" data-nav="submissions">提交记录</a>
     <a href="#/ranking" data-nav="ranking">排行榜</a>
     <a href="#/path" data-nav="path">学习路径</a>
   </nav>
 
-  <div class="topbar-right">
-    <div class="score-chip" id="scoreChip" title="累计等级分 = 各题历史最高分之和">
+  <div class="topbar-right wk-actions">
+    <button class="ds-btn ds-btn-ghost ds-btn-sm" id="btnTheme" type="button" aria-label="切换深浅主题">主题</button>
+    <div class="score-chip wk-score" id="scoreChip" title="累计等级分 = 各题历史最高分之和">
       <span class="lv" id="lvText">Lv.1</span>
       <span class="pts" id="ptsText">0 分</span>
     </div>
+    <button class="ds-btn ds-btn-sm wk-menu-btn" id="btnMenu" type="button" aria-expanded="false" aria-controls="drawerNav">菜单</button>
   </div>
 </header>
 
+<nav class="wk-drawer" id="drawerNav" aria-label="移动端主导航">
+  <a href="#/" data-nav="dashboard">工作台</a>
+  <a href="#/problems" data-nav="problems">题库</a>
+  <a href="#/methods" data-nav="methods">方法库</a>
+  <a href="#/learn" data-nav="learn">课程</a>
+  <a href="#/lab" data-nav="lab">实验室</a>
+  <a href="#/submissions" data-nav="submissions">提交记录</a>
+  <a href="#/ranking" data-nav="ranking">排行榜</a>
+  <a href="#/path" data-nav="path">学习路径</a>
+</nav>
+
 <!-- ============ 视图容器 ============
      tabindex="-1"：路由切换后把焦点交给 #view，读屏用户能感知「内容已更新」 -->
-<main id="view" class="view" role="main" tabindex="-1"></main>
+<a class="ds-skip-link" href="#view">跳到主要内容</a>
+<main id="view" class="view wk-main" role="main" tabindex="-1"></main>
 
 <!-- ============ 引导 / 弹层 ============
      role/aria-modal 由 app/a11y.js 在打开时再确认一次；关闭后焦点回到 #view -->
@@ -4925,6 +5690,1330 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
 </script>
 <script>
 /**
+ * assets/js/content/references.js —— 一手来源登记表
+ *
+ * 规则：
+ *   - 只收论文原文 / 官方会议页 / 官方文档 / 教材官方站；博客只作补充且不放进核心事实。
+ *   - status 用 preprint / conference / journal / book / archive / competition。
+ *   - checkedAt 是人工核查日期；不推断“最新版本”或“SOTA”。
+ *   - arXiv 与正式发表分开标注，不把 arXiv 年份说成正式发表年份。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+
+  var references = [
+    {
+      id: 'fpp3',
+      title: 'Forecasting: Principles and Practice, 3rd edition',
+      authors: 'Rob J. Hyndman, George Athanasopoulos',
+      year: 2021,
+      venue: 'OTexts',
+      status: 'book',
+      url: 'https://otexts.com/fpp3/',
+      checkedAt: '2026-10-24',
+      note: '时序预测教材：ETS、ARIMA、预测评估与滚动起点验证的权威入口。'
+    },
+    {
+      id: 'fpp3-tscv',
+      title: 'Forecasting: Principles and Practice, 3rd edition — Time series cross-validation',
+      authors: 'Rob J. Hyndman, George Athanasopoulos',
+      year: 2021,
+      venue: 'OTexts',
+      status: 'book',
+      url: 'https://otexts.com/fpp3/tscv.html',
+      checkedAt: '2026-10-24',
+      note: 'rolling-origin 评估：训练只用预测起点之前的数据。'
+    },
+    {
+      id: 'monash',
+      title: 'Monash Time Series Forecasting Archive',
+      authors: 'Rakshitha Godahewa et al.',
+      year: 2021,
+      venue: 'arXiv:2105.06643',
+      status: 'archive',
+      url: 'https://arxiv.org/abs/2105.06643',
+      checkedAt: '2026-10-24',
+      note: '公开时序基准档案；用于理解全球模型与训练语料重叠风险。'
+    },
+    {
+      id: 'chronos-2024',
+      title: 'Chronos: Learning the Language of Time Series',
+      authors: 'Abdul Fatir Ansari, Lorenzo Stella, Caner Turkmen, et al.',
+      year: 2024,
+      venue: 'arXiv:2403.07815',
+      status: 'preprint',
+      url: 'https://arxiv.org/abs/2403.07815',
+      checkedAt: '2026-10-24',
+      note: '把时序值缩放量化成 token，用语言模型做概率预测；概念级，不在浏览器推理。'
+    },
+    {
+      id: 'aci-2021',
+      title: 'Adaptive Conformal Inference Under Distribution Shift',
+      authors: 'Isaac Gibbs, Emmanuel J. Candès',
+      year: 2021,
+      venue: 'NeurIPS 34 / arXiv:2106.00170',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2106.00170',
+      checkedAt: '2026-10-24',
+      note: '分布漂移下的在线一致性预测；须区分长期覆盖与条件覆盖。'
+    },
+    {
+      id: 'timesfm-2024',
+      title: 'A decoder-only foundation model for time-series forecasting',
+      authors: 'Abhimanyu Das, Weihao Kong, Rajat Sen, Yichen Zhou',
+      year: 2024,
+      venue: 'ICML / arXiv:2310.10688',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2310.10688',
+      checkedAt: '2026-10-24',
+      note: 'TimesFM：patched decoder-only 基础模型；概念级。'
+    },
+    {
+      id: 'moirai-2024',
+      title: 'Unified Training of Universal Time Series Forecasting Transformers',
+      authors: 'Gerald Woo, Chenghao Liu, Akshat Kumar, Caiming Xiong, Silvio Savarese, Doyen Sahoo',
+      year: 2024,
+      venue: 'ICML / arXiv:2402.02592',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2402.02592',
+      checkedAt: '2026-10-24',
+      note: 'Moirai / LOTSA：跨频率、任意变量数的统一训练；概念级。'
+    },
+    {
+      id: 'global-models-2021',
+      title: 'Principles and algorithms for forecasting groups of time series: Locality and globality',
+      authors: 'Pablo Montero-Manso, Rob J. Hyndman',
+      year: 2021,
+      venue: 'International Journal of Forecasting 37(4)',
+      status: 'journal',
+      url: 'https://doi.org/10.1016/j.ijforecast.2021.03.004',
+      checkedAt: '2026-10-24',
+      note: '全球模型与局部模型的适用边界；全球不等于复杂深度模型。'
+    },
+    {
+      id: 'mint-2019',
+      title: 'Optimal forecast reconciliation for hierarchical and grouped time series through trace minimization',
+      authors: 'Shanika L. Wickramasuriya, George Athanasopoulos, Rob J. Hyndman',
+      year: 2019,
+      venue: 'Journal of the American Statistical Association 114(526)',
+      status: 'journal',
+      url: 'https://doi.org/10.1080/01621459.2018.1448825',
+      checkedAt: '2026-10-24',
+      note: 'MinT：层级/分组预测协调；P0 只做小型一致性演示。'
+    },
+    {
+      id: 'croston-1972',
+      title: 'Forecasting and Stock Control for Intermittent Demands',
+      authors: 'J. D. Croston',
+      year: 1972,
+      venue: 'Operational Research Quarterly 23(3)',
+      status: 'journal',
+      url: 'https://doi.org/10.1057/jors.1972.50',
+      checkedAt: '2026-10-24',
+      note: '间歇需求：分开平滑需求量与需求间隔的起点。'
+    },
+    {
+      id: 'tsb-2011',
+      title: 'An inventory system for intermittent demand with advance demand information',
+      authors: 'R. H. Teunter, A. A. Syntetos, M. Z. Babai',
+      year: 2011,
+      venue: 'International Journal of Production Economics',
+      status: 'journal',
+      url: 'https://doi.org/10.1016/j.ijpe.2010.11.007',
+      checkedAt: '2026-10-24',
+      note: 'TSB：直接平滑“有需求概率”和“非零需求量”。'
+    },
+    {
+      id: 'sba-2005',
+      title: 'On the categorization of demand patterns',
+      authors: 'A. A. Syntetos, J. E. Boylan',
+      year: 2005,
+      venue: 'Journal of the Operational Research Society 56',
+      status: 'journal',
+      url: 'https://doi.org/10.1057/palgrave.jors.2602841',
+      checkedAt: '2026-10-24',
+      note: '需求形态分类与 Croston/SBA 的偏差修正背景。'
+    },
+    {
+      id: 'dm-1995',
+      title: 'Comparing Predictive Accuracy',
+      authors: 'Francis X. Diebold, Roberto S. Mariano',
+      year: 1995,
+      venue: 'Journal of Business & Economic Statistics 13(3)',
+      status: 'journal',
+      url: 'https://doi.org/10.1080/07350015.1995.10524599',
+      checkedAt: '2026-10-24',
+      note: '预测准确性比较检验；比较前先说明损失、horizon 与多重比较。'
+    },
+    {
+      id: 'm4-2018',
+      title: 'The M4 Competition: 100,000 time series and 61 forecasting methods',
+      authors: 'Spyros Makridakis, Evangelos Spiliotis, Vassilios Assimakopoulos',
+      year: 2018,
+      venue: 'International Journal of Forecasting 36(1)',
+      status: 'journal',
+      url: 'https://doi.org/10.1016/j.ijforecast.2018.06.001',
+      checkedAt: '2026-10-24',
+      note: 'M4：统计与机器学习方法的大规模比较；结论不可直接外推到业务数据。'
+    },
+    {
+      id: 'm5-2020',
+      title: 'M5 Accuracy competition',
+      authors: 'Spyros Makridakis, Evangelos Spiliotis, Vassilios Assimakopoulos',
+      year: 2020,
+      venue: 'International Journal of Forecasting',
+      status: 'competition',
+      url: 'https://doi.org/10.1016/j.ijforecast.2019.08.007',
+      checkedAt: '2026-10-24',
+      note: 'M5：沃尔玛分层销售数据；层级一致性是核心难点之一。'
+    },
+    {
+      id: 'dlinear-2023',
+      title: 'Are Transformers Effective for Time Series Forecasting?',
+      authors: 'Ailing Zeng, Muxi Chen, Lei Zhang, Qiang Xu',
+      year: 2023,
+      venue: 'AAAI / arXiv:2205.13504',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2205.13504',
+      checkedAt: '2026-10-24',
+      note: 'DLinear：一层线性分解在多个长序列基准上强于复杂 Transformer。'
+    },
+    {
+      id: 'patchtst-2023',
+      title: 'A Time Series is Worth 64 Words: Long-term Forecasting with Transformers',
+      authors: 'Yuqi Nie, Nam H. Nguyen, Sinan Wang, et al.',
+      year: 2023,
+      venue: 'ICLR / arXiv:2211.14730',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2211.14730',
+      checkedAt: '2026-10-24',
+      note: 'PatchTST：分 patch + 通道独立；概念级。'
+    },
+    {
+      id: 'timesnet-2023',
+      title: 'TimesNet: Temporal 2D-Variation Modeling for General Time Series Analysis',
+      authors: 'Haixu Wu, Tengge Hu, Yong Liu, Hang Zhou, Jianmin Wang, Mingsheng Long',
+      year: 2023,
+      venue: 'ICLR / arXiv:2210.02186',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2210.02186',
+      checkedAt: '2026-10-24',
+      note: 'TimesNet：把一维序列按周期折叠成二维变化；概念级。'
+    },
+    {
+      id: 'itransformer-2024',
+      title: 'iTransformer: Inverted Transformers Are Effective for Time Series Forecasting',
+      authors: 'Yong Liu, Tengge Hu, Haixu Wu, et al.',
+      year: 2024,
+      venue: 'ICLR / arXiv:2310.06625',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2310.06625',
+      checkedAt: '2026-10-24',
+      note: 'iTransformer：把变量维当 token，序列维当通道；概念级。'
+    },
+    {
+      id: 'nbeats-2020',
+      title: 'N-BEATS: Neural Basis Expansion Analysis for Interpretable Time Series Forecasting',
+      authors: 'Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio',
+      year: 2020,
+      venue: 'ICLR / arXiv:1905.10437',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/1905.10437',
+      checkedAt: '2026-10-24',
+      note: 'N-BEATS：纯 MLP 的双残差堆叠，趋势/季节可解释分支；概念级。'
+    },
+    {
+      id: 'nhits-2023',
+      title: 'N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting',
+      authors: 'Cristian Challu, Kin G. Olivares, Boris N. Oreshkin, et al.',
+      year: 2023,
+      venue: 'AAAI / arXiv:2201.12886',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2201.12886',
+      checkedAt: '2026-10-24',
+      note: 'N-HiTS：多尺度采样 + 分层插值；概念级。'
+    },
+    {
+      id: 'tft-2021',
+      title: 'Temporal Fusion Transformers for Interpretable Multi-horizon Time Series Forecasting',
+      authors: 'Bryan Lim, Sercan Ö. Arık, Nicolas Loeff, Tomas Pfister',
+      year: 2021,
+      venue: 'International Journal of Forecasting 37(4) / arXiv:1912.09363',
+      status: 'journal',
+      url: 'https://arxiv.org/abs/1912.09363',
+      checkedAt: '2026-10-24',
+      note: 'TFT：多 horizon + 静态/未来/观测特征的门控解释；概念级。'
+    },
+    {
+      id: 'deepar-2020',
+      title: 'DeepAR: Probabilistic forecasting with autoregressive recurrent networks',
+      authors: 'David Salinas, Valentin Flunkert, Jan Gasthaus, Tim Januschowski',
+      year: 2020,
+      venue: 'International Journal of Forecasting 36(3) / arXiv:1704.04110',
+      status: 'journal',
+      url: 'https://arxiv.org/abs/1704.04110',
+      checkedAt: '2026-10-24',
+      note: 'DeepAR：全球概率模型；输出分位数/区间；概念级。'
+    }
+  ];
+
+  TSJ.references = references;
+
+  TSJ.referenceIndex = (function () {
+    var byId = {};
+    for (var i = 0; i < references.length; i++) byId[references[i].id] = references[i];
+    return byId;
+  })();
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/content/courses.js —— v3 课程内容层（8 个模块）
+ *
+ * 规则：
+ *   - body 只允许受控 Markdown：标题、段落、列表、引用、行内/块代码、粗斜体。
+ *   - [[formula:id]] / [[ref:id]] 由 content.js 渲染，不在正文写裸 URL。
+ *   - demo 指向已注册的演示，不是任意代码；exercise 指向真实题目。
+ *   - 合成数据结论不外推为普遍优胜；所有核心事实就近引用。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+
+  var courses = [
+    {
+      id: 'm1',
+      index: 1,
+      title: '数据、目标与统计基础',
+      prereq: [],
+      level: 'L1',
+      minutes: 90,
+      summary: '先弄清预测目标、数据频率、趋势/季节/周期、训练验证测试边界，再谈模型。',
+      topics: ['频率与时间戳', '趋势/季节/周期', '平稳性直觉', '切分与泄漏', '误差与偏差方差'],
+      body: [
+        '## 为什么先看数据',
+        '',
+        '预测任务的第一步不是选模型，而是把问题写清楚：预测谁、预测多远、用什么频率、',
+        '误差多大算可接受、错了会有什么业务后果。同一个序列，目标不同，最优方法可能完全不同。',
+        '',
+        '**频率与时间戳**：日、周、月、小时的数据要区别对待。日历效应（周末、月末、节假日）、',
+        '夏令时、缺失与重复时间戳，都会在切分和特征工程里造成泄漏。',
+        '',
+        '**趋势、季节、周期**：趋势是长期方向；季节是固定已知周期的重复（周、年）；',
+        '周期长度不固定（如经济周期）。把不固定的周期当固定季节，会得到过度自信的季节项。',
+        '',
+        '**平稳性直觉**：均值、方差、自相关是否随时间稳定。平稳性不是“能建模”的前提，',
+        '但很多经典方法假设它；差分、对数变换、去趋势都是常见处理。变换会改变误差含义，',
+        '必须在同一尺度上比较。',
+        '',
+        '## 切分是预测的生命线',
+        '',
+        '时间序列的验证必须保持时间顺序。训练段只能用预测起点之前的数据；验证/测试段必须',
+        '严格位于其后。随机打乱、先全局标准化再切分、用未来统计量填补缺失，都是常见泄漏。',
+        '详见 [[ref:fpp3-tscv]]。',
+        '',
+        '## 误差：先定义损失，再看分数',
+        '',
+        'MAE 对异常值稳健，RMSE 放大大误差，MAPE 在真值接近 0 时会爆炸。间歇需求、零膨胀、',
+        '比率型目标要另选指标。比较模型前先固定指标、horizon、切分协议和数据版本。',
+        '',
+        '> 编辑建议：本项目合成序列用于教学直觉，不要把某道题的分数差直接当成业务结论。'
+      ].join('\n'),
+      formulas: [
+        {
+          id: 'm1-mae',
+          text: 'MAE = (1 / H) * Σ_{h=1..H} | y_{t+h} - ŷ_{t+h|t} |',
+          variables: 'y 为真值，ŷ 为预测，H 为预测步长，t 为预测起点。',
+          example: 'H=3，真值 [10, 12, 14]，预测 [11, 11, 15] → MAE = (1+1+1)/3 = 1。'
+        },
+        {
+          id: 'm1-smape',
+          text: 'sMAPE = (100 / H) * Σ (2|y-ŷ| / (|y|+|ŷ|))',
+          variables: '分母做了平滑，真值与预测同时为 0 时需单独定义。',
+          example: '真值 10、预测 12 → 该项 = 2*2/22 ≈ 0.1818，乘以 100/H。'
+        }
+      ],
+      demo: { kind: 'sandbox', id: 'decomposition', label: '打开季节分解演示' },
+      exercise: {
+        problemIds: ['p1-naive'],
+        output: '写一张“预测目标与切分卡”：目标、频率、horizon、损失、训练/测试边界、泄漏检查。'
+      },
+      counterexamples: ['把全年数据先做标准化再切分；用未来均值填补缺失；按索引随机划分训练测试。'],
+      referenceIds: ['fpp3', 'fpp3-tscv']
+    },
+    {
+      id: 'm2',
+      index: 2,
+      title: '经典统计与诊断',
+      prereq: ['m1'],
+      level: 'L2',
+      minutes: 150,
+      summary: 'SES/Holt/ETS、AR/MA/ARIMA 直觉、Theta、ACF/PACF、季节分解与残差白噪声检验。',
+      topics: ['指数平滑家族', 'AR/MA/ARIMA', 'Theta', 'ACF/PACF', '残差诊断'],
+      body: [
+        '## 指数平滑：一个状态方程',
+        '',
+        '简单指数平滑（SES）只维护一个水平 `l_t`；Holt 加趋势；Holt-Winters 再加季节。',
+        'ETS 是它们的状态空间统一视角。参数平滑的是“新信息 vs 历史状态”的权重，',
+        '不是魔法：α 越大越贴近最近观测，也越容易被噪声带走。',
+        '',
+        '## ARIMA：用差分与滞后结构描述依赖',
+        '',
+        'AR 用过去值解释现在，MA 用过去误差解释现在，I 是差分。Box-Jenkins 流程强调',
+        '识别→估计→诊断。实务中先看 ACF/PACF，再检查残差是否接近白噪声；不要只看拟合优度。',
+        '',
+        '**ACF/PACF 的读法**：ACF 缓慢衰减常提示非平稳；PACF 截断而 ACF 拖尾可考虑 AR；',
+        'ACF 截断而 PACF 拖尾可考虑 MA。这些是启发式，不是定理，必须结合残差与业务结构。',
+        '',
+        '## Theta 方法',
+        '',
+        'Theta 把序列拆成若干条“θ 线”，常用 θ=0 的长期线性趋势与 θ=2 的短期曲线组合，',
+        '再与 SES 结合。它在 M3/M4 上是强基线，说明“简单组合”经常打败复杂模型，详见 [[ref:m4-2018]]。',
+        '',
+        '## 残差诊断',
+        '',
+        '残差应近似零均值、无显著自相关、方差相对稳定、无结构性异常聚集。若残差还有季节或',
+        '自相关，说明模型漏掉了结构；若残差异方差明显，区间宽度不能只用常数标准差。'
+      ].join('\n'),
+      formulas: [
+        {
+          id: 'm2-ses',
+          text: 'l_t = α y_t + (1-α) l_{t-1}',
+          variables: 'α∈(0,1] 是平滑系数；l_t 是 t 时刻水平。',
+          example: 'α=0.3，y_t=10，l_{t-1}=8 → l_t = 0.3*10 + 0.7*8 = 8.6。'
+        },
+        {
+          id: 'm2-holt',
+          text: 'l_t = α y_t + (1-α)(l_{t-1}+b_{t-1});  b_t = β(l_t-l_{t-1}) + (1-β)b_{t-1}',
+          variables: 'b_t 是趋势项；预测 ŷ_{t+h|t} = l_t + h b_t。',
+          example: 'α=0.3, β=0.1；若 l_t=8.6, b_t=0.2，则 h=2 预测 9.0。'
+        }
+      ],
+      demo: { kind: 'sandbox', id: 'acf-pacf', label: '打开 ACF/PACF 演示' },
+      exercise: {
+        problemIds: ['p4-ses', 'p5-holt', 'p6-holt-winters', 'p10-theta', 'p11-ar-yw'],
+        output: '残差诊断单：残差均值、ACF 前 10 阶、是否白噪声、季节项是否残留。'
+      },
+      counterexamples: ['只看训练误差下降；残差仍强自相关却宣称模型最优；用同一测试集反复调参。'],
+      referenceIds: ['fpp3', 'm4-2018']
+    },
+    {
+      id: 'm3',
+      index: 3,
+      title: '特征工程与机器学习',
+      prereq: ['m1', 'm2'],
+      level: 'L2',
+      minutes: 130,
+      summary: '滞后/滚动/日历特征、递归/直接/MIMO、局部与全球模型、正则化与泄漏防控。',
+      topics: ['滞后与滚动特征', '日历与外生变量', '递归/直接/MIMO', '局部 vs 全球模型', '正则化'],
+      body: [
+        '## 特征是“把历史压缩成表”',
+        '',
+        '树模型/线性模型通常需要显式特征：滞后值、滚动均值/标准差、同比/环比、日历字段、',
+        '促销与天气等外生变量。特征一旦引入未来信息（如全局均值、未来事件），就是泄漏。',
+        '',
+        '## 多步预测的三种策略',
+        '',
+        '- **递归（recursive）**：先预测一步，再把预测当历史预测下一步；实现简单但误差会累积。',
+        '- **直接（direct）**：每个 horizon 单独训练一个模型；避免累积，但模型数量增加。',
+        '- **MIMO**：一个模型同时输出多步；训练目标更直接，但可能牺牲单步精度。',
+        '',
+        '选择没有普遍最优：短 horizon、强自相关序列常用递归；长 horizon 或强季节序列常用直接/MIMO。',
+        '',
+        '## 局部模型 vs 全球模型',
+        '',
+        '局部模型为每条序列单独拟合，适合序列长且结构差异大；全球模型跨序列共享参数，',
+        '适合短序列众多、结构相似。全球不等于复杂深度模型，见 [[ref:global-models-2021]]。',
+        '',
+        '## 正则化与验证',
+        '',
+        '特征多、序列少时，正则化与交叉验证同样重要。时序交叉验证必须按时间展开；',
+        '验证集只能用于选模型和阈值，不能反复回到测试集。'
+      ].join('\n'),
+      formulas: [
+        {
+          id: 'm3-lag',
+          text: 'x_{t,h} = [ y_{t-1}, y_{t-2}, ..., rolling_mean(y, k)_t, calendar_t ]',
+          variables: '所有特征在 t 时刻必须只依赖 ≤t 的信息。',
+          example: '预测 y_{t+1} 时，rolling_mean 的窗口结束点必须是 t，不能包含 t+1。'
+        }
+      ],
+      demo: { kind: 'sandbox', id: 'feature-window', label: '打开窗口构造演示' },
+      exercise: {
+        problemIds: ['p7-direct-multistep'],
+        output: '给定小表构造无泄漏特征表，并标注每个特征可用时间。'
+      },
+      counterexamples: ['先用全序列分位数裁剪异常再切分；把测试段统计量用于训练标准化；滚动窗口右对齐。'],
+      referenceIds: ['global-models-2021', 'fpp3-tscv']
+    },
+    {
+      id: 'm4',
+      index: 4,
+      title: '深度学习架构与归纳偏置',
+      prereq: ['m2', 'm3'],
+      level: 'L1',
+      minutes: 140,
+      summary: 'DeepAR/TFT、N-BEATS/N-HiTS、DLinear、PatchTST/TimesNet/iTransformer 的结构、成本与失效场景。',
+      topics: ['概率深度模型', '纯 MLP 分解', '线性基线', 'Patch/倒换注意力', '计算成本'],
+      body: [
+        '## 深度模型的三种常见目标',
+        '',
+        '点预测、分位数/区间预测、概率分布预测。DeepAR 输出分布参数，TFT 支持静态/已知未来/',
+        '观测三类输入并给出可解释门控，见 [[ref:deepar-2020]] 与 [[ref:tft-2021]]。',
+        '',
+        '## 纯 MLP 与线性模型为什么强',
+        '',
+        'N-BEATS/N-HiTS 用残差堆叠做基展开，DLinear 用趋势/季节分解加一层线性映射，',
+        '在多个长序列基准上超过复杂 Transformer，见 [[ref:dlinear-2023]]。',
+        '这提醒我们：序列的周期结构显式建模，往往比堆注意力更有效。',
+        '',
+        '## Patch 与倒换注意力',
+        '',
+        'PatchTST 把序列分 patch 并做通道独立，见 [[ref:patchtst-2023]]；TimesNet 通过周期折叠',
+        '把一维问题转成二维变化建模，见 [[ref:timesnet-2023]]；iTransformer 把变量维当 token，',
+        '适合强多变量相关，见 [[ref:itransformer-2024]]。',
+        '',
+        '## 归纳偏置与成本',
+        '',
+        '架构选择本质是选择先验：线性适合趋势+季节；CNN 适合局部模式；RNN 适合顺序依赖但难并行；',
+        'Transformer 适合长依赖但需要更多数据与算力。评估时必须同时看精度、训练/推理成本、',
+        '数据量需求与失效模式。本项目只对 DLinear 等少数方法提供可运行演示，深度训练属概念级。'
+      ].join('\n'),
+      formulas: [
+        {
+          id: 'm4-dlinear',
+          text: 'ŷ = W_trend * TrendDecomp(y) + W_seas * SeasDecomp(y)',
+          variables: '分解可用移动平均；W 为线性层，按 horizon 共享或分别学习。',
+          example: '趋势用长度 L 的移动平均得到，季节为残差；再分别线性映射到 horizon。'
+        }
+      ],
+      demo: { kind: 'sandbox', id: 'dlinear', label: '运行 DLinear 演示' },
+      exercise: {
+        problemIds: ['p15-dlinear'],
+        output: '架构选型与失败假设对照表：数据规模、序列长度、多变量强度、算力预算、期望失效模式。'
+      },
+      counterexamples: ['把论文基准分数直接搬到业务数据；只看参数量不看推理延迟；忽视通道独立与归一化差异。'],
+      referenceIds: ['dlinear-2023', 'patchtst-2023', 'timesnet-2023', 'itransformer-2024', 'nbeats-2020', 'nhits-2023', 'deepar-2020', 'tft-2021']
+    },
+    {
+      id: 'm5',
+      index: 5,
+      title: '概率预测与不确定性',
+      prereq: ['m1', 'm2'],
+      level: 'L2',
+      minutes: 120,
+      summary: '分位数/区间、校准与覆盖率、pinball/CRPS、残差 bootstrap、split conformal 与漂移下的限制。',
+      topics: ['点预测不够', '分位数与区间', '校准与覆盖', '经验区间构造', '一致性预测'],
+      body: [
+        '## 为什么需要区间',
+        '',
+        '业务决策通常关心风险：库存该备多少、预算该留多少余量。一个点预测无法回答“最坏情况”。',
+        '概率预测给分布或区间，让我们把误差转化为决策成本。',
+        '',
+        '## 分位数损失与区间',
+        '',
+        '分位数回归用 pinball loss 直接优化分位数；80%/95% 区间通常取 10%/90% 与 2.5%/97.5% 分位。',
+        '区间宽度与覆盖率是一对矛盾：区间越宽覆盖率越高，但业务可用性下降。',
+        '',
+        '## 校准：报出经验覆盖率',
+        '',
+        '标称 95% 区间不等于实际覆盖 95%。应在验证/测试段统计经验覆盖率，并明确样本量。',
+        '边际覆盖不等于条件覆盖：某些时段（促销、节假日）可能系统性偏窄。',
+        '',
+        '## 残差经验区间（本项目教学演示）',
+        '',
+        '一种简单做法：在训练段内部用滚动原点计算残差分位数，再按 horizon 汇总成区间。',
+        '**测试真值绝不参与校准**，否则覆盖率会被高估。本项目实验室的区间明确标注为',
+        '“残差经验区间 / 教学演示，非模型原生概率输出”。',
+        '',
+        '## 一致性预测与漂移',
+        '',
+        'Split conformal 用校准集给任意点预测包上分布-free 区间；ACI 在分布漂移下在线更新，',
+        '见 [[ref:aci-2021]]。要讲清假设：交换性/漂移模型、长期覆盖与条件覆盖的差别。'
+      ].join('\n'),
+      formulas: [
+        {
+          id: 'm5-pinball',
+          text: 'L_τ(y, ŷ) = (y-ŷ) * (τ - 1{y<ŷ})',
+          variables: 'τ 为目标分位；τ=0.5 时退化为 MAE 的一半尺度。',
+          example: 'τ=0.9，y=10，ŷ=8 → 损失 = 2*(0.9-0)=1.8；若 ŷ=12 → 损失 = -2*(0.9-1)=0.2。'
+        },
+        {
+          id: 'm5-coverage',
+          text: 'Coverage = (1/N) * Σ 1{ lower ≤ y ≤ upper }',
+          variables: 'N 为测试样本数；样本少时覆盖率波动大，应同时报 N。',
+          example: 'N=20，16 个真值落在区间内 → 经验覆盖 80%。'
+        }
+      ],
+      demo: { kind: 'sandbox', id: 'intervals', label: '打开区间与覆盖演示' },
+      exercise: {
+        problemIds: [],
+        output: '区间诊断报告：标称水平、经验覆盖、平均宽度、最窄/最宽时段、失效假设。'
+      },
+      counterexamples: ['用测试真值调参区间宽度；把边际覆盖说成任何时段都覆盖；样本 N 很小仍下强结论。'],
+      referenceIds: ['aci-2021']
+    },
+    {
+      id: 'm6',
+      index: 6,
+      title: '时序基础模型',
+      prereq: ['m3', 'm4', 'm5'],
+      level: 'L1',
+      minutes: 100,
+      summary: '预训练/零样本、tokenization/patching、多频率多变量、代表工作与适用边界。',
+      topics: ['什么是基础模型', 'Token / Patch', '多频率多变量', '代表工作', '数据重叠与泄漏'],
+      body: [
+        '## 基础模型改变了什么',
+        '',
+        '传统流程是“每条序列单独建模”；基础模型在海量序列上预训练，再对新序列零样本或少样本推理。',
+        '它简化了 pipeline，但不消除评估责任：训练语料是否包含你的测试序列？分布差异多大？',
+        '',
+        '## 两类主流做法',
+        '',
+        '- **语言模型式**：把数值缩放量化成 token，用 Transformer 训练，如 Chronos，见 [[ref:chronos-2024]]。',
+        '- **Decoder-only / patch 式**：TimesFM 用 patched decoder，见 [[ref:timesfm-2024]]。',
+        '- **统一多频率多变量**：Moirai/LOTSA 处理任意变量数与频率，见 [[ref:moirai-2024]]。',
+        '',
+        '## 适用边界',
+        '',
+        '基础模型在跨域零样本上可能接近专门训练的模型，但不保证在你的业务数据上最优。',
+        '短序列、强周期、层级一致性、非负约束、特殊日历效应，往往仍需要领域特征或后处理。',
+        '',
+        '## 数据重叠与泄漏',
+        '',
+        '公开基准可能进入训练语料；用同一基准评估“零样本”时要谨慎。Monash 等档案可用于',
+        '理解公开数据范围，见 [[ref:monash]]。本项目不下载权重、不训练基础模型，相关页面仅概念级。'
+      ].join('\n'),
+      formulas: [
+        {
+          id: 'm6-token',
+          text: 'tokenize(y) = quantize(scale(y), vocabulary)',
+          variables: 'scale 常用均值中心化 + 分位数缩放；quantize 把连续值映射到有限词表。',
+          example: '序列 [98, 102, 105] 均值缩放后再量化，可得到离散 token 序列用于语言模型。'
+        }
+      ],
+      demo: { kind: 'concept', id: 'foundation-flow', label: '查看推理流程图（概念级）' },
+      exercise: {
+        problemIds: [],
+        output: '基础模型选型备忘录：数据域、频率、是否含测试数据重叠、成本、泄漏检查、回退基线。'
+      },
+      counterexamples: ['把零样本结果直接当业务 SOTA；忽视训练语料重叠；不比较简单基线与成本。'],
+      referenceIds: ['chronos-2024', 'timesfm-2024', 'moirai-2024', 'monash']
+    },
+    {
+      id: 'm7',
+      index: 7,
+      title: '评测、比较与泄漏防控',
+      prereq: ['m1', 'm2', 'm3'],
+      level: 'L3',
+      minutes: 120,
+      summary: 'rolling-origin、多 horizon、指标边界、DM 检验、重复实验与数据窥探。',
+      topics: ['时间顺序验证', '指标适用边界', '基线必须公平', '统计比较', '多重比较'],
+      body: [
+        '## 时间顺序验证',
+        '',
+        '滚动起点回测（rolling-origin）在多个 origin 上重复“训练→预测 horizon→评估”，',
+        '训练永远只用 origin 之前的数据，见 [[ref:fpp3-tscv]]。随机 K 折在时序上通常无效。',
+        '',
+        '## 指标要看结构',
+        '',
+        'MAE/RMSE 对异常值敏感不同；MAPE/sMAPE 在零值附近会爆炸；MASE 用 naive 季节性误差缩放，',
+        '便于跨序列比较。间歇需求、比率目标、层级目标要分别选指标。',
+        '',
+        '## 基线与公平比较',
+        '',
+        '任何新方法都必须和 naive、seasonal naive、mean、moving average、linear trend 等基线',
+        '在**相同切分、相同 horizon、相同指标**下比较。只报平均提升不报最差窗口，容易误导。',
+        '',
+        '## 统计比较与多重比较',
+        '',
+        'Diebold-Mariano 检验比较两个模型的预测损失差异，见 [[ref:dm-1995]]。多模型、多序列、',
+        '多 horizon 时要考虑多重比较；一个窗口的领先不构成结论。',
+        '',
+        '> 防数据窥探：同一测试集反复调参会把测试集变成验证集。最终结论应在未动过的测试段上确认。'
+      ].join('\n'),
+      formulas: [
+        {
+          id: 'm7-mase',
+          text: 'MASE = MAE_model / MAE_naive_on_training',
+          variables: '季节性 naive 常用 season=m；分母在训练段计算。',
+          example: '模型 MAE=3.2，训练段季节 naive MAE=4.0 → MASE=0.8，表示优于该基线。'
+        }
+      ],
+      demo: { kind: 'sandbox', id: 'rolling', label: '打开滚动回测演示' },
+      exercise: {
+        problemIds: ['p9-rolling-challenge', 'p14-combination'],
+        output: '固定协议比较至少两个基线，报告逐窗口指标与最差窗口，不做单窗口结论。'
+      },
+      counterexamples: ['随机打乱切分；只报平均不报最差；把测试集当验证集反复调参；忽视指标零值问题。'],
+      referenceIds: ['fpp3-tscv', 'dm-1995', 'm4-2018']
+    },
+    {
+      id: 'm8',
+      index: 8,
+      title: '业务与结构化预测',
+      prereq: ['m1', 'm2', 'm3', 'm5', 'm7'],
+      level: 'L2',
+      minutes: 120,
+      summary: '层级/分组协调、间歇需求、异常与漂移、库存/促销决策、非负一致性、监控与回退。',
+      topics: ['层级与分组', '间歇需求', '异常与漂移', '业务约束', '监控与回退'],
+      body: [
+        '## 层级与分组预测',
+        '',
+        '零售、能源、制造常见“总-分”结构：全国→大区→门店，或品类→SKU。各层分别预测常常不一致，',
+        '需要预测协调（forecast reconciliation）。MinT 最小化协调后预测误差的方差和，见 [[ref:mint-2019]]；',
+        'M5 的难点之一就是层级一致性，见 [[ref:m5-2020]]。',
+        '',
+        '## 间歇需求',
+        '',
+        '备件、慢销品大量月份为零。Croston 把需求量与需求间隔分开平滑，见 [[ref:croston-1972]]；',
+        'SBA 修正 Croston 的偏高，见 [[ref:sba-2005]]；TSB 直接平滑需求概率，见 [[ref:tsb-2011]]。',
+        '需求变密后，简单平滑也可能追上，因此必须用具体数据比较。',
+        '',
+        '## 异常、漂移与业务约束',
+        '',
+        '促销、节假日、设备故障、政策变化都会造成结构性变化。监控预测误差、覆盖率、输入分布；',
+        '触发阈值后回退到稳健基线或人工复核。非负、整数、容量、预算等约束要在后处理中显式满足。',
+        '',
+        '## 上线评估与回退',
+        '',
+        '一页上线方案至少包含：目标、基线、指标、回测协议、监控看板、回退条件、责任人与复盘时间。'
+      ].join('\n'),
+      formulas: [
+        {
+          id: 'm8-croston',
+          text: 'z_t = α d_t + (1-α) z_{t-1};  p_t = β q_t + (1-β) p_{t-1};  rate = z_t / p_t',
+          variables: 'd_t 为非零需求量，q_t 为距上次需求的间隔；SBA 常用 rate *= (1-α/2)。',
+          example: '非零需求 [50, 70]，间隔 [2, 3]，α=β=0.1 → 平滑后需求量约 52，间隔约 2.1，rate≈24.8。'
+        }
+      ],
+      demo: { kind: 'sandbox', id: 'croston', label: '运行间歇需求演示' },
+      exercise: {
+        problemIds: ['p8-robust-shift', 'p12-croston', 'p13-harmonic'],
+        output: '一页上线评估与回退方案：指标、监控、阈值、回退基线、复盘节奏。'
+      },
+      counterexamples: ['只优化总层级不顾门店；负预测直接截断却不记录；促销期用普通基线评估；无回退方案上线。'],
+      referenceIds: ['mint-2019', 'm5-2020', 'croston-1972', 'sba-2005', 'tsb-2011']
+    }
+  ];
+
+  TSJ.courses = courses;
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/content/method-details.js —— 方法详情扩展层
+ *
+ * 只放“比方法卡更深”的字段：直觉、假设、复杂度、局限、数值小例、反例、运行级别、引用。
+ * 方法卡里的 idea/formula/when/limit/venue 仍由 methods.js 单一来源提供，这里不复制。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+
+  var details = {
+    naive: {
+      runLevel: 'sandbox',
+      intuition: '把最后一个观测原样平推；等价于假设“下一刻和现在一样”。',
+      assumptions: ['序列接近随机游走', '无显著趋势/季节', '误差近似零均值'],
+      complexity: 'O(1) 参数、O(H) 预测',
+      limitations: ['结构性趋势/季节下偏差大', '对异常值极敏感', '不能给出可靠区间'],
+      workedExample: '历史末尾 100 → 未来 3 步全为 100。',
+      counterexample: '航空客运量有 12 月季节，naive 会在旺季系统性偏低。',
+      referenceIds: ['fpp3']
+    },
+    'seasonal-naive': {
+      runLevel: 'sandbox',
+      intuition: '用上一个同季节的值作为预测，显式利用固定周期。',
+      assumptions: ['季节周期稳定且已知', '同相位水平变化缓慢'],
+      complexity: 'O(1) 参数',
+      limitations: ['趋势项会漏掉', '偶发大单被重复搬运', '周期估计错误时崩坏'],
+      workedExample: '月度数据 m=12，预测明年 1 月用去年 1 月。',
+      counterexample: '强趋势序列需要 naive + drift，而非纯季节朴素。',
+      referenceIds: ['fpp3']
+    },
+    ses: {
+      runLevel: 'sandbox',
+      intuition: '只维护一个水平，用 α 平衡新观测与旧状态。',
+      assumptions: ['无趋势无季节', '噪声近似独立'],
+      complexity: 'O(n) 拟合',
+      limitations: ['无法跟随趋势/季节', 'α 敏感', '区间需另建'],
+      workedExample: 'α=0.3，y=10，旧水平 8 → 新水平 8.6。',
+      counterexample: 'Holt-Winters 可建模的强季节数据上，SES 会长期偏离。',
+      referenceIds: ['fpp3']
+    },
+    holt: {
+      runLevel: 'sandbox',
+      intuition: '在水平之外维护一个趋势项，预测沿趋势外推。',
+      assumptions: ['趋势近似线性', '噪声独立'],
+      complexity: 'O(n) 拟合',
+      limitations: ['长 horizon 趋势外推可能爆炸', '季节需另加', '对突变反应慢'],
+      workedExample: '水平 8.6、趋势 0.2 → h=2 预测 9.0。',
+      counterexample: '周期波动强的序列会把季节误当趋势。',
+      referenceIds: ['fpp3']
+    },
+    'holt-winters': {
+      runLevel: 'sandbox',
+      intuition: '水平 + 趋势 + 季节三件套，加性或乘法季节。',
+      assumptions: ['季节周期固定', '趋势与季节可分离'],
+      complexity: 'O(n) 拟合，3 个平滑参数',
+      limitations: ['参数过多需正则/约束', '结构突变后恢复慢', '乘法季节需正数据'],
+      workedExample: 'm=12，先初始化 12 个季节项，再逐期更新水平/趋势/季节。',
+      counterexample: '季节幅度随水平增长时应优先乘法而非加性。',
+      referenceIds: ['fpp3']
+    },
+    theta: {
+      runLevel: 'sandbox',
+      intuition: '把序列分解为多条 θ 线，常用 θ=0 线性趋势与 θ=2 短期曲线组合。',
+      assumptions: ['趋势可用线性近似', '与 SES 组合稳定'],
+      complexity: '低，接近统计基线',
+      limitations: ['复杂季节需先去季节', '无原生概率输出', '超长 horizon 仍可能欠拟合'],
+      workedExample: '对去季节序列拟合直线，再与 SES 末端水平加权合并。',
+      counterexample: '强多周期序列可能不如显式分解 + 线性映射。',
+      referenceIds: ['m4-2018']
+    },
+    arima: {
+      runLevel: 'sandbox',
+      intuition: '用差分处理非平稳，用 AR/MA 描述依赖；Yule-Walker 可闭式解 AR 参数。',
+      assumptions: ['差分后近似平稳', '残差接近白噪声'],
+      complexity: 'O(n p) 量级，矩阵求解随阶数增长',
+      limitations: ['长序列阶数选择难', '季节需 SARIMA', '区间假设正态残差'],
+      workedExample: '一阶差分后估计 AR(2)，再积分回原尺度预测。',
+      counterexample: '方差随时间增长时未变换直接 ARIMA 会失真。',
+      referenceIds: ['fpp3']
+    },
+    ets: {
+      runLevel: 'sandbox',
+      intuition: '指数平滑的状态空间统一视角，可用似然与信息准则自动选型。',
+      assumptions: ['误差分布可选', '状态转移稳定'],
+      complexity: '中，需优化似然',
+      limitations: ['自动选型仍可能过拟合', '实现比 SES 复杂', '强季节需乘法项'],
+      workedExample: '对同一序列比较 (A,A,A) 与 (A,N,N)，按 AIC 选型。',
+      counterexample: '短序列上信息准则不稳定，需交叉验证。',
+      referenceIds: ['fpp3']
+    },
+    croston: {
+      runLevel: 'sandbox',
+      intuition: '把非零需求量与需求间隔分开平滑，预测需求率 z/p。',
+      assumptions: ['需求发生与需求量可分离', '间隔分布稳定'],
+      complexity: 'O(n)',
+      limitations: ['对需求率系统性偏高', '需求变密后优势缩小', '稀疏窗口噪声大'],
+      workedExample: '需求 [50,70]，间隔 [2,3]，α=0.1 → rate≈25。',
+      counterexample: '连续非零序列退化为普通平滑。',
+      referenceIds: ['croston-1972', 'sba-2005']
+    },
+    tsb: {
+      runLevel: 'sandbox',
+      intuition: '直接平滑“有需求概率”和“非零需求量”，预测概率×需求量。',
+      assumptions: ['需求概率可平滑', '需求量条件分布稳定'],
+      complexity: 'O(n)',
+      limitations: ['过时/淘汰品概率估计难', '仍无原生区间', '稀疏时方差大'],
+      workedExample: '概率 0.4、平均需求 80 → 预测 32。',
+      counterexample: '需求频率快速变化时需更短记忆或在线更新。',
+      referenceIds: ['tsb-2011']
+    },
+    pelt: {
+      runLevel: 'sandbox',
+      intuition: '用惩罚似然检测变点，把序列分成结构稳定的段。',
+      assumptions: ['段内分布稳定', '惩罚项与噪声匹配'],
+      complexity: '近似 O(n)，依赖实现',
+      limitations: ['惩罚参数敏感', '变点过多会过拟合', '不等于因果突变'],
+      workedExample: '对水平漂移序列检测出漂移点并分段估计水平。',
+      counterexample: '纯噪声序列也会检出“显著”变点，需结合业务验证。',
+      referenceIds: ['fpp3']
+    },
+    spectral: {
+      runLevel: 'sandbox',
+      intuition: '用周期图/FFT 找主导频率，再拟合谐波回归。',
+      assumptions: ['周期在频域有峰值', '谐波可加'],
+      complexity: 'O(n log n)',
+      limitations: ['非平稳序列频谱糊', '谐波数量需控制', '峰值≠业务因果'],
+      workedExample: '年周期在 365 天附近出现峰值，取前 k 个谐波外推。',
+      counterexample: '趋势未去时低频能量掩盖真实周期。',
+      referenceIds: ['fpp3']
+    },
+    mapa: {
+      runLevel: 'sandbox',
+      intuition: '在多个时间聚合尺度上分别预测再组合，降低单尺度噪声。',
+      assumptions: ['聚合后结构更稳定', '聚合关系可逆/可回分配'],
+      complexity: '中，多尺度计算',
+      limitations: ['回分配引入误差', '聚合粒度选择敏感', '可能模糊短期模式'],
+      workedExample: '日→周聚合预测后再回分配到日。',
+      counterexample: '强日内周期序列直接按小时建模可能更稳。',
+      referenceIds: ['m4-2018']
+    },
+    combination: {
+      runLevel: 'sandbox',
+      intuition: '把多个候选预测平均/加权，降低单模型方差。',
+      assumptions: ['候选误差不完全相关', '权重稳定'],
+      complexity: '低',
+      limitations: ['候选都错时组合放大风险', '权重估计需防泄漏', '中位数稳健但可能过平滑'],
+      workedExample: '候选 [10, 12, 30]，中位数 12 比均值 17.3 更抗离群。',
+      counterexample: '候选模型高度相关时组合收益有限。',
+      referenceIds: ['m4-2018']
+    },
+    m4: {
+      runLevel: 'concept',
+      intuition: 'M4 是大规模预测竞赛，核心经验是统计/组合方法常与复杂方法竞争。',
+      assumptions: ['基准分布与业务不同'],
+      complexity: '不适用',
+      limitations: ['不能直接外推到业务', '部分结论依赖指标选择'],
+      workedExample: '比较 M4 上统计组合与深度模型，注意 horizon 与频率分层。',
+      counterexample: '把 M4 排名当普适规律。',
+      referenceIds: ['m4-2018']
+    },
+    m5: {
+      runLevel: 'concept',
+      intuition: 'M5 强调分层销售、间歇需求与层级一致性。',
+      assumptions: ['层级结构已知', '基预测可靠'],
+      complexity: '不适用',
+      limitations: ['需要协调算法', '真实业务约束更多'],
+      workedExample: '门店→州→总销售额需满足加和一致性。',
+      counterexample: '只报总层级 WRMSS 而忽略底层可解释性。',
+      referenceIds: ['m5-2020']
+    },
+    nbeats: {
+      runLevel: 'concept',
+      intuition: '纯 MLP 残差堆叠做基展开，可解释趋势/季节分支。',
+      assumptions: ['足够数据', '基函数可覆盖目标结构'],
+      complexity: '高，需训练',
+      limitations: ['浏览器不训练', '对多变量/协变量支持有限', '调参敏感'],
+      workedExample: '每层输出趋势基与季节基的系数，逐层逼近残差。',
+      counterexample: '小数据上可能不如经典基线。',
+      referenceIds: ['nbeats-2020']
+    },
+    nhits: {
+      runLevel: 'concept',
+      intuition: '多尺度采样 + 分层插值，降低长 horizon 计算量。',
+      assumptions: ['多尺度结构存在', '插值核合理'],
+      complexity: '高，需训练',
+      limitations: ['概念级', '实现复杂', '小数据收益有限'],
+      workedExample: '在不同 pool 尺寸上预测再插值到目标 horizon。',
+      counterexample: '短 horizon 上复杂度不划算。',
+      referenceIds: ['nhits-2023']
+    },
+    dlinear: {
+      runLevel: 'sandbox',
+      intuition: '趋势/季节分解 + 一层线性映射，结构简单但强。',
+      assumptions: ['序列可分解为趋势+季节+残差', '线性映射足够'],
+      complexity: '低，可闭式或轻量训练',
+      limitations: ['复杂多变量相关可能不足', '分解核需选择', '无原生区间'],
+      workedExample: '移动平均提趋势，残差为季节，再线性映射到 horizon。',
+      counterexample: '强非线性交互需更 expressive 模型或特征。',
+      referenceIds: ['dlinear-2023']
+    },
+    patchtst: {
+      runLevel: 'sandbox',
+      intuition: '分 patch 降低序列长度，通道独立减少变量干扰。',
+      assumptions: ['patch 内局部模式稳定', '通道相对独立'],
+      complexity: '中高，需训练',
+      limitations: ['强通道相关时需调整', 'patch 长度敏感'],
+      workedExample: '长度 512 分成长度 16 的 32 个 patch。',
+      counterexample: '多变量强相关场景通道独立可能丢信息。',
+      referenceIds: ['patchtst-2023']
+    },
+    timesnet: {
+      runLevel: 'concept',
+      intuition: '按主导周期把一维序列折叠成二维，用二维卷积/注意力建模。',
+      assumptions: ['存在稳定主导周期'],
+      complexity: '高，需训练',
+      limitations: ['概念级', '周期估计影响大'],
+      workedExample: '日序列按 24 折叠成 (天, 小时) 二维张量。',
+      counterexample: '无固定周期序列折叠无意义。',
+      referenceIds: ['timesnet-2023']
+    },
+    itransformer: {
+      runLevel: 'concept',
+      intuition: '把变量维当 token、时间维当通道，用注意力建模变量相关。',
+      assumptions: ['变量间相关重要', '序列长度适中'],
+      complexity: '高，需训练',
+      limitations: ['概念级', '变量多时 token 数增长', '实现细节敏感'],
+      workedExample: 'N 个变量生成 N 个 token，注意力在变量间计算。',
+      counterexample: '变量近似独立时收益有限。',
+      referenceIds: ['itransformer-2024']
+    },
+    tft: {
+      runLevel: 'concept',
+      intuition: '静态/已知未来/观测特征分开编码，多 horizon 输出与可解释门控。',
+      assumptions: ['协变量可靠', '多 horizon 需联合建模'],
+      complexity: '高，需训练',
+      limitations: ['概念级', '特征工程重', '推理成本高'],
+      workedExample: '节假日作为已知未来输入，天气作为观测输入。',
+      counterexample: '协变量泄漏或延迟会导致离线好线上差。',
+      referenceIds: ['tft-2021']
+    },
+    deepar: {
+      runLevel: 'concept',
+      intuition: '全球概率模型，递归采样输出预测分布。',
+      assumptions: ['跨序列共享参数', '似然形式匹配数据'],
+      complexity: '高，需训练',
+      limitations: ['概念级', '负二项/高斯假设可能不符', '不确定性校准需验证'],
+      workedExample: '对多条相似序列训练一个 RNN，输出未来分布参数。',
+      counterexample: '序列结构差异大时全球模型偏差明显。',
+      referenceIds: ['deepar-2020']
+    },
+    informer: {
+      runLevel: 'concept',
+      intuition: '稀疏注意力与蒸馏处理长序列，降低计算量。',
+      assumptions: ['长序列稀疏注意力足够', '蒸馏不丢关键信息'],
+      complexity: '高，需训练',
+      limitations: ['概念级', '实现复杂', '基准结论需复现'],
+      workedExample: '对超长用电序列用 ProbSparse 注意力。',
+      counterexample: '短序列上复杂度不必要。',
+      referenceIds: ['timesnet-2023']
+    },
+    'dm-test': {
+      runLevel: 'concept',
+      intuition: '比较两个模型的预测损失差异是否统计显著。',
+      assumptions: ['损失序列可比', '差分平稳'],
+      complexity: '低',
+      limitations: ['不告诉你哪个业务更好', '多重比较需校正', '对异常敏感'],
+      workedExample: '两模型逐点损失差做 t 检验，报告 DM 统计量与 p 值。',
+      counterexample: '只报 p 不报效应量与业务成本。',
+      referenceIds: ['dm-1995']
+    },
+    mase: {
+      runLevel: 'concept',
+      intuition: '用训练段 naive 误差缩放模型误差，便于跨序列比较。',
+      assumptions: ['naive 基线有意义', '训练段长度足够'],
+      complexity: '低',
+      limitations: ['零/常数序列分母问题', '季节 m 选择影响大'],
+      workedExample: '模型 MAE=3.2，训练段季节 naive MAE=4.0 → MASE=0.8。',
+      counterexample: '间歇需求上用普通 naive 可能放大分母波动。',
+      referenceIds: ['fpp3-tscv', 'm4-2018']
+    },
+    backtest: {
+      runLevel: 'sandbox',
+      intuition: '按时间顺序反复“训练→预测→评估”，防止前视偏差。',
+      assumptions: ['训练只用 origin 前数据', 'horizon 固定'],
+      complexity: 'O(windows * fit)',
+      limitations: ['计算成本随窗口增长', '窗口选择影响结论'],
+      workedExample: '4 个 origin、horizon=12，逐窗口比较模型与基线。',
+      counterexample: '随机 K 折把未来信息泄漏进训练。',
+      referenceIds: ['fpp3-tscv']
+    },
+    conformal: {
+      runLevel: 'sandbox',
+      intuition: '用校准集残差分位数给点预测包上分布-free 区间。',
+      assumptions: ['校准与测试近似交换', '点预测固定'],
+      complexity: '低',
+      limitations: ['条件覆盖不保证', '漂移需 ACI 等在线更新', '样本少时分位数不稳'],
+      workedExample: '校准残差 90% 分位为 3.2，则区间为 ŷ ± 3.2。',
+      counterexample: '把测试真值用于选分位数。',
+      referenceIds: ['aci-2021']
+    }
+  };
+
+  TSJ.methodDetails = details;
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/content/content.js —— 内容索引、安全渲染与完整性校验
+ *
+ * 这里不直接操作 DOM：只输出 HTML 字符串与校验结果，页面模块负责插入。
+ * Markdown 是受控子集，先转义再解析，禁止裸 HTML / 任意链接 / 任意属性。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var methods = TSJ.methods || [];
+  var courses = TSJ.courses || [];
+  var references = TSJ.references || [];
+  var refIndex = TSJ.referenceIndex || {};
+  var methodDetails = TSJ.methodDetails || {};
+
+  var VALID_RUN_LEVEL = { sandbox: true, precomputed: true, concept: true };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function indexBy(list, key) {
+    var out = {};
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i][key] != null) out[list[i][key]] = list[i];
+    }
+    return out;
+  }
+
+  var courseIndex = indexBy(courses, 'id');
+  var methodIndex = indexBy(methods, 'id');
+
+  /* ---------- 索引与查询 ---------- */
+  function course(id) { return courseIndex[id] || null; }
+
+  function nextCourse(id) {
+    var sorted = courses.slice().sort(function (a, b) { return (a.index || 0) - (b.index || 0); });
+    for (var i = 0; i < sorted.length; i++) {
+      if (sorted[i].id === id && sorted[i + 1]) return sorted[i + 1];
+    }
+    return null;
+  }
+
+  function prevCourse(id) {
+    var sorted = courses.slice().sort(function (a, b) { return (a.index || 0) - (b.index || 0); });
+    for (var i = 0; i < sorted.length; i++) {
+      if (sorted[i].id === id && i > 0) return sorted[i - 1];
+    }
+    return null;
+  }
+
+  function methodDetail(id) { return methodDetails[id] || null; }
+
+  function referencesFor(ids) {
+    var out = [];
+    var list = ids || [];
+    for (var i = 0; i < list.length; i++) {
+      var r = refIndex[list[i]];
+      if (r) out.push(r);
+    }
+    return out;
+  }
+
+  function formulaIndexFor(c) {
+    var out = {};
+    var fs = (c && c.formulas) || [];
+    for (var i = 0; i < fs.length; i++) if (fs[i] && fs[i].id) out[fs[i].id] = fs[i];
+    return out;
+  }
+
+  /* ---------- 受控 Markdown ---------- */
+  function inline(text, ctx) {
+    var s = esc(text);
+    // 占位符：先替换成不易冲突的 token，避免被转义破坏
+    s = s.replace(/\[\[ref:([a-z0-9\-]+)\]\]/gi, function (_, id) {
+      var r = refIndex[id];
+      if (!r) return '<span class="ds-badge ds-badge-err">缺失引用 ' + esc(id) + '</span>';
+      return '<sup class="md-ref"><a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer"' +
+        ' title="' + esc(r.title + ' · ' + r.venue) + '">[' + esc(r.id) + ']</a></sup>';
+    });
+    s = s.replace(/\[\[method:([a-z0-9\-]+)\]\]/gi, function (_, id) {
+      var m = methodIndex[id];
+      if (!m) return '<span class="ds-badge ds-badge-err">缺失方法 ' + esc(id) + '</span>';
+      return '<a href="#/methods/' + encodeURIComponent(id) + '">' + esc(m.title) + '</a>';
+    });
+    s = s.replace(/\[\[formula:([a-z0-9\-]+)\]\]/gi, function (_, id) {
+      var f = ctx && ctx.formulas ? ctx.formulas[id] : null;
+      if (!f) return '<span class="ds-badge ds-badge-err">缺失公式 ' + esc(id) + '</span>';
+      return formulaHtml(f);
+    });
+    // 行内代码
+    s = s.replace(/`([^`\n]+)`/g, function (_, code) { return '<code>' + code + '</code>'; });
+    // 粗体 / 斜体（保守匹配，不跨嵌套）
+    s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+    return s;
+  }
+
+  function formulaHtml(f) {
+    return '<div class="md-formula"><div>' + esc(f.text) + '</div>' +
+      '<small style="color:var(--v3-muted)">符号：' + esc(f.variables || '') + '</small>' +
+      (f.example ? '<small style="color:var(--v3-text-dim)">小例：' + esc(f.example) + '</small>' : '') +
+      '</div>';
+  }
+
+  function renderMarkdown(md, ctx) {
+    var lines = String(md == null ? '' : md).split('\n');
+    var html = [];
+    var para = [];
+    var listType = null;
+    var inCode = false;
+    var codeBuf = [];
+
+    function flushPara() {
+      if (!para.length) return;
+      html.push('<p>' + para.map(function (l) { return inline(l, ctx); }).join('<br>') + '</p>');
+      para = [];
+    }
+    function flushList() {
+      if (!listType) return;
+      html.push('</' + listType + '>');
+      listType = null;
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (/^```/.test(line)) {
+        if (inCode) {
+          html.push('<pre><code>' + esc(codeBuf.join('\n')) + '</code></pre>');
+          codeBuf = [];
+          inCode = false;
+        } else {
+          flushPara(); flushList();
+          inCode = true;
+        }
+        continue;
+      }
+      if (inCode) { codeBuf.push(line); continue; }
+
+      if (!line.trim()) { flushPara(); flushList(); continue; }
+
+      var h = line.match(/^(#{1,4})\s+(.*)$/);
+      if (h) {
+        flushPara(); flushList();
+        var level = h[1].length + 1; // 页面里已有 H1，正文从 H2 起
+        html.push('<h' + level + '>' + inline(h[2], ctx) + '</h' + level + '>');
+        continue;
+      }
+
+      if (/^&gt;|^>/.test(line)) {
+        flushPara(); flushList();
+        html.push('<blockquote>' + inline(line.replace(/^>\s?/, ''), ctx) + '</blockquote>');
+        continue;
+      }
+
+      var ul = line.match(/^\s*[-*]\s+(.*)$/);
+      if (ul) {
+        flushPara();
+        if (listType !== 'ul') { flushList(); html.push('<ul>'); listType = 'ul'; }
+        html.push('<li>' + inline(ul[1], ctx) + '</li>');
+        continue;
+      }
+
+      var ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
+      if (ol) {
+        flushPara();
+        if (listType !== 'ol') { flushList(); html.push('<ol>'); listType = 'ol'; }
+        html.push('<li>' + inline(ol[1], ctx) + '</li>');
+        continue;
+      }
+
+      para.push(line);
+    }
+
+    if (inCode) html.push('<pre><code>' + esc(codeBuf.join('\n')) + '</code></pre>');
+    flushPara(); flushList();
+    return html.join('\n');
+  }
+
+  function renderCourseBody(c) {
+    var html = renderMarkdown(c.body, { formulas: formulaIndexFor(c) });
+    // 公式统一在正文后集中展示，避免课程作者忘记写 [[formula:id]] 占位符
+    if (c.formulas && c.formulas.length) {
+      html += '<div class="course-panel"><h3>关键公式与数值小例</h3>' +
+        c.formulas.map(formulaHtml).join('') + '</div>';
+    }
+    return html;
+  }
+
+  function referenceListHtml(ids) {
+    var refs = referencesFor(ids);
+    if (!refs.length) return '<div class="ds-empty"><strong>暂无引用</strong><span>该内容未声明外部来源。</span></div>';
+    var items = refs.map(function (r) {
+      return '<li><a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">' +
+        esc(r.title) + '</a> · ' + esc(r.authors) + ' · ' + esc(r.year) + ' · ' + esc(r.venue) +
+        ' · 核查于 ' + esc(r.checkedAt) + '</li>';
+    });
+    return '<ul class="course-refs">' + items.join('') + '</ul>';
+  }
+
+  /* ---------- 完整性校验 ---------- */
+  function validate() {
+    var errors = [];
+
+    if (courses.length !== 8) errors.push('课程模块应为 8 个，实际 ' + courses.length);
+
+    var ids = {};
+    courses.forEach(function (c) {
+      if (!c.id) errors.push('存在没有 id 的课程');
+      if (ids[c.id]) errors.push('课程 id 重复：' + c.id);
+      ids[c.id] = true;
+      if (!c.title) errors.push(c.id + ' 缺少 title');
+      if (!c.summary || c.summary.length < 10) errors.push(c.id + ' summary 过短');
+      if (!c.body || c.body.length < 300) errors.push(c.id + ' 正文过短，不足以构成一个模块');
+      if (!Array.isArray(c.topics) || c.topics.length < 3) errors.push(c.id + ' 核心主题少于 3 个');
+      (c.formulas || []).forEach(function (f) {
+        if (!f.id || !f.text || !f.variables || !f.example) {
+          errors.push(c.id + ' 公式字段不完整：' + (f && f.id));
+        }
+      });
+      if (!c.demo || !c.demo.id) errors.push(c.id + ' 缺少演示');
+      if (!c.exercise || !c.exercise.output) errors.push(c.id + ' 缺少练习产出');
+      (c.exercise && c.exercise.problemIds || []).forEach(function (pid) {
+        if (!TSJ.findProblem || !TSJ.findProblem(pid)) errors.push(c.id + ' 练习引用了不存在的题目：' + pid);
+      });
+      (c.referenceIds || []).forEach(function (rid) {
+        if (!refIndex[rid]) errors.push(c.id + ' 引用了不存在的来源：' + rid);
+      });
+      (c.prereq || []).forEach(function (p) {
+        if (!courseIndex[p]) errors.push(c.id + ' 先修不存在：' + p);
+      });
+    });
+
+    // 先修无环
+    courses.forEach(function (c) { visit(c.id, [], errors); });
+    function visit(id, stack, errs) {
+      if (stack.indexOf(id) >= 0) { errs.push('课程先修存在环：' + stack.concat(id).join(' -> ')); return; }
+      var c = courseIndex[id];
+      if (!c) return;
+      (c.prereq || []).forEach(function (p) { visit(p, stack.concat(id), errs); });
+    }
+
+    // 方法详情必须覆盖所有方法卡，且引用/级别合法
+    var methodIds = methods.map(function (m) { return m.id; });
+    methodIds.forEach(function (id) {
+      var d = methodDetails[id];
+      if (!d) { errors.push('方法缺少详情：' + id); return; }
+      if (!VALID_RUN_LEVEL[d.runLevel]) errors.push(id + ' runLevel 非法：' + d.runLevel);
+      if (!d.intuition || d.intuition.length < 10) errors.push(id + ' 直觉描述过短');
+      if (!Array.isArray(d.assumptions) || !d.assumptions.length) errors.push(id + ' 缺少假设');
+      if (!Array.isArray(d.limitations) || !d.limitations.length) errors.push(id + ' 缺少局限');
+      if (!d.workedExample) errors.push(id + ' 缺少数值小例');
+      if (!d.counterexample) errors.push(id + ' 缺少反例');
+      (d.referenceIds || []).forEach(function (rid) {
+        if (!refIndex[rid]) errors.push(id + ' 引用了不存在的来源：' + rid);
+      });
+      var m = methodIndex[id];
+      if (m && m.runnable === false && d.runLevel === 'sandbox') {
+        errors.push(id + ' 方法卡标注不可运行，详情却标为 sandbox');
+      }
+    });
+
+    Object.keys(methodDetails).forEach(function (id) {
+      if (!methodIndex[id]) errors.push('方法详情指向不存在的方法卡：' + id);
+    });
+
+    // 引用表自身
+    var seen = {};
+    references.forEach(function (r) {
+      if (!r.id || seen[r.id]) errors.push('引用 id 缺失或重复：' + r.id);
+      seen[r.id] = true;
+      if (!/^https:\/\//.test(r.url || '')) errors.push(r.id + ' URL 必须为 https');
+      if (!r.checkedAt) errors.push(r.id + ' 缺少核查日期');
+    });
+
+    return errors;
+  }
+
+  TSJ.content = {
+    esc: esc,
+    courses: courses,
+    course: course,
+    nextCourse: nextCourse,
+    prevCourse: prevCourse,
+    methodDetail: methodDetail,
+    referencesFor: referencesFor,
+    renderMarkdown: renderMarkdown,
+    renderCourseBody: renderCourseBody,
+    referenceListHtml: referenceListHtml,
+    validate: validate
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
  * judge.js —— 判题引擎
  *
  * 结构：
@@ -7337,6 +9426,1593 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
 </script>
 <script>
 /**
+ * assets/js/charts/core.js —— v3 图表内核
+ *
+ * 统一管理：DPR、resize、指针/键盘、tooltip、销毁、几何信息。
+ * 具体画法由 charts/series.js 与 charts/diagnostics.js 注册的渲染器完成，
+ * 内核不关心是折线、扇形还是残差图。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var doc = global.document;
+
+  TSJ.charts = TSJ.charts || {};
+  var registry = TSJ.charts.renderers || (TSJ.charts.renderers = {});
+
+  function register(kind, renderer) { registry[kind] = renderer; }
+
+  function cssVar(name, fallback) {
+    if (!doc || !doc.documentElement || !global.getComputedStyle) return fallback;
+    var v = global.getComputedStyle(doc.documentElement).getPropertyValue(name);
+    return v && v.trim() ? v.trim() : fallback;
+  }
+
+  /**
+   * 生成显示层采样映射：按桶保留最小/最大点，避免长序列压平极值。
+   * @param {number} n 原始点数
+   * @param {number} maxPoints 目标桶数
+   * @returns {number[]} 原始下标（升序）
+   */
+  function sampleMap(n, maxPoints) {
+    if (!n || n <= 0) return [];
+    if (!maxPoints || n <= maxPoints) {
+      var all = [];
+      for (var i = 0; i < n; i++) all.push(i);
+      return all;
+    }
+    var buckets = Math.max(2, Math.floor(maxPoints));
+    var size = n / buckets;
+    var picked = {};
+    var out = [];
+    for (var b = 0; b < buckets; b++) {
+      var lo = Math.floor(b * size);
+      var hi = Math.min(n - 1, Math.floor((b + 1) * size) - 1);
+      if (hi < lo) hi = lo;
+      // 由渲染器提供 values 才能选极值，这里先给桶首尾，渲染器可再细化
+      picked[lo] = true;
+      picked[hi] = true;
+    }
+    picked[0] = true;
+    picked[n - 1] = true;
+    for (var k = 0; k < n; k++) if (picked[k]) out.push(k);
+    return out;
+  }
+
+  function ensureTip(wrap) {
+    var tip = wrap.querySelector('.chart-v2-tip');
+    if (tip) return tip;
+    tip = doc.createElement('div');
+    tip.className = 'chart-v2-tip hidden';
+    tip.setAttribute('role', 'status');
+    wrap.appendChild(tip);
+    return tip;
+  }
+
+  /**
+   * 创建图表实例。
+   * @param {HTMLCanvasElement} canvas
+   * @param {Object} opts
+   */
+  function create(canvas, opts) {
+    if (!canvas || !canvas.getContext) return null;
+    opts = opts || {};
+    var ctx = canvas.getContext('2d');
+    var wrap = canvas.parentNode;
+    var scope = opts.scope;
+    var kind = opts.kind || 'forecast';
+    var renderer = registry[kind];
+    var model = null;
+    var geom = null;
+    var focusIndex = -1;
+    var raf = null;
+    var destroyed = false;
+    var ro = null;
+
+    function resize() {
+      if (destroyed) return;
+      var width = wrap.clientWidth || canvas.clientWidth || 320;
+      var height = opts.height || 260;
+      var dpr = global.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.round(width * dpr));
+      canvas.height = Math.max(1, Math.round(height * dpr));
+      canvas.style.height = height + 'px';
+      draw();
+    }
+
+    function scheduleResize() {
+      if (raf) global.cancelAnimationFrame(raf);
+      raf = global.requestAnimationFrame(function () {
+        raf = null;
+        resize();
+      });
+    }
+
+    function draw() {
+      if (destroyed || !renderer) return;
+      var width = wrap.clientWidth || canvas.clientWidth || 320;
+      var height = opts.height || 260;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      var dpr = global.devicePixelRatio || 1;
+      ctx.scale(dpr, dpr);
+      geom = renderer.draw(ctx, model, {
+        width: width,
+        height: height,
+        unit: opts.unit || '',
+        ariaLabel: opts.ariaLabel || '',
+        colors: {
+          history: cssVar('--v3-chart-history', '#7dd3fc'),
+          actual: cssVar('--v3-chart-actual', '#34d399'),
+          pred: cssVar('--v3-chart-pred', '#2dd4bf'),
+          baseline: cssVar('--v3-chart-baseline', '#f5b942'),
+          interval: cssVar('--v3-chart-interval', 'rgba(125,211,252,.16)'),
+          grid: cssVar('--v3-chart-grid', 'rgba(147,165,183,.18)'),
+          axis: cssVar('--v3-chart-axis', '#8b98a9'),
+          text: cssVar('--v3-text', '#e6edf5'),
+          muted: cssVar('--v3-muted', '#8b98a9')
+        }
+      }) || null;
+      canvas.__tsjGeom = geom;
+      if (focusIndex >= 0) paintFocus(focusIndex, true);
+    }
+
+    function hideTip() {
+      var tip = wrap.querySelector('.chart-v2-tip');
+      if (tip) tip.classList.add('hidden');
+    }
+
+    function paintFocus(index, silent) {
+      if (destroyed || !geom || !renderer) return;
+      if (typeof renderer.focus !== 'function') return;
+      renderer.focus(ctx, model, geom, index, {
+        colors: {
+          history: cssVar('--v3-chart-history', '#7dd3fc'),
+          actual: cssVar('--v3-chart-actual', '#34d399'),
+          pred: cssVar('--v3-chart-pred', '#2dd4bf'),
+          baseline: cssVar('--v3-chart-baseline', '#f5b942'),
+          text: cssVar('--v3-text', '#e6edf5')
+        }
+      });
+      var tip = ensureTip(wrap);
+      if (index < 0 || !renderer.tooltip) { hideTip(); return; }
+      var html = renderer.tooltip(model, index);
+      if (!html) { hideTip(); return; }
+      tip.innerHTML = html;
+      tip.classList.remove('hidden');
+      var x = geom.xOf ? geom.xOf(index) : 0;
+      var wrapWidth = wrap.clientWidth || 0;
+      var tipWidth = tip.offsetWidth || 160;
+      var left = Math.max(8, Math.min(wrapWidth - tipWidth - 8, x - tipWidth / 2));
+      tip.style.left = left + 'px';
+      tip.style.top = '12px';
+      if (!silent && typeof opts.onInspect === 'function') opts.onInspect(index, model);
+    }
+
+    function indexFromEvent(ev) {
+      if (!geom || typeof geom.indexAt !== 'function') return -1;
+      var rect = canvas.getBoundingClientRect();
+      var x = (ev.clientX != null ? ev.clientX : 0) - rect.left;
+      return geom.indexAt(x);
+    }
+
+    function onMove(ev) {
+      var idx = indexFromEvent(ev);
+      if (idx < 0) { focusIndex = -1; hideTip(); return; }
+      focusIndex = idx;
+      paintFocus(idx);
+    }
+
+    function onLeave() {
+      focusIndex = -1;
+      paintFocus(-1, true);
+      hideTip();
+    }
+
+    function onKey(ev) {
+      if (!geom || geom.n == null) return;
+      var n = geom.n;
+      var next = focusIndex;
+      if (ev.key === 'ArrowRight') next = focusIndex < 0 ? 0 : Math.min(n - 1, focusIndex + 1);
+      else if (ev.key === 'ArrowLeft') next = focusIndex < 0 ? n - 1 : Math.max(0, focusIndex - 1);
+      else if (ev.key === 'Home') next = 0;
+      else if (ev.key === 'End') next = n - 1;
+      else if (ev.key === 'Escape') { onLeave(); return; }
+      else return;
+      ev.preventDefault();
+      focusIndex = next;
+      paintFocus(next);
+    }
+
+    // 生命周期登记：全部通过 scope 解绑
+    if (scope && typeof scope.listen === 'function') {
+      scope.listen(canvas, 'pointermove', onMove);
+      scope.listen(canvas, 'pointerleave', onLeave);
+      scope.listen(canvas, 'keydown', onKey);
+      scope.listen(global, 'resize', scheduleResize);
+    } else {
+      canvas.addEventListener('pointermove', onMove);
+      canvas.addEventListener('pointerleave', onLeave);
+      canvas.addEventListener('keydown', onKey);
+      global.addEventListener('resize', scheduleResize);
+    }
+
+    if (global.ResizeObserver) {
+      ro = new global.ResizeObserver(scheduleResize);
+      ro.observe(wrap);
+    }
+
+    canvas.setAttribute('tabindex', '0');
+    if (opts.ariaLabel) canvas.setAttribute('aria-label', opts.ariaLabel);
+
+    resize();
+
+    return {
+      kind: kind,
+      update: function (next) {
+        model = next;
+        focusIndex = -1;
+        hideTip();
+        draw();
+      },
+      resize: resize,
+      focusIndex: function (i) {
+        if (i == null) return focusIndex;
+        focusIndex = i;
+        paintFocus(i, true);
+      },
+      summary: function () {
+        return renderer && renderer.summary ? renderer.summary(model) : '';
+      },
+      geometry: function () { return geom; },
+      destroy: function () {
+        if (destroyed) return;
+        destroyed = true;
+        if (ro && ro.disconnect) ro.disconnect();
+        if (raf) global.cancelAnimationFrame(raf);
+        hideTip();
+        delete canvas.__tsjGeom;
+      }
+    };
+  }
+
+  TSJ.charts.register = register;
+  TSJ.charts.create = create;
+  TSJ.charts.sampleMap = sampleMap;
+  TSJ.charts.cssVar = cssVar;
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/charts/series.js —— 序列图渲染器（预测 / 残差 / 指标对比）
+ *
+ * 所有渲染器遵循同一约定：
+ *   draw(ctx, model, env) -> geom
+ *   focus(ctx, model, geom, index, env)  // 只画高亮层，可重复调用
+ *   tooltip(model, index) -> html
+ *   summary(model) -> 文本
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var charts = TSJ.charts || (TSJ.charts = {});
+  var core = charts;
+
+  /* ---------- 公共工具 ---------- */
+  function finite(v) { return typeof v === 'number' && isFinite(v); }
+
+  function allValues(model) {
+    var out = [];
+    var keys = ['history', 'actual', 'prediction', 'baseline'];
+    for (var i = 0; i < keys.length; i++) {
+      var arr = model[keys[i]] || [];
+      for (var j = 0; j < arr.length; j++) if (finite(arr[j])) out.push(arr[j]);
+    }
+    var iv = model.intervals || [];
+    for (var k = 0; k < iv.length; k++) {
+      var lo = iv[k].lower || [];
+      var hi = iv[k].upper || [];
+      for (var a = 0; a < lo.length; a++) if (finite(lo[a])) out.push(lo[a]);
+      for (var b = 0; b < hi.length; b++) if (finite(hi[b])) out.push(hi[b]);
+    }
+    return out;
+  }
+
+  function pickIndices(model, maxPoints) {
+    var n = model.n || 0;
+    if (!n) return [];
+    var max = maxPoints || model.maxPoints || 1200;
+    if (n <= max) {
+      var all = [];
+      for (var i = 0; i < n; i++) all.push(i);
+      return all;
+    }
+    var buckets = Math.max(2, Math.floor(max / 2));
+    var size = n / buckets;
+    var picked = {};
+    function mark(i) { if (i >= 0 && i < n) picked[i] = true; }
+    var keys = ['history', 'actual', 'prediction', 'baseline'];
+    for (var b = 0; b < buckets; b++) {
+      var lo = Math.floor(b * size);
+      var hi = Math.min(n - 1, Math.floor((b + 1) * size) - 1);
+      if (hi < lo) hi = lo;
+      var minI = -1, maxI = -1, minV = Infinity, maxV = -Infinity;
+      for (var j = lo; j <= hi; j++) {
+        for (var k = 0; k < keys.length; k++) {
+          var v = (model[keys[k]] || [])[j];
+          if (!finite(v)) continue;
+          if (v < minV) { minV = v; minI = j; }
+          if (v > maxV) { maxV = v; maxI = j; }
+        }
+      }
+      mark(lo); mark(hi);
+      if (minI >= 0) mark(minI);
+      if (maxI >= 0) mark(maxI);
+    }
+    mark(0); mark(n - 1);
+    var out = [];
+    for (var p = 0; p < n; p++) if (picked[p]) out.push(p);
+    return out;
+  }
+
+  function scales(model, env, indices) {
+    var vals = allValues(model);
+    if (!vals.length) vals = [0, 1];
+    var min = Math.min.apply(null, vals);
+    var max = Math.max.apply(null, vals);
+    if (min === max) {
+      var pad = Math.max(1, Math.abs(min) * 0.05);
+      min -= pad; max += pad;
+    } else {
+      var span = max - min;
+      min -= span * 0.06;
+      max += span * 0.06;
+    }
+    var padL = 52, padR = 16, padT = 16, padB = 30;
+    var plotW = Math.max(10, env.width - padL - padR);
+    var plotH = Math.max(10, env.height - padT - padB);
+    var n = model.n || 0;
+    function xOf(i) {
+      if (n <= 1) return padL + plotW / 2;
+      return padL + (i / (n - 1)) * plotW;
+    }
+    function yOf(v) {
+      return padT + (1 - (v - min) / (max - min)) * plotH;
+    }
+    function indexAt(x) {
+      if (n <= 1) return 0;
+      var t = (x - padL) / plotW;
+      var i = Math.round(t * (n - 1));
+      return Math.max(0, Math.min(n - 1, i));
+    }
+    return { min: min, max: max, padL: padL, padR: padR, padT: padT, padB: padB, plotW: plotW, plotH: plotH, xOf: xOf, yOf: yOf, indexAt: indexAt };
+  }
+
+  function drawGrid(ctx, sc, env) {
+    ctx.save();
+    ctx.strokeStyle = env.colors.grid;
+    ctx.fillStyle = env.colors.muted;
+    ctx.lineWidth = 1;
+    ctx.font = '11px ' + (global.getComputedStyle ? getComputedStyle(doc().documentElement).getPropertyValue('--v3-sans') : 'sans-serif');
+    var lines = 4;
+    for (var i = 0; i <= lines; i++) {
+      var v = sc.min + (sc.max - sc.min) * (i / lines);
+      var y = Math.round(sc.yOf(v)) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(sc.padL, y);
+      ctx.lineTo(sc.padL + sc.plotW, y);
+      ctx.stroke();
+      ctx.fillText(fmt(v), 6, y + 3);
+    }
+    ctx.restore();
+  }
+
+  function doc() { return global.document; }
+
+  function fmt(v) {
+    if (!finite(v)) return '-';
+    var a = Math.abs(v);
+    if (a >= 1000) return (v / 1000).toFixed(1) + 'k';
+    if (a >= 100) return v.toFixed(0);
+    if (a >= 1) return v.toFixed(1);
+    return v.toFixed(2);
+  }
+
+  function drawSplits(ctx, sc, model, env) {
+    var splits = model.splits || [];
+    ctx.save();
+    ctx.strokeStyle = env.colors.axis;
+    ctx.setLineDash([4, 4]);
+    ctx.fillStyle = env.colors.muted;
+    ctx.font = '11px sans-serif';
+    for (var i = 0; i < splits.length; i++) {
+      var s = splits[i];
+      var x = Math.round(sc.xOf(s.index)) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, sc.padT);
+      ctx.lineTo(x, sc.padT + sc.plotH);
+      ctx.stroke();
+      ctx.fillText(s.label || s.role || 'split', x + 4, sc.padT + 12);
+    }
+    ctx.restore();
+  }
+
+  function linePath(ctx, sc, indices, values, xOf, yOf) {
+    ctx.beginPath();
+    var started = false;
+    for (var k = 0; k < indices.length; k++) {
+      var i = indices[k];
+      var v = values[i];
+      if (!finite(v)) { started = false; continue; }
+      var x = xOf(i), y = yOf(v);
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    }
+  }
+
+  function drawSeriesLine(ctx, sc, indices, values, color, style) {
+    if (!indices.length) return;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = style === 'pred' ? 2 : 1.6;
+    ctx.setLineDash(style === 'pred' ? [6, 4] : style === 'baseline' ? [2, 3] : []);
+    linePath(ctx, sc, indices, values, sc.xOf, sc.yOf);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawIntervals(ctx, sc, model, env) {
+    var iv = model.intervals || [];
+    if (!iv.length) return;
+    var indices = model.__indices || [];
+    ctx.save();
+    for (var k = 0; k < iv.length; k++) {
+      var level = iv[k];
+      var lower = level.lower || [];
+      var upper = level.upper || [];
+      ctx.fillStyle = level.level >= 90 ? env.colors.interval : 'rgba(125,211,252,.10)';
+      ctx.beginPath();
+      var started = false;
+      for (var i = 0; i < indices.length; i++) {
+        var idx = indices[i];
+        var hi = upper[idx];
+        if (!finite(hi)) continue;
+        var x = sc.xOf(idx), y = sc.yOf(hi);
+        if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+      }
+      for (var j = indices.length - 1; j >= 0; j--) {
+        var idx2 = indices[j];
+        var lo = lower[idx2];
+        if (!finite(lo)) continue;
+        ctx.lineTo(sc.xOf(idx2), sc.yOf(lo));
+      }
+      if (started) {
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  function legendItems(model) {
+    var out = [];
+    if ((model.history || []).length) out.push(['history', '历史']);
+    if ((model.actual || []).length) out.push(['actual', '真值']);
+    if ((model.prediction || []).length) out.push(['pred', '预测']);
+    if ((model.baseline || []).length) out.push(['baseline', '基线']);
+    if ((model.intervals || []).length) out.push(['interval', '区间']);
+    return out;
+  }
+
+  /* ---------- forecast ---------- */
+  var forecast = {
+    draw: function (ctx, model, env) {
+      model = model || { n: 0 };
+      var indices = pickIndices(model, model.maxPoints);
+      model.__indices = indices;
+      var sc = scales(model, env, indices);
+      drawGrid(ctx, sc, env);
+      drawIntervals(ctx, sc, model, env);
+      drawSplits(ctx, sc, model, env);
+      drawSeriesLine(ctx, sc, indices, model.history || [], env.colors.history, 'history');
+      drawSeriesLine(ctx, sc, indices, model.actual || [], env.colors.actual, 'actual');
+      drawSeriesLine(ctx, sc, indices, model.prediction || [], env.colors.pred, 'pred');
+      drawSeriesLine(ctx, sc, indices, model.baseline || [], env.colors.baseline, 'baseline');
+      if (env.unit) {
+        ctx.save();
+        ctx.fillStyle = env.colors.muted;
+        ctx.font = '11px sans-serif';
+        ctx.fillText('单位：' + env.unit, sc.padL, 12);
+        ctx.restore();
+      }
+      return { xOf: sc.xOf, yOf: sc.yOf, indexAt: sc.indexAt, n: model.n || 0, plot: sc, indices: indices };
+    },
+    focus: function (ctx, model, geom, index, env) {
+      if (!geom || index < 0) return;
+      ctx.save();
+      ctx.strokeStyle = env.colors.text;
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1;
+      var x = Math.round(geom.xOf(index)) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, geom.plot.padT);
+      ctx.lineTo(x, geom.plot.padT + geom.plot.plotH);
+      ctx.stroke();
+      ctx.restore();
+    },
+    tooltip: function (model, index) {
+      function val(arr) { var v = (arr || [])[index]; return finite(v) ? v.toFixed(2) : '—'; }
+      var iv = (model.intervals || []).map(function (x) {
+        var lo = (x.lower || [])[index], hi = (x.upper || [])[index];
+        return finite(lo) && finite(hi) ? x.level + '%: [' + lo.toFixed(1) + ', ' + hi.toFixed(1) + ']' : null;
+      }).filter(Boolean).join('<br>');
+      return '<div><b>#' + index + '</b></div>' +
+        '<div>历史 ' + val(model.history) + '</div>' +
+        '<div>真值 ' + val(model.actual) + '</div>' +
+        '<div>预测 ' + val(model.prediction) + '</div>' +
+        '<div>基线 ' + val(model.baseline) + '</div>' +
+        (iv ? '<div>' + iv + '</div>' : '');
+    },
+    summary: function (model) {
+      var n = (model && model.n) || 0;
+      var miss = 0;
+      var keys = ['history', 'actual', 'prediction'];
+      for (var i = 0; i < keys.length; i++) {
+        var arr = model[keys[i]] || [];
+        for (var j = 0; j < arr.length; j++) if (arr[j] == null) miss++;
+      }
+      return '样本 ' + n + ' 个' + (miss ? '，缺失/未覆盖 ' + miss + ' 点' : '') +
+        ((model.splits || []).length ? '，切分线 ' + model.splits.length + ' 条' : '');
+    }
+  };
+
+  /* ---------- residual ---------- */
+  var residual = {
+    draw: function (ctx, model, env) {
+      model = model || { residuals: [] };
+      var residuals = model.residuals || [];
+      var n = residuals.length;
+      var vals = residuals.filter(finite);
+      var min = vals.length ? Math.min.apply(null, vals) : -1;
+      var max = vals.length ? Math.max.apply(null, vals) : 1;
+      if (min === max) { min -= 1; max += 1; }
+      var padL = 52, padR = 16, padT = 16, padB = 28;
+      var plotW = Math.max(10, env.width - padL - padR);
+      var plotH = Math.max(10, env.height - padT - padB);
+      function xOf(i) { return n <= 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW; }
+      function yOf(v) { return padT + (1 - (v - min) / (max - min)) * plotH; }
+      function indexAt(x) {
+        if (n <= 1) return 0;
+        var t = (x - padL) / plotW;
+        return Math.max(0, Math.min(n - 1, Math.round(t * (n - 1))));
+      }
+      // 网格与零线
+      ctx.save();
+      ctx.strokeStyle = env.colors.grid;
+      for (var g = 0; g <= 4; g++) {
+        var v = min + (max - min) * (g / 4);
+        var y = Math.round(yOf(v)) + 0.5;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+        ctx.fillStyle = env.colors.muted; ctx.font = '11px sans-serif';
+        ctx.fillText(fmt(v), 6, y + 3);
+      }
+      ctx.strokeStyle = env.colors.axis;
+      ctx.setLineDash([4, 4]);
+      var zy = Math.round(yOf(0)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(padL, zy); ctx.lineTo(padL + plotW, zy); ctx.stroke();
+      ctx.setLineDash([]);
+      // 残差柱
+      ctx.fillStyle = env.colors.pred;
+      for (var i = 0; i < n; i++) {
+        var r = residuals[i];
+        if (!finite(r)) continue;
+        var x = xOf(i), y = yOf(r);
+        ctx.fillRect(x - 1, Math.min(y, zy), 2, Math.max(1, Math.abs(y - zy)));
+      }
+      ctx.restore();
+      return { xOf: xOf, yOf: yOf, indexAt: indexAt, n: n, plot: { padL: padL, padT: padT, plotW: plotW, plotH: plotH } };
+    },
+    focus: function (ctx, model, geom, index, env) {
+      if (!geom || index < 0) return;
+      ctx.save();
+      ctx.strokeStyle = env.colors.text;
+      ctx.setLineDash([3, 3]);
+      var x = Math.round(geom.xOf(index)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(x, geom.plot.padT); ctx.lineTo(x, geom.plot.padT + geom.plot.plotH); ctx.stroke();
+      ctx.restore();
+    },
+    tooltip: function (model, index) {
+      var r = (model.residuals || [])[index];
+      return '<div><b>#' + index + '</b></div><div>残差 ' + (finite(r) ? r.toFixed(3) : '—') + '</div>';
+    },
+    summary: function (model) {
+      var rs = (model && model.residuals || []).filter(finite);
+      if (!rs.length) return '无残差数据';
+      var mean = rs.reduce(function (a, b) { return a + b; }, 0) / rs.length;
+      return '残差 ' + rs.length + ' 个，均值 ' + mean.toFixed(3) + '，零线已标出';
+    }
+  };
+
+  /* ---------- metrics 对比 ---------- */
+  var metrics = {
+    draw: function (ctx, model, env) {
+      model = model || { labels: [], series: [] };
+      var labels = model.labels || [];
+      var series = model.series || [];
+      var max = 0;
+      series.forEach(function (s) { (s.values || []).forEach(function (v) { if (finite(v) && v > max) max = v; }); });
+      if (max <= 0) max = 1;
+      var padL = 52, padR = 16, padT = 16, padB = 42;
+      var plotW = Math.max(10, env.width - padL - padR);
+      var plotH = Math.max(10, env.height - padT - padB);
+      function yOf(v) { return padT + (1 - v / max) * plotH; }
+      ctx.save();
+      ctx.strokeStyle = env.colors.grid;
+      ctx.fillStyle = env.colors.muted;
+      ctx.font = '11px sans-serif';
+      for (var g = 0; g <= 4; g++) {
+        var v = max * (g / 4);
+        var y = Math.round(yOf(v)) + 0.5;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+        ctx.fillText(fmt(v), 6, y + 3);
+      }
+      var groupW = plotW / Math.max(1, labels.length);
+      var barW = Math.max(4, (groupW - 8) / Math.max(1, series.length));
+      var palette = [env.colors.pred, env.colors.baseline, env.colors.history, env.colors.actual];
+      series.forEach(function (s, si) {
+        ctx.fillStyle = palette[si % palette.length];
+        (s.values || []).forEach(function (v, i) {
+          if (!finite(v)) return;
+          var x = padL + i * groupW + 4 + si * barW;
+          var y = yOf(v);
+          ctx.fillRect(x, y, barW - 2, padT + plotH - y);
+        });
+      });
+      ctx.fillStyle = env.colors.muted;
+      labels.forEach(function (l, i) {
+        var x = padL + i * groupW + groupW / 2;
+        ctx.textAlign = 'center';
+        ctx.fillText(String(l).slice(0, 10), x, padT + plotH + 16);
+      });
+      ctx.restore();
+      return { n: labels.length, indexAt: function () { return -1; }, xOf: function () { return 0; }, yOf: yOf, plot: { padL: padL, padT: padT, plotW: plotW, plotH: plotH } };
+    },
+    tooltip: function (model, index) {
+      var rows = (model.series || []).map(function (s) {
+        var v = (s.values || [])[index];
+        return '<div>' + s.name + ' ' + (finite(v) ? v.toFixed(3) : '—') + '</div>';
+      }).join('');
+      return '<div><b>' + (model.labels || [])[index] + '</b></div>' + rows;
+    },
+    summary: function (model) {
+      return '对比 ' + ((model.labels || []).length) + ' 组 × ' + ((model.series || []).length) + ' 个指标';
+    }
+  };
+
+  charts.register('forecast', forecast);
+  charts.register('residual', residual);
+  charts.register('metrics', metrics);
+  TSJ.chartV2 = { forecast: forecast, residual: residual, metrics: metrics };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/charts/diagnostics.js —— 诊断图与统计量
+ *
+ * 这里同时提供纯函数（ACF/PACF/加性分解），实验室与课程演示共用同一实现，
+ * 避免“图表算一套、实验算一套”导致数值漂移。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var charts = TSJ.charts || (TSJ.charts = {});
+
+  function finite(v) { return typeof v === 'number' && isFinite(v); }
+
+  function mean(arr) {
+    var s = 0, n = 0;
+    for (var i = 0; i < arr.length; i++) if (finite(arr[i])) { s += arr[i]; n++; }
+    return n ? s / n : NaN;
+  }
+
+  /**
+   * 自相关函数（默认有偏估计，样本少时需在文案中说明）。
+   */
+  function acf(series, lags) {
+    var x = series.filter(finite);
+    var n = x.length;
+    var m = mean(x);
+    var denom = 0;
+    for (var i = 0; i < n; i++) denom += (x[i] - m) * (x[i] - m);
+    var out = [];
+    var maxLag = Math.min(lags || 20, n - 1);
+    for (var k = 0; k <= maxLag; k++) {
+      var num = 0;
+      for (var j = k; j < n; j++) num += (x[j] - m) * (x[j - k] - m);
+      out.push(denom > 0 ? num / denom : NaN);
+    }
+    return out;
+  }
+
+  /** 解对称正定线性方程组（Cholesky）。失败返回 null。 */
+  function solveSym(A, b) {
+    var n = b.length;
+    var L = [];
+    for (var i = 0; i < n; i++) L.push(new Array(n).fill(0));
+    for (var col = 0; col < n; col++) {
+      for (var row = 0; row <= col; row++) {
+        var sum = A[col][row];
+        for (var k = 0; k < row; k++) sum -= L[col][k] * L[row][k];
+        if (col === row) {
+          if (sum <= 1e-12) return null;
+          L[col][row] = Math.sqrt(sum);
+        } else {
+          L[col][row] = sum / L[row][row];
+        }
+      }
+    }
+    var y = [];
+    for (var i2 = 0; i2 < n; i2++) {
+      var s = b[i2];
+      for (var k2 = 0; k2 < i2; k2++) s -= L[i2][k2] * y[k2];
+      y.push(s / L[i2][i2]);
+    }
+    var x = new Array(n).fill(0);
+    for (var i3 = n - 1; i3 >= 0; i3--) {
+      var s2 = y[i3];
+      for (var k3 = i3 + 1; k3 < n; k3++) s2 -= L[k3][i3] * x[k3];
+      x[i3] = s2 / L[i3][i3];
+    }
+    return x;
+  }
+
+  /** 偏自相关（Yule-Walker + 递推）。 */
+  function pacf(series, lags) {
+    var r = acf(series, lags);
+    var out = [1];
+    var phi = [];
+    for (var k = 1; k < r.length; k++) {
+      var A = [], b = [];
+      for (var i = 0; i < k; i++) {
+        A.push([]);
+        for (var j = 0; j < k; j++) A[i].push(r[Math.abs(i - j)]);
+        b.push(r[i + 1]);
+      }
+      var coef = solveSym(A, b);
+      if (!coef) { out.push(NaN); continue; }
+      phi = coef;
+      out.push(coef[k - 1]);
+    }
+    return out;
+  }
+
+  /**
+   * 经典加性分解：居中移动平均估趋势，残差按相位平均得季节项。
+   * 数据不足两个完整周期时返回 null，不做“降级成能画”的假图。
+   */
+  function decomposeAdditive(series, m) {
+    if (!m || m < 2) return null;
+    var n = series.length;
+    if (n < 2 * m) return null;
+    for (var i = 0; i < n; i++) if (!finite(series[i])) return null;
+    var trend = new Array(n).fill(NaN);
+    var half = Math.floor(m / 2);
+    for (var t = half; t < n - half; t++) {
+      var sum = 0;
+      if (m % 2 === 1) {
+        for (var j = -half; j <= half; j++) sum += series[t + j];
+        trend[t] = sum / m;
+      } else {
+        // 偶数周期：两个相邻移动平均再平均，权重为 (A + 0.5*(两端))/m
+        var a = 0;
+        for (var j2 = -half + 1; j2 <= half - 1; j2++) a += series[t + j2];
+        trend[t] = (a + 0.5 * (series[t - half] + series[t + half])) / m;
+      }
+    }
+    var sums = [], counts = [];
+    for (var p = 0; p < m; p++) { sums.push(0); counts.push(0); }
+    for (var t2 = 0; t2 < n; t2++) {
+      if (!finite(trend[t2])) continue;
+      var ph = t2 % m;
+      sums[ph] += series[t2] - trend[t2];
+      counts[ph]++;
+    }
+    var seasonal = [];
+    for (var p2 = 0; p2 < m; p2++) seasonal.push(counts[p2] ? sums[p2] / counts[p2] : 0);
+    var smean = seasonal.reduce(function (a, b) { return a + b; }, 0) / m;
+    for (var p3 = 0; p3 < m; p3++) seasonal[p3] -= smean;
+    var detrended = [];
+    var residual = [];
+    for (var t3 = 0; t3 < n; t3++) {
+      var tr = finite(trend[t3]) ? trend[t3] : NaN;
+      detrended.push(finite(tr) ? series[t3] - tr : NaN);
+      residual.push(finite(tr) ? series[t3] - tr - seasonal[t3 % m] : NaN);
+    }
+    return { trend: trend, seasonal: seasonal, detrended: detrended, residual: residual, period: m };
+  }
+
+  /* ---------- 渲染器 ---------- */
+  function stemChart(kind, title) {
+    return {
+      draw: function (ctx, model, env) {
+        var values = model.values || [];
+        var lags = model.lags || [];
+        var conf = model.conf || [];
+        var n = values.length;
+        var padL = 44, padR = 16, padT = 18, padB = 28;
+        var plotW = Math.max(10, env.width - padL - padR);
+        var plotH = Math.max(10, env.height - padT - padB);
+        var maxAbs = 0.0001;
+        for (var i = 0; i < n; i++) {
+          if (finite(values[i])) maxAbs = Math.max(maxAbs, Math.abs(values[i]));
+          if (conf[i] != null) maxAbs = Math.max(maxAbs, Math.abs(conf[i]));
+        }
+        function xOf(i) { return n <= 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW; }
+        function yOf(v) { return padT + (1 - (v + maxAbs) / (2 * maxAbs)) * plotH; }
+        ctx.save();
+        ctx.strokeStyle = env.colors.grid;
+        ctx.fillStyle = env.colors.muted;
+        ctx.font = '11px sans-serif';
+        for (var g = 0; g <= 4; g++) {
+          var v = -maxAbs + (2 * maxAbs) * (g / 4);
+          var y = Math.round(yOf(v)) + 0.5;
+          ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+          ctx.fillText(v.toFixed(2), 6, y + 3);
+        }
+        // 置信界
+        if (conf.length) {
+          ctx.strokeStyle = env.colors.axis;
+          ctx.setLineDash([4, 3]);
+          [conf[0], -conf[0]].forEach(function (c) {
+            if (!finite(c)) return;
+            var yy = Math.round(yOf(c)) + 0.5;
+            ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(padL + plotW, yy); ctx.stroke();
+          });
+          ctx.setLineDash([]);
+        }
+        ctx.strokeStyle = env.colors.pred;
+        ctx.lineWidth = 1.5;
+        for (var k = 0; k < n; k++) {
+          var val = values[k];
+          if (!finite(val)) continue;
+          var x = xOf(k), yv = yOf(val), zero = yOf(0);
+          ctx.beginPath(); ctx.moveTo(x, zero); ctx.lineTo(x, yv); ctx.stroke();
+          ctx.fillStyle = Math.abs(val) > Math.abs(conf[0] || 0) ? env.colors.baseline : env.colors.pred;
+          ctx.beginPath(); ctx.arc(x, yv, 2.5, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = env.colors.muted;
+        ctx.textAlign = 'center';
+        for (var s = 0; s < n; s += Math.max(1, Math.floor(n / 8))) ctx.fillText(String(lags[s] != null ? lags[s] : s), xOf(s), padT + plotH + 16);
+        ctx.restore();
+        return { xOf: xOf, yOf: yOf, n: n, indexAt: function (x) { return n <= 1 ? 0 : Math.max(0, Math.min(n - 1, Math.round((x - padL) / plotW * (n - 1)))); }, plot: { padL: padL, padT: padT, plotW: plotW, plotH: plotH } };
+      },
+      focus: function (ctx, model, geom, index, env) {
+        if (!geom || index < 0) return;
+        ctx.save();
+        ctx.strokeStyle = env.colors.text;
+        ctx.setLineDash([3, 3]);
+        var x = Math.round(geom.xOf(index)) + 0.5;
+        ctx.beginPath(); ctx.moveTo(x, geom.plot.padT); ctx.lineTo(x, geom.plot.padT + geom.plot.plotH); ctx.stroke();
+        ctx.restore();
+      },
+      tooltip: function (model, index) {
+        var v = (model.values || [])[index];
+        var c = (model.conf || [])[index];
+        return '<div><b>滞后 ' + ((model.lags || [])[index] != null ? (model.lags || [])[index] : index) + '</b></div>' +
+          '<div>' + (model.name || '值') + ' ' + (finite(v) ? v.toFixed(3) : '—') + '</div>' +
+          (finite(c) ? '<div>置信界 ±' + c.toFixed(3) + '</div>' : '');
+      },
+      summary: function (model) {
+        var vals = (model.values || []).filter(finite);
+        var over = 0;
+        var c0 = (model.conf || [])[0];
+        for (var i = 1; i < vals.length; i++) if (finite(c0) && Math.abs(vals[i]) > Math.abs(c0)) over++;
+        return title + '：' + vals.length + ' 阶，其中 ' + over + ' 阶超出置信界（估计法与假设见图注）';
+      }
+    };
+  }
+
+  var decomposition = {
+    draw: function (ctx, model, env) {
+      var parts = model.parts || {};
+      var series = model.series || [];
+      var n = series.length;
+      var vals = [];
+      [series, parts.trend, parts.seasonal, parts.residual].forEach(function (arr) {
+        (arr || []).forEach(function (v) { if (finite(v)) vals.push(v); });
+      });
+      var seasonalFull = new Array(n).fill(null);
+      for (var i = 0; i < n; i++) seasonalFull[i] = (parts.seasonal || [])[i % parts.period];
+      vals = vals.concat(seasonalFull.filter(finite));
+      if (!vals.length) vals = [0, 1];
+      var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+      if (min === max) { min -= 1; max += 1; }
+      var padL = 52, padR = 16, padT = 16, padB = 28;
+      var plotW = Math.max(10, env.width - padL - padR);
+      var plotH = Math.max(10, env.height - padT - padB);
+      function xOf(i) { return n <= 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW; }
+      function yOf(v) { return padT + (1 - (v - min) / (max - min)) * plotH; }
+      function line(arr, color, dash) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.setLineDash(dash || []);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        var started = false;
+        for (var k = 0; k < n; k++) {
+          var v = arr[k];
+          if (!finite(v)) { started = false; continue; }
+          var x = xOf(k), y = yOf(v);
+          if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.strokeStyle = env.colors.grid;
+      for (var g = 0; g <= 4; g++) {
+        var vv = min + (max - min) * (g / 4);
+        var y = Math.round(yOf(vv)) + 0.5;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+        ctx.fillStyle = env.colors.muted; ctx.font = '11px sans-serif'; ctx.fillText(vv.toFixed(1), 6, y + 3);
+      }
+      ctx.restore();
+      line(series, env.colors.history, []);
+      line(parts.trend, env.colors.pred, [5, 4]);
+      line(seasonalFull, env.colors.baseline, [2, 3]);
+      line(parts.residual, env.colors.actual, []);
+      return { xOf: xOf, yOf: yOf, n: n, indexAt: function (x) { return n <= 1 ? 0 : Math.max(0, Math.min(n - 1, Math.round((x - padL) / plotW * (n - 1)))); }, plot: { padL: padL, padT: padT, plotW: plotW, plotH: plotH } };
+    },
+    tooltip: function (model, index) {
+      var p = model.parts || {};
+      function v(arr) { var x = (arr || [])[index]; return finite(x) ? x.toFixed(2) : '—'; }
+      return '<div><b>#' + index + '</b></div><div>序列 ' + v(model.series) + '</div>' +
+        '<div>趋势 ' + v(p.trend) + '</div><div>季节 ' + v(p.seasonal && p.seasonal[index % p.period] != null ? new Array(index + 1).fill(p.seasonal[index % p.period]) : []) + '</div>' +
+        '<div>残差 ' + v(p.residual) + '</div>';
+    },
+    summary: function (model) {
+      var p = model.parts || {};
+      return '加性分解：周期 ' + p.period + '，趋势/季节/残差同图；数据不足两个周期会拒绝绘制。';
+    }
+  };
+
+  charts.register('acf', stemChart('acf', 'ACF'));
+  charts.register('pacf', stemChart('pacf', 'PACF'));
+  charts.register('decomposition', decomposition);
+
+  charts.stats = {
+    mean: mean,
+    acf: acf,
+    pacf: pacf,
+    decomposeAdditive: decomposeAdditive
+  };
+  TSJ.chartStats = charts.stats;
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/lab/config.js —— 实验室配置 schema 与白名单
+ *
+ * 原则：用户不能提交代码或表达式；只能改白名单方法、有限参数、切分与指标。
+ * 任何越界值都不会被“猜着修正”，要么给出明确错误，要么回退默认并提示。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+
+  var METHODS = {
+    naive: { label: '朴素法', params: {}, minHistory: 2 },
+    'seasonal-naive': { label: '季节朴素', params: {}, minHistory: 3 },
+    mean: { label: '历史均值', params: {}, minHistory: 1 },
+    'moving-average': { label: '移动平均', params: {}, minHistory: 2 },
+    ses: { label: '简单指数平滑', params: { alpha: { min: 0.02, max: 0.6, step: 0.01, def: 0.28 } }, minHistory: 2 },
+    holt: {
+      label: 'Holt 线性趋势',
+      params: {
+        alpha: { min: 0.02, max: 0.8, step: 0.01, def: 0.42 },
+        beta: { min: 0.01, max: 0.5, step: 0.01, def: 0.1 }
+      },
+      minHistory: 3
+    },
+    'holt-winters': {
+      label: 'Holt-Winters',
+      params: {
+        alpha: { min: 0.02, max: 0.8, step: 0.01, def: 0.32 },
+        beta: { min: 0.01, max: 0.5, step: 0.01, def: 0.06 },
+        gamma: { min: 0.02, max: 0.6, step: 0.01, def: 0.28 }
+      },
+      minHistory: 8
+    },
+    ar: { label: 'AR(p) Yule-Walker', params: { order: { min: 1, max: 10, step: 1, def: 4 } }, minHistory: 8 },
+    theta: { label: 'Theta 方法', params: { alpha: { min: 0.05, max: 0.5, step: 0.01, def: 0.2 } }, minHistory: 6 },
+    dlinear: { label: 'DLinear', params: {}, minHistory: 8 }
+  };
+
+  var METRICS = {
+    mse: { label: 'MSE', better: 'lower' },
+    mae: { label: 'MAE', better: 'lower' },
+    smape: { label: 'sMAPE', better: 'lower' }
+  };
+
+  var BASELINES = ['naive', 'seasonal_naive', 'mean', 'moving_average', 'linear_trend'];
+
+  function defaults() {
+    return {
+      schema: 1,
+      datasetId: 'airline',
+      method: 'holt-winters',
+      params: { alpha: 0.32, beta: 0.06, gamma: 0.28 },
+      split: { mode: 'holdout', horizon: 12, windows: 1, originStep: 12 },
+      metrics: ['mse', 'mae', 'smape'],
+      baseline: 'seasonal_naive',
+      interval: { enabled: true, levels: [80, 95] }
+    };
+  }
+
+  function datasetIds() {
+    return (TSJ.datasets || []).map(function (d) { return d.id; });
+  }
+
+  function isFiniteNumber(v) { return typeof v === 'number' && isFinite(v); }
+
+  function normalize(raw) {
+    var errors = [];
+    var base = defaults();
+    var cfg = {
+      schema: 1,
+      datasetId: typeof raw.datasetId === 'string' ? raw.datasetId : base.datasetId,
+      method: typeof raw.method === 'string' ? raw.method : base.method,
+      params: {},
+      split: {
+        mode: raw.split && raw.split.mode === 'rolling' ? 'rolling' : 'holdout',
+        horizon: raw.split && isFiniteNumber(raw.split.horizon) ? Math.floor(raw.split.horizon) : base.split.horizon,
+        windows: raw.split && isFiniteNumber(raw.split.windows) ? Math.floor(raw.split.windows) : base.split.windows,
+        originStep: raw.split && isFiniteNumber(raw.split.originStep) ? Math.floor(raw.split.originStep) : base.split.originStep
+      },
+      metrics: Array.isArray(raw.metrics) ? raw.metrics.slice() : base.metrics.slice(),
+      baseline: typeof raw.baseline === 'string' ? raw.baseline : base.baseline,
+      interval: {
+        enabled: !!(raw.interval && raw.interval.enabled),
+        levels: Array.isArray(raw.interval && raw.interval.levels) && raw.interval.levels.length
+          ? raw.interval.levels.slice() : base.interval.levels.slice()
+      }
+    };
+
+    if (!METHODS[cfg.method]) {
+      errors.push('方法不在白名单：' + cfg.method);
+      cfg.method = base.method;
+    }
+    if (datasetIds().indexOf(cfg.datasetId) < 0) {
+      errors.push('数据集不存在：' + cfg.datasetId);
+      cfg.datasetId = base.datasetId;
+    }
+
+    var meta = METHODS[cfg.method] || METHODS[base.method];
+    var defParams = METHODS[base.method].params;
+    Object.keys(defParams).forEach(function (k) { cfg.params[k] = defParams[k].def; });
+    if (raw.params && typeof raw.params === 'object') {
+      Object.keys(meta.params).forEach(function (key) {
+        var rule = meta.params[key];
+        var v = raw.params[key];
+        if (v == null) return;
+        if (!isFiniteNumber(v)) { errors.push('参数 ' + key + ' 必须是数字'); return; }
+        if (v < rule.min || v > rule.max) {
+          errors.push('参数 ' + key + ' 超出范围 [' + rule.min + ', ' + rule.max + ']');
+          return;
+        }
+        cfg.params[key] = rule.step >= 1 ? Math.round(v) : Math.round(v * 100) / 100;
+      });
+    }
+
+    if (cfg.split.horizon < 1 || cfg.split.horizon > 48) {
+      errors.push('horizon 必须在 1–48 之间');
+      cfg.split.horizon = base.split.horizon;
+    }
+    if (cfg.split.mode === 'rolling') {
+      if (cfg.split.windows < 1 || cfg.split.windows > 12) {
+        errors.push('rolling 窗口数必须在 1–12 之间');
+        cfg.split.windows = base.split.windows;
+      }
+      if (cfg.split.originStep < 1 || cfg.split.originStep > 48) {
+        errors.push('originStep 必须在 1–48 之间');
+        cfg.split.originStep = base.split.originStep;
+      }
+    } else {
+      cfg.split.windows = 1;
+      cfg.split.originStep = cfg.split.horizon;
+    }
+
+    cfg.metrics = cfg.metrics.filter(function (m) { return METRICS[m]; });
+    if (!cfg.metrics.length) {
+      errors.push('至少选择一个指标');
+      cfg.metrics = base.metrics.slice();
+    }
+    if (BASELINES.indexOf(cfg.baseline) < 0) {
+      errors.push('基线不在白名单：' + cfg.baseline);
+      cfg.baseline = base.baseline;
+    }
+    cfg.interval.levels = cfg.interval.levels.filter(function (l) { return l === 80 || l === 95; });
+    if (!cfg.interval.levels.length) cfg.interval.levels = [80, 95];
+
+    return { ok: errors.length === 0, errors: errors, config: cfg };
+  }
+
+  function stableStringify(obj) {
+    return JSON.stringify(obj, function (key, value) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return Object.keys(value).sort().reduce(function (acc, k) {
+          acc[k] = value[k];
+          return acc;
+        }, {});
+      }
+      return value;
+    });
+  }
+
+  TSJ.labConfig = {
+    METHODS: METHODS,
+    METRICS: METRICS,
+    BASELINES: BASELINES,
+    defaults: defaults,
+    normalize: normalize,
+    stableStringify: stableStringify
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/lab/adapters.js —— 白名单方法的唯一适配层
+ *
+ * 基线直接调用 judge.baselines；参考方法用「题目参考解 + 精确参数锚点替换」，
+ * 再用 judge.runInProcess 执行与校验。锚点缺失或替换不唯一时**失败关闭**，
+ * 绝不复制算法，也不用宽松正则猜参数。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var judge = TSJ.judge;
+  var config = TSJ.labConfig;
+
+  var ANCHORS = {
+    ses: [{ from: 'var alpha = 0.28;', param: 'alpha' }],
+    holt: [
+      { from: 'var alpha = 0.42;', param: 'alpha' },
+      { from: 'var beta = 0.10;', param: 'beta' }
+    ],
+    'holt-winters': [
+      { from: 'var alpha = 0.32;', param: 'alpha' },
+      { from: 'var beta = 0.06;', param: 'beta' },
+      { from: 'var gamma = 0.28;', param: 'gamma' }
+    ],
+    ar: [{ from: 'var p = Math.min(10, Math.max(1, Math.floor(n / 4)));', param: 'order' }],
+    theta: [{ from: 'var alpha = 0.2;', param: 'alpha' }],
+    dlinear: []
+  };
+
+  var SOURCE_PROBLEM = {
+    ses: 'p4-ses',
+    holt: 'p5-holt',
+    'holt-winters': 'p6-holt-winters',
+    ar: 'p11-ar-yw',
+    theta: 'p10-theta',
+    dlinear: 'p15-dlinear'
+  };
+
+  function replaceOnce(src, anchor, replacement, label) {
+    var idx = src.indexOf(anchor);
+    if (idx < 0) throw new Error('参数锚点缺失：' + label);
+    if (src.indexOf(anchor, idx + anchor.length) >= 0) throw new Error('参数锚点不唯一：' + label);
+    return src.slice(0, idx) + replacement + src.slice(idx + anchor.length);
+  }
+
+  function buildSource(method, params) {
+    if (!config.METHODS[method]) throw new Error('方法不在白名单：' + method);
+    var problemId = SOURCE_PROBLEM[method];
+    if (!problemId) return null;
+    var p = TSJ.findProblem(problemId);
+    if (!p || !p.solution) throw new Error('找不到参考解：' + problemId);
+    var src = p.solution;
+    var anchors = ANCHORS[method] || [];
+    for (var i = 0; i < anchors.length; i++) {
+      var a = anchors[i];
+      var value = params[a.param];
+      if (value == null) continue;
+      var literal = a.param === 'order' ? String(Math.round(value)) : String(value);
+      src = replaceOnce(src, a.from, 'var ' + a.param + ' = ' + literal + ';', method + '.' + a.param);
+    }
+    return src;
+  }
+
+  /**
+   * 批量执行同一方法的一组任务：参考方法只编译一次，避免逐点重复编译。
+   * @returns {{results:Array}} 与 judge.runInProcess 同构
+   */
+  function runJobs(method, params, jobs) {
+    if (!config.METHODS[method]) throw new Error('方法不在白名单：' + method);
+    params = params || {};
+    if (judge.baselines[method]) {
+      var results = [];
+      for (var i = 0; i < jobs.length; i++) {
+        var job = jobs[i];
+        try {
+          var out = judge.baselines[method](job.history.slice(), job.horizon, job.ctx);
+          if (!Array.isArray(out) || out.length !== job.horizon) throw new Error('基线输出长度不正确');
+          results.push({ status: 'ok', value: out });
+        } catch (err) {
+          results.push({ status: 'error', error: (err && err.message) || String(err), line: null });
+        }
+      }
+      return { results: results, timedOut: false };
+    }
+    var src = buildSource(method, params);
+    return judge.runInProcess(src, jobs);
+  }
+
+  /**
+   * 返回一个预测函数。
+   * @param {string} method 白名单方法
+   * @param {Object} params 参数
+   */
+  function buildForecaster(method, params) {
+    var runner = function (jobs) { return runJobs(method, params, jobs); };
+    return function (history, horizon, ctx) {
+      var run = runner([{ history: history.slice(), horizon: horizon, ctx: ctx }]);
+      var r = run.results && run.results[0];
+      if (!r || r.status !== 'ok') throw new Error((r && r.error) || '预测失败');
+      return r.value;
+    };
+  }
+
+  /**
+   * 创建一个批量执行器：参考方法只编译一次，避免逐点重复编译。
+   */
+  function createRunner(method, params) {
+    return function (jobs) { return runJobs(method, params, jobs); };
+  }
+
+  TSJ.labAdapters = {
+    ANCHORS: ANCHORS,
+    SOURCE_PROBLEM: SOURCE_PROBLEM,
+    buildSource: buildSource,
+    runJobs: runJobs,
+    createRunner: createRunner,
+    buildForecaster: buildForecaster
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/lab/stats.js —— 实验室纯函数：指标、训练残差、经验分位区间
+ *
+ * 区间只使用“预测起点之前”的训练残差；测试真值绝不参与校准。
+ * 这里的区间是教学演示，不是模型原生概率输出。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var judge = TSJ.judge;
+  var stats = TSJ.chartStats || {};
+
+  function finite(v) { return typeof v === 'number' && isFinite(v); }
+
+  function metricsFor(actual, pred, names) {
+    var out = {};
+    (names || []).forEach(function (name) {
+      var fn = judge.metrics[name];
+      out[name] = fn ? fn(actual, pred) : NaN;
+    });
+    return out;
+  }
+
+  function quantile(sorted, q) {
+    if (!sorted.length) return NaN;
+    if (sorted.length === 1) return sorted[0];
+    var pos = (sorted.length - 1) * q;
+    var lo = Math.floor(pos), hi = Math.ceil(pos);
+    if (lo === hi) return sorted[lo];
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+  }
+
+  /**
+   * 在训练段内部计算一步预测残差（只用 t 之前的数据）。
+   * @param {Function} runJobs 适配器批量执行函数
+   * @param {number[]} values 完整序列
+   * @param {number} minHistory 方法最小历史
+   * @returns {number[]} 残差数组（已排序）
+   */
+  function trainingResiduals(runJobs, values, minHistory) {
+    var start = Math.max(minHistory, 2);
+    if (values.length <= start + 1) return [];
+    var jobs = [];
+    var index = [];
+    for (var t = start; t < values.length; t++) {
+      jobs.push({
+        history: values.slice(0, t),
+        horizon: 1,
+        ctx: { season: 0, datasetId: 'lab-train', index: t }
+      });
+      index.push(t);
+    }
+    var run = runJobs(jobs);
+    var residuals = [];
+    for (var i = 0; i < index.length; i++) {
+      var r = run.results && run.results[i];
+      if (r && r.status === 'ok' && finite(r.value[0])) residuals.push(values[index[i]] - r.value[0]);
+    }
+    residuals.sort(function (a, b) { return a - b; });
+    return residuals;
+  }
+
+  /**
+   * 由训练残差构造对称经验区间。
+   * @returns {Array<{level:number,lower:number,upper:number}>}
+   */
+  function empiricalIntervals(residuals, levels) {
+    if (!residuals.length) return [];
+    var out = [];
+    (levels || [80, 95]).forEach(function (level) {
+      var alpha = (100 - level) / 100;
+      var lo = quantile(residuals, alpha / 2);
+      var hi = quantile(residuals, 1 - alpha / 2);
+      if (finite(lo) && finite(hi)) out.push({ level: level, lower: lo, upper: hi });
+    });
+    return out;
+  }
+
+  function coverage(actual, lower, upper) {
+    var n = 0, hit = 0;
+    for (var i = 0; i < actual.length; i++) {
+      if (!finite(actual[i]) || !finite(lower[i]) || !finite(upper[i])) continue;
+      n++;
+      if (actual[i] >= lower[i] && actual[i] <= upper[i]) hit++;
+    }
+    return n ? { n: n, rate: hit / n } : { n: 0, rate: NaN };
+  }
+
+  function applyInterval(prediction, interval) {
+    var lower = [], upper = [];
+    for (var i = 0; i < prediction.length; i++) {
+      lower.push(finite(prediction[i]) ? prediction[i] + interval.lower : NaN);
+      upper.push(finite(prediction[i]) ? prediction[i] + interval.upper : NaN);
+    }
+    return { lower: lower, upper: upper };
+  }
+
+  function summaryMetrics(metrics) {
+    var keys = Object.keys(metrics);
+    return keys.map(function (k) {
+      var v = metrics[k];
+      return (judge.metricLabels[k] || k) + ' ' + (finite(v) ? v.toFixed(3) : '—');
+    }).join(' · ');
+  }
+
+  TSJ.labStats = {
+    finite: finite,
+    metricsFor: metricsFor,
+    quantile: quantile,
+    trainingResiduals: trainingResiduals,
+    empiricalIntervals: empiricalIntervals,
+    coverage: coverage,
+    applyInterval: applyInterval,
+    summaryMetrics: summaryMetrics,
+    mean: stats.mean || function () { return NaN; }
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/lab/runner.js —— 实验室确定性执行器
+ *
+ * - 先冻结配置，再用 judge.buildTestPoints 生成 origins；
+ * - 每个 origin 只用其 history，候选与基线共享同一样本；
+ * - 逐 origin 让出主线程；token 失效立即取消，旧结果整段丢弃；
+ * - 区间只用训练段内部残差，测试真值绝不参与校准。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var judge = TSJ.judge;
+  var adapters = TSJ.labAdapters;
+  var labStats = TSJ.labStats;
+  var core = TSJ.appCore;
+
+  function finite(v) { return typeof v === 'number' && isFinite(v); }
+
+  function yieldControl() {
+    return new Promise(function (resolve) { global.setTimeout(resolve, 0); });
+  }
+
+  function hashConfig(cfg) {
+    var text = TSJ.labConfig.stableStringify(cfg);
+    if (core && typeof core.fnv1a === 'function') return core.fnv1a(text).slice(0, 8);
+    var h = 5381;
+    for (var i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0;
+    return ('00000000' + h.toString(16)).slice(-8);
+  }
+
+  function metricValue(name, actual, pred) {
+    var fn = judge.metrics[name];
+    return fn ? fn(actual, pred) : NaN;
+  }
+
+  /**
+   * 运行实验。
+   * @param {Object} rawConfig 配置
+   * @param {Object} session { token, onOrigin, onStatus }
+   * @returns {Promise<Object>} 结果；被取消时 resolve { canceled:true }
+   */
+  function run(rawConfig, session) {
+    session = session || {};
+    var started = (global.performance && global.performance.now) ? global.performance.now() : Date.now();
+    var norm = TSJ.labConfig.normalize(rawConfig);
+    if (!norm.ok) {
+      return Promise.resolve({ ok: false, errors: norm.errors });
+    }
+    var cfg = norm.config;
+    var token = session.token;
+    var ds = null;
+    for (var i = 0; i < (TSJ.datasets || []).length; i++) {
+      if (TSJ.datasets[i].id === cfg.datasetId) ds = TSJ.datasets[i];
+    }
+    if (!ds) return Promise.resolve({ ok: false, errors: ['数据集不存在：' + cfg.datasetId] });
+
+    var points = judge.buildTestPoints(ds.values, {
+      mode: cfg.split.mode,
+      horizon: cfg.split.horizon,
+      windows: cfg.split.windows,
+      originStep: cfg.split.originStep,
+      season: ds.season,
+      freq: ds.freq,
+      datasetId: ds.id
+    });
+
+    var meta = TSJ.labConfig.METHODS[cfg.method];
+    var runJobs = adapters.createRunner(cfg.method, cfg.params);
+    var origins = [];
+    var aggregate = {};
+    var baselineAggregate = {};
+    cfg.metrics.forEach(function (m) { aggregate[m] = []; baselineAggregate[m] = []; });
+
+    function step() {
+      if (session.token != null && token != null && session.token !== token) {
+        return Promise.resolve({ canceled: true });
+      }
+      if (!origins.length && points.length) return runOrigin(points[0], 0);
+      var idx = origins.length;
+      if (idx >= points.length) return finish();
+      return runOrigin(points[idx], idx);
+    }
+
+    function runOrigin(point, idx) {
+      var jobs = [];
+      var trainIndex = [];
+      if (cfg.interval.enabled) {
+        var start = Math.max(meta.minHistory, 2);
+        for (var t = start; t < point.history.length; t++) {
+          jobs.push({ history: point.history.slice(0, t), horizon: 1, ctx: { season: 0, datasetId: ds.id, index: t } });
+          trainIndex.push(t);
+        }
+      }
+      var finalJob = jobs.length;
+      jobs.push({ history: point.history.slice(), horizon: cfg.split.horizon, ctx: point.ctx });
+
+      var run;
+      try {
+        run = runJobs(jobs);
+      } catch (err) {
+        return Promise.resolve({ ok: false, errors: ['第 ' + (idx + 1) + ' 个测试点执行失败：' + ((err && err.message) || err)] });
+      }
+      for (var k = 0; k < run.results.length; k++) {
+        if (!run.results[k] || run.results[k].status !== 'ok') {
+          return Promise.resolve({ ok: false, errors: ['第 ' + (idx + 1) + ' 个测试点预测失败：' + ((run.results[k] && run.results[k].error) || '未知错误')] });
+        }
+      }
+
+      var prediction = run.results[finalJob].value;
+      var baselinePred = judge.baselines[cfg.baseline](point.history.slice(), cfg.split.horizon, point.ctx);
+      var metrics = {};
+      var baselineMetrics = {};
+      cfg.metrics.forEach(function (m) {
+        metrics[m] = metricValue(m, point.actual, prediction);
+        baselineMetrics[m] = metricValue(m, point.actual, baselinePred);
+        if (finite(metrics[m])) aggregate[m].push(metrics[m]);
+        if (finite(baselineMetrics[m])) baselineAggregate[m].push(baselineMetrics[m]);
+      });
+
+      var intervals = [];
+      var coverage = [];
+      if (cfg.interval.enabled) {
+        var residuals = [];
+        for (var r = 0; r < trainIndex.length; r++) {
+          var pv = run.results[r].value[0];
+          if (finite(pv)) residuals.push(point.history[trainIndex[r]] - pv);
+        }
+        residuals.sort(function (a, b) { return a - b; });
+        intervals = labStats.empiricalIntervals(residuals, cfg.interval.levels);
+        intervals.forEach(function (iv) {
+          var band = labStats.applyInterval(prediction, iv);
+          coverage.push({
+            level: iv.level,
+            n: point.actual.length,
+            rate: labStats.coverage(point.actual, band.lower, band.upper).rate
+          });
+          iv.lower = band.lower;
+          iv.upper = band.upper;
+        });
+      }
+
+      origins.push({
+        index: idx,
+        history: point.history,
+        actual: point.actual,
+        prediction: prediction,
+        baseline: baselinePred,
+        metrics: metrics,
+        baselineMetrics: baselineMetrics,
+        intervals: intervals,
+        coverage: coverage
+      });
+
+      if (typeof session.onOrigin === 'function') session.onOrigin(origins[origins.length - 1], idx + 1, points.length);
+      return yieldControl().then(step);
+    }
+
+    function finish() {
+      var mean = {};
+      var worst = {};
+      var baselineMean = {};
+      var baselineWorst = {};
+      cfg.metrics.forEach(function (m) {
+        var arr = aggregate[m];
+        var barr = baselineAggregate[m];
+        mean[m] = arr.length ? arr.reduce(function (a, b) { return a + b; }, 0) / arr.length : NaN;
+        worst[m] = arr.length ? Math.max.apply(null, arr) : NaN;
+        baselineMean[m] = barr.length ? barr.reduce(function (a, b) { return a + b; }, 0) / barr.length : NaN;
+        baselineWorst[m] = barr.length ? Math.max.apply(null, barr) : NaN;
+      });
+      var durationMs = ((global.performance && global.performance.now) ? global.performance.now() : Date.now()) - started;
+      return {
+        ok: true,
+        canceled: false,
+        schema: 1,
+        appVersion: '3.0.0',
+        algorithmVersion: 'lab-1',
+        datasetVersion: 'datasets-' + ((TSJ.datasets || []).length),
+        createdAt: Date.now(),
+        config: cfg,
+        configHash: hashConfig(cfg),
+        origins: origins,
+        metrics: { mean: mean, worst: worst, baselineMean: baselineMean, baselineWorst: baselineWorst },
+        baseline: cfg.baseline,
+        intervalMeta: cfg.interval.enabled
+          ? { kind: 'residual-empirical', note: '训练段内部一步残差分位；教学演示，非模型原生概率输出' }
+          : null,
+        durationMs: Math.round(durationMs)
+      };
+    }
+
+    return step();
+  }
+
+  TSJ.labRunner = { run: run, hashConfig: hashConfig };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
  * assets/js/app/util.js —— 通用工具：转义、DOM 查询、格式化、防抖
  *
  * 加载顺序：util → core → store → storage → ui → a11y → views → problem → pages → app.js
@@ -7508,7 +11184,11 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
     onboarded: 'tsoj:onboarded',
     filter: 'tsoj:filter',
     schema: 'tsoj:schema',
-    edFont: 'tsoj:edFont'
+    edFont: 'tsoj:edFont',
+    theme: 'tsoj:theme',
+    courseProgress: 'tsoj:courseProgress:v1',
+    lab: 'tsoj:lab:v1',
+    labDraft: 'tsoj:labDraft:v1'
   };
 
   /* ---------- 1. 类型守卫 ---------- */
@@ -8020,11 +11700,12 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
 
   /** 高亮当前导航项。 */
   function setActiveNav(name) {
-    var links = document.querySelectorAll('#nav a');
+    var links = document.querySelectorAll('#nav a, #drawerNav a');
     for (var i = 0; i < links.length; i++) {
       var isOn = links[i].getAttribute('data-nav') === name;
-      if (isOn) links[i].classList.add('on');
-      else links[i].classList.remove('on');
+      links[i].classList.toggle('on', isOn);
+      if (isOn) links[i].setAttribute('aria-current', 'page');
+      else links[i].removeAttribute('aria-current');
     }
   }
 
@@ -8470,6 +12151,99 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
     clearAll: clearAll,
     bindStorageSync: bindStorageSync
   };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app/lifecycle.js —— 路由级生命周期（Scope）
+ *
+ * 目标：把「事件监听 / 定时器 / ResizeObserver / 子销毁器」统一登记到当前路由的
+ * Scope 上，路由切换时一次性销毁。这样图表 hover、实验室轮询、抽屉监听都不会
+ * 跨页面累积，也不用再靠“猜测某个全局变量还在不在”来防泄漏。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+
+  /**
+   * 创建一个可统一销毁的作用域。
+   * @returns {Object} Scope
+   */
+  function createScope(name) {
+    var disposers = [];
+    var children = [];
+    var destroyed = false;
+
+    function listen(target, type, handler, options) {
+      if (!target || !target.addEventListener) return function () {};
+      target.addEventListener(type, handler, options);
+      var off = function () {
+        target.removeEventListener(type, handler, options);
+      };
+      disposers.push(off);
+      return off;
+    }
+
+    function timeout(fn, ms) {
+      var id = global.setTimeout(function () {
+        var i = disposers.indexOf(clear);
+        if (i >= 0) disposers.splice(i, 1);
+        if (!destroyed) fn();
+      }, ms);
+      function clear() { global.clearTimeout(id); }
+      disposers.push(clear);
+      return clear;
+    }
+
+    function interval(fn, ms) {
+      var id = global.setInterval(function () {
+        if (!destroyed) fn();
+      }, ms);
+      function clear() { global.clearInterval(id); }
+      disposers.push(clear);
+      return clear;
+    }
+
+    function own(child) {
+      if (!child) return child;
+      if (typeof child === 'function') {
+        disposers.push(child);
+        return child;
+      }
+      if (typeof child.destroy === 'function') {
+        children.push(child);
+        return child;
+      }
+      return child;
+    }
+
+    function destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      for (var i = 0; i < children.length; i++) {
+        try { children[i].destroy(); } catch (e) { /* 单个子项失败不应阻断其他销毁 */ }
+      }
+      children.length = 0;
+      for (var j = 0; j < disposers.length; j++) {
+        try { disposers[j](); } catch (e2) { /* 同上 */ }
+      }
+      disposers.length = 0;
+    }
+
+    return {
+      name: name || 'scope',
+      listen: listen,
+      timeout: timeout,
+      interval: interval,
+      own: own,
+      destroy: destroy,
+      isDestroyed: function () { return destroyed; }
+    };
+  }
+
+  TSJ.appLifecycle = { createScope: createScope };
 })(typeof window !== 'undefined' ? window : this);
 
 </script>
@@ -9043,6 +12817,107 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
 </script>
 <script>
 /**
+ * assets/js/app/theme.js —— 主题解析（system / light / dark）
+ *
+ * 只用经典 script 与 localStorage，不引入框架。system 通过 matchMedia 监听，
+ * 并在路由 Scope 销毁时解绑；主题写入前做白名单校验，坏值回退为 system。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var doc = global.document;
+  var core = TSJ.appCore;
+
+  var VALID = { system: true, light: true, dark: true };
+  var listeners = [];
+  var media = null;
+  var mediaHandler = null;
+  var current = 'system';
+
+  function readStored() {
+    if (!core || typeof core.readJSON !== 'function') return 'system';
+    var v = core.readJSON(core.STORE.theme, 'system', function (x) {
+      return typeof x === 'string' && VALID[x] === true;
+    });
+    return VALID[v] ? v : 'system';
+  }
+
+  function systemPrefersLight() {
+    return !!(global.matchMedia && global.matchMedia('(prefers-color-scheme: light)').matches);
+  }
+
+  function resolve(theme) {
+    if (theme === 'light' || theme === 'dark') return theme;
+    return systemPrefersLight() ? 'light' : 'dark';
+  }
+
+  function apply(theme) {
+    current = VALID[theme] ? theme : 'system';
+    var resolved = resolve(current);
+    if (doc && doc.documentElement) {
+      doc.documentElement.setAttribute('data-theme', resolved);
+      doc.documentElement.setAttribute('data-theme-mode', current);
+    }
+    for (var i = 0; i < listeners.length; i++) {
+      try { listeners[i](resolved, current); } catch (e) { /* 观察者异常不影响主题切换 */ }
+    }
+  }
+
+  function set(theme) {
+    if (!VALID[theme]) return current;
+    if (core && typeof core.writeJSON === 'function') core.writeJSON(core.STORE.theme, theme);
+    apply(theme);
+    return current;
+  }
+
+  function onChange(fn) {
+    if (typeof fn !== 'function') return function () {};
+    listeners.push(fn);
+    return function () {
+      var i = listeners.indexOf(fn);
+      if (i >= 0) listeners.splice(i, 1);
+    };
+  }
+
+  /** 监听系统主题变化；返回解绑函数。 */
+  function watchSystem() {
+    if (!global.matchMedia) return function () {};
+    media = global.matchMedia('(prefers-color-scheme: light)');
+    mediaHandler = function () {
+      if (current === 'system') apply('system');
+    };
+    if (media.addEventListener) media.addEventListener('change', mediaHandler);
+    else if (media.addListener) media.addListener(mediaHandler);
+    return function () {
+      if (!media) return;
+      if (media.removeEventListener) media.removeEventListener('change', mediaHandler);
+      else if (media.removeListener) media.removeListener(mediaHandler);
+      media = null;
+      mediaHandler = null;
+    };
+  }
+
+  function init() {
+    apply(readStored());
+  }
+
+  TSJ.appTheme = {
+    init: init,
+    get: function () { return current; },
+    resolved: function () { return resolve(current); },
+    set: set,
+    toggle: function () {
+      return set(resolve(current) === 'dark' ? 'light' : 'dark');
+    },
+    onChange: onChange,
+    watchSystem: watchSystem
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
  * assets/js/app/views.js —— 题库页（搜索 / 标签 / 难度 / 随机一题）与判题入口注入
  *
  * 加载顺序：util → core → schema → store → storage → ui → a11y → views → problem → pages → app.js。
@@ -9117,6 +12992,7 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
     html.push('  <input type="search" class="search-input" id="searchInput" placeholder="搜索题号 / 标题 / 标签"' +
       ' aria-label="搜索题目" value="' + esc(st.query) + '">');
     html.push('  <button type="button" class="btn btn-random" id="btnRandom" title="优先从还没通过的题目里抽一题">随机一题</button>');
+    html.push('  <button type="button" class="btn" id="btnTagToggle" aria-expanded="true" aria-controls="tagCloud">标签筛选</button>');
     html.push('  <button type="button" class="btn btn-clear" id="btnClearFilters" hidden>清除筛选</button>');
     html.push('</div>');
 
@@ -9129,7 +13005,7 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
     }
     html.push('</div>');
 
-    html.push('<div class="tag-cloud" role="group" aria-label="按标签筛选">');
+    html.push('<div class="tag-cloud" id="tagCloud" role="group" aria-label="按标签筛选">');
     var tags = allTags();
     for (var g = 0; g < tags.length; g++) {
       var tagOn = st.tag === tags[g] ? ' on' : '';
@@ -9178,6 +13054,21 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
 
     var btnRandom = $('#btnRandom', view);
     if (btnRandom) btnRandom.addEventListener('click', goRandom);
+
+    // 标签云在窄屏默认折叠，保证首屏先给「继续做题」入口；桌面默认展开
+    var tagCloud = $('#tagCloud', view);
+    var tagToggle = $('#btnTagToggle', view);
+    if (tagCloud && tagToggle) {
+      var narrow = !!(global.matchMedia && global.matchMedia('(max-width: 640px)').matches);
+      function setTagCloud(open) {
+        tagCloud.hidden = !open;
+        tagToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+      setTagCloud(!narrow);
+      tagToggle.addEventListener('click', function () {
+        setTagCloud(tagCloud.hidden);
+      });
+    }
 
     var btnClear = $('#btnClearFilters', view);
     if (btnClear) btnClear.addEventListener('click', clearFilters);
@@ -9900,6 +13791,912 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
 </script>
 <script>
 /**
+ * assets/js/app/lab-storage.js —— 实验室记录存储（最近 20 组）
+ *
+ * 导入先完整校验再替换；写入失败不动旧数据；达到上限按时间淘汰。
+ * 记录里保存完整配置、版本、逐 origin 预测/真值/指标与基线，保证可复现。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var KEY = core.STORE.lab;
+  var MAX = 20;
+
+  function isFiniteNumber(v) { return typeof v === 'number' && isFinite(v); }
+
+  function normalizeRecord(r) {
+    if (!r || typeof r !== 'object') return null;
+    if (r.schema !== 1) return null;
+    if (r.algorithmVersion !== 'lab-1') return null;
+    if (!r.config || typeof r.config !== 'object') return null;
+    if (!r.configHash || typeof r.configHash !== 'string') return null;
+    if (!Array.isArray(r.origins) || !r.origins.length) return null;
+    if (!r.metrics || !r.metrics.mean || !r.metrics.worst) return null;
+    return {
+      schema: 1,
+      appVersion: typeof r.appVersion === 'string' ? r.appVersion : '3.0.0',
+      algorithmVersion: 'lab-1',
+      datasetVersion: typeof r.datasetVersion === 'string' ? r.datasetVersion : '',
+      createdAt: isFiniteNumber(r.createdAt) ? r.createdAt : 0,
+      config: r.config,
+      configHash: r.configHash,
+      origins: r.origins,
+      metrics: r.metrics,
+      baseline: typeof r.baseline === 'string' ? r.baseline : '',
+      intervalMeta: r.intervalMeta || null,
+      durationMs: isFiniteNumber(r.durationMs) ? r.durationMs : 0
+    };
+  }
+
+  function list() {
+    var raw = core.readJSON(KEY, [], function (v) { return Array.isArray(v); });
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var rec = normalizeRecord(raw[i]);
+      if (rec) out.push(rec);
+    }
+    out.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+    return out;
+  }
+
+  function save(record) {
+    var rec = normalizeRecord(record);
+    if (!rec) return { ok: false, error: '记录不合法，未保存' };
+    var arr = list().filter(function (x) { return x.configHash !== rec.configHash; });
+    arr.unshift(rec);
+    while (arr.length > MAX) arr.pop();
+    core.writeJSON(KEY, arr);
+    return { ok: true, count: arr.length };
+  }
+
+  function clear() {
+    core.writeJSON(KEY, []);
+  }
+
+  function exportJSON(record) {
+    var rec = normalizeRecord(record);
+    if (!rec) return null;
+    return JSON.stringify({
+      app: 'tsoj-lab',
+      schema: 1,
+      exportedAt: Date.now(),
+      record: rec
+    }, null, 2);
+  }
+
+  function importJSON(text) {
+    var data;
+    try { data = JSON.parse(text); } catch (e) {
+      return { ok: false, error: '不是合法 JSON' };
+    }
+    if (!data || data.app !== 'tsoj-lab') return { ok: false, error: '不是 TSOJ 实验文件' };
+    if (data.schema !== 1) return { ok: false, error: 'schema 不支持：' + data.schema };
+    var rec = normalizeRecord(data.record);
+    if (!rec) return { ok: false, error: '记录字段不完整或算法版本不匹配' };
+    var res = save(rec);
+    if (!res.ok) return { ok: false, error: res.error };
+    return { ok: true, record: rec, count: res.count };
+  }
+
+  TSJ.appLabStorage = {
+    MAX: MAX,
+    list: list,
+    save: save,
+    clear: clear,
+    exportJSON: exportJSON,
+    importJSON: importJSON,
+    normalizeRecord: normalizeRecord
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app/lab-panels.js —— 实验室 UI 面板片段（纯字符串生成）
+ *
+ * 与 app/lab.js 分离：这里不做事件绑定与图表生命周期，只输出 HTML 片段，
+ * 方便控制单文件长度并独立做静态审计。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var esc = core.esc;
+
+  function paramsHtml(method) {
+    var meta = TSJ.labConfig.METHODS[method];
+    if (!meta || !Object.keys(meta.params).length) return '<p class="ds-card-sub">该方法无可调参数。</p>';
+    var rows = Object.keys(meta.params).map(function (key) {
+      var r = meta.params[key];
+      return '<label class="ds-field"><span>' + esc(key) + '（' + r.min + '–' + r.max + '）</span>' +
+        '<input id="param-' + esc(key) + '" type="number" min="' + r.min + '" max="' + r.max + '" step="' + r.step + '" value="' + r.def + '"></label>';
+    });
+    return '<div class="lab-config-row">' + rows.join('') + '</div>';
+  }
+
+  function metricChecks(selected) {
+    return Object.keys(TSJ.labConfig.METRICS).map(function (m) {
+      var on = selected.indexOf(m) >= 0;
+      return '<label class="ds-badge"><input type="checkbox" class="lab-metric" value="' + m + '"' + (on ? ' checked' : '') + '> ' + esc(TSJ.labConfig.METRICS[m].label) + '</label>';
+    }).join('');
+  }
+
+  function configPanel(ctx) {
+    var cfg = ctx.config;
+    return [
+      '<div class="ds-card lab-config">',
+      '  <h2 class="ds-card-title">实验配置</h2>',
+      '  <label class="ds-field"><span>数据集</span><select id="labDataset">',
+      TSJ.datasets.map(function (d) {
+        return '<option value="' + esc(d.id) + '"' + (d.id === cfg.datasetId ? ' selected' : '') + '>' + esc(d.name) + '（' + d.values.length + ' 点 · ' + esc(d.freq) + '）</option>';
+      }).join(''),
+      '  </select></label>',
+      '  <label class="ds-field"><span>方法（白名单）</span><select id="labMethod">',
+      Object.keys(TSJ.labConfig.METHODS).map(function (m) {
+        return '<option value="' + esc(m) + '"' + (m === cfg.method ? ' selected' : '') + '>' + esc(TSJ.labConfig.METHODS[m].label) + '</option>';
+      }).join(''),
+      '  </select></label>',
+      paramsHtml(cfg.method),
+      '  <div class="lab-config-row">',
+      '    <label class="ds-field"><span>切分</span><select id="labMode">',
+      '      <option value="holdout"' + (cfg.split.mode === 'holdout' ? ' selected' : '') + '>留出法</option>',
+      '      <option value="rolling"' + (cfg.split.mode === 'rolling' ? ' selected' : '') + '>滚动回测</option>',
+      '    </select></label>',
+      '    <label class="ds-field"><span>horizon</span><input id="labHorizon" type="number" min="1" max="48" value="' + cfg.split.horizon + '"></label>',
+      '    <label class="ds-field"><span>窗口数</span><input id="labWindows" type="number" min="1" max="12" value="' + cfg.split.windows + '"></label>',
+      '    <label class="ds-field"><span>起点步长</span><input id="labOriginStep" type="number" min="1" max="48" value="' + cfg.split.originStep + '"></label>',
+      '  </div>',
+      '  <div class="ds-field"><span>指标</span><div>' + metricChecks(cfg.metrics) + '</div></div>',
+      '  <label class="ds-field"><span>对照基线</span><select id="labBaseline">',
+      TSJ.labConfig.BASELINES.map(function (b) {
+        return '<option value="' + esc(b) + '"' + (b === cfg.baseline ? ' selected' : '') + '>' + esc(TSJ.judge.baselineLabels[b] || b) + '</option>';
+      }).join(''),
+      '  </select></label>',
+      '  <label class="ds-badge"><input type="checkbox" id="labInterval"' + (cfg.interval.enabled ? ' checked' : '') + '> 残差经验区间（80/95%）</label>',
+      '  <div class="lab-actions">',
+      '    <button class="ds-btn ds-btn-primary" id="labRun">运行实验</button>',
+      '    <button class="ds-btn" id="labReset">恢复默认</button>',
+      '  </div>',
+      '  <p class="md-note"><span>⚠</span><span>区间由训练段内部一步残差分位构造，是教学演示，不是模型原生概率输出；测试真值不参与校准。</span></p>',
+      '</div>'
+    ].join('\n');
+  }
+
+  function originModel(origin) {
+    var n = origin.history.length + origin.actual.length;
+    var split = origin.history.length;
+    function pad(arr) {
+      var out = new Array(n).fill(null);
+      for (var i = 0; i < arr.length; i++) out[split + i] = arr[i];
+      return out;
+    }
+    var intervals = (origin.intervals || []).map(function (iv) {
+      return { level: iv.level, lower: pad(iv.lower || []), upper: pad(iv.upper || []) };
+    });
+    return {
+      n: n,
+      history: origin.history.slice(),
+      actual: pad(origin.actual),
+      prediction: pad(origin.prediction),
+      baseline: pad(origin.baseline),
+      intervals: intervals,
+      splits: [{ index: split, role: 'test', label: '测试起点' }],
+      maxPoints: 1200
+    };
+  }
+
+  function metricTable(result) {
+    var rows = result.config.metrics.map(function (m) {
+      function fmt(v) { return typeof v === 'number' && isFinite(v) ? v.toFixed(3) : '—'; }
+      return '<tr><td>' + esc(TSJ.labConfig.METRICS[m].label) + '</td>' +
+        '<td class="num">' + fmt(result.metrics.mean[m]) + '</td>' +
+        '<td class="num">' + fmt(result.metrics.worst[m]) + '</td>' +
+        '<td class="num">' + fmt(result.metrics.baselineMean[m]) + '</td>' +
+        '<td class="num">' + fmt(result.metrics.baselineWorst[m]) + '</td></tr>';
+    }).join('');
+    return '<div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>指标</th><th class="num">均值</th><th class="num">最差窗口</th><th class="num">基线均值</th><th class="num">基线最差</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function historyPanel() {
+    var list = TSJ.appLabStorage.list();
+    if (!list.length) return '<div class="ds-empty"><strong>还没有实验记录</strong><span>运行成功后会自动保存最近 20 组。</span></div>';
+    return '<div class="lab-history">' + list.map(function (r) {
+      var m = r.metrics && r.metrics.mean || {};
+      var first = Object.keys(m)[0];
+      return '<div class="lab-history-item"><span>' + esc(r.config.datasetId) + ' · ' + esc(r.config.method) + ' · ' + (first ? first.toUpperCase() + ' ' + m[first].toFixed(2) : '—') + '</span>' +
+        '<span><button data-load="' + esc(r.configHash) + '">载入配置</button></span></div>';
+    }).join('') + '</div>';
+  }
+
+  TSJ.appLabPanels = {
+    paramsHtml: paramsHtml,
+    metricChecks: metricChecks,
+    configPanel: configPanel,
+    originModel: originModel,
+    metricTable: metricTable,
+    historyPanel: historyPanel
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app/dashboard.js —— 工作台 #/
+ *
+ * 只汇总本机真实数据：学习进度、做题进度、最近提交、最近实验。
+ * 不显示营销大屏，也不把本地统计说成在线排行。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var store = TSJ.appStore;
+  var esc = core.esc;
+
+  function fmtTime(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts);
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  function readProgress() {
+    return core.readJSON(core.STORE.courseProgress, {}, function (v) {
+      return v && typeof v === 'object' && !Array.isArray(v);
+    });
+  }
+
+  function doneCount(p) {
+    var n = 0;
+    for (var i = 0; i < TSJ.courses.length; i++) {
+      if (p && p[TSJ.courses[i].id] && p[TSJ.courses[i].id].done) n++;
+    }
+    return n;
+  }
+
+  function nextLesson() {
+    var prog = readProgress();
+    var sorted = TSJ.courses.slice().sort(function (a, b) { return a.index - b.index; });
+    for (var i = 0; i < sorted.length; i++) {
+      if (!(prog[sorted[i].id] && prog[sorted[i].id].done)) return sorted[i];
+    }
+    return null;
+  }
+
+  function recentSubmissions(n) {
+    return (store.state.submissions || []).slice().sort(function (a, b) { return b.at - a.at; }).slice(0, n || 5);
+  }
+
+  function recentExperiments(n) {
+    return TSJ.appLabStorage.list().slice(0, n || 5);
+  }
+
+  function render(scope) {
+    var state = store.state;
+    var total = state.totalScore || 0;
+    var passed = 0;
+    var attempts = 0;
+    for (var id in state.progress) {
+      if (state.progress[id].passed) passed++;
+      attempts += state.progress[id].attempts || 0;
+    }
+    var lesson = nextLesson();
+    var subs = recentSubmissions(5);
+    var labs = recentExperiments(5);
+    var courseDone = doneCount(readProgress());
+
+    var html = [
+      '<div class="wk-hero">',
+      '  <div class="wk-hero-main">',
+      '    <div class="wk-kicker">TSOJ v3 · 研究工作台</div>',
+      '    <h1>看数据、选方法、回测、诊断、复盘</h1>',
+      '    <p>先用基线与评估建立可靠判断，再进入高阶方法。所有实验都固定数据版本、切分协议与指标；本地进度可导出，换机器不丢记录。</p>',
+      '    <div class="wk-cta-row">',
+      '      <a class="ds-btn ds-btn-primary" href="#/lab">进入可视化实验室</a>',
+      lesson ? '<a class="ds-btn" href="#/learn/' + encodeURIComponent(lesson.id) + '">继续学习：' + esc(lesson.title) + '</a>' : '<a class="ds-btn" href="#/learn">查看课程地图</a>',
+      '      <a class="ds-btn" href="#/methods">浏览方法库</a>',
+      '    </div>',
+      '  </div>',
+      '  <div class="wk-side-stack">',
+      '    <div class="ds-card"><h2 class="ds-card-title">本机概览</h2><p class="ds-card-sub">数据只保存在当前浏览器。</p>',
+      '      <div class="method-facts">',
+      '        <div class="method-fact"><span>累计等级分</span><b>' + total + '</b></div>',
+      '        <div class="method-fact"><span>已通过题目</span><b>' + passed + ' / ' + TSJ.problems.length + '</b></div>',
+      '        <div class="method-fact"><span>提交次数</span><b>' + attempts + '</b></div>',
+      '        <div class="method-fact"><span>课程完成</span><b>' + courseDone + ' / ' + TSJ.courses.length + '</b></div>',
+      '      </div>',
+      '    </div>',
+      '    <div class="ds-card"><h2 class="ds-card-title">快速入口</h2><div class="wk-list">',
+      '      <a class="wk-list-item" href="#/problems"><span class="wk-list-main"><b>题库</b><span>' + TSJ.problems.length + ' 道可判题练习</span></span><span class="ds-badge">去练习</span></a>',
+      '      <a class="wk-list-item" href="#/learn"><span class="wk-list-main"><b>课程</b><span>8 个模块与先修路径</span></span><span class="ds-badge">去学习</span></a>',
+      '      <a class="wk-list-item" href="#/submissions"><span class="wk-list-main"><b>提交记录</b><span>代码快照与逐测试点复盘</span></span><span class="ds-badge">去复盘</span></a>',
+      '    </div></div>',
+      '  </div>',
+      '</div>',
+
+      '<div class="wk-grid-2">',
+      '  <div class="ds-card"><h2 class="ds-card-title">最近提交</h2><p class="ds-card-sub">点开可看当时的代码与逐测试点。</p>',
+      subs.length ? '<div class="wk-list">' + subs.map(function (s) {
+        return '<a class="wk-list-item" href="#/submission/' + encodeURIComponent(s.id) + '"><span class="wk-list-main"><b>' + esc(s.title) + '</b><span>' + fmtTime(s.at) + ' · ' + esc(s.verdict) + '</span></span><span class="ds-badge">' + s.score + ' 分</span></a>';
+      }).join('') + '</div>' : '<div class="ds-empty"><strong>还没有提交</strong><span>从第 1 题或模板开始，先建立基线直觉。</span><a class="ds-btn" href="#/problem/p1-naive">打开第 1 题</a></div>',
+      '  </div>',
+      '  <div class="ds-card"><h2 class="ds-card-title">最近实验</h2><p class="ds-card-sub">实验室配置与结果保存在本机，可复现。</p>',
+      labs.length ? '<div class="lab-history">' + labs.map(function (r) {
+        var m = r.metrics && r.metrics.mean || {};
+        var first = Object.keys(m)[0];
+        return '<div class="lab-history-item"><span>' + esc(r.config.datasetId) + ' · ' + esc(r.config.method) + '</span><span>' + (first ? (first.toUpperCase() + ' ' + m[first].toFixed(2)) : '—') + '</span></div>';
+      }).join('') + '</div>' : '<div class="ds-empty"><strong>还没有实验</strong><span>选一个数据集和方法，先跑一次受控回测。</span><a class="ds-btn" href="#/lab">打开实验室</a></div>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+
+    document.getElementById('view').innerHTML = html;
+    TSJ.appA11y.setTitle('工作台 · TSOJ');
+  }
+
+  TSJ.appDashboard = { render: render };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app/learn.js —— 课程地图与模块页
+ *
+ * 课程内容全部来自 content/*，本模块只负责渲染、进度与出口链接。
+ * 演示分三级：sandbox 跳实验室、concept 显示流程说明，不冒充运行。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var content = TSJ.content;
+  var esc = core.esc;
+  var KEY = core.STORE.courseProgress;
+
+  function readProgress() {
+    return core.readJSON(KEY, {}, function (v) {
+      return v && typeof v === 'object' && !Array.isArray(v);
+    });
+  }
+
+  function writeProgress(p) { core.writeJSON(KEY, p); }
+
+  function progressOf(p, id) { return !!(p && p[id] && p[id].done); }
+
+  function doneCount(p) {
+    var n = 0;
+    for (var i = 0; i < TSJ.courses.length; i++) if (progressOf(p, TSJ.courses[i].id)) n++;
+    return n;
+  }
+
+  function moduleCard(c, p) {
+    var done = progressOf(p, c.id);
+    var prereq = (c.prereq || []).map(function (id) {
+      var pc = content.course(id);
+      return pc ? pc.title : id;
+    });
+    return [
+      '<article class="course-module">',
+      '  <div class="course-num">' + c.index + '</div>',
+      '  <div>',
+      '    <h3><a href="#/learn/' + encodeURIComponent(c.id) + '">' + esc(c.title) + '</a></h3>',
+      '    <p>' + esc(c.summary) + '</p>',
+      '    <div class="course-tags">',
+      '      <span class="ds-badge">' + esc(c.level) + '</span>',
+      '      <span class="ds-badge">约 ' + c.minutes + ' 分钟</span>',
+      prereq.length ? '<span class="ds-badge">先修：' + esc(prereq.join('、')) + '</span>' : '<span class="ds-badge">无先修</span>',
+      done ? '<span class="ds-badge ds-badge-ok">已完成</span>' : '<span class="ds-badge">未完成</span>',
+      '    </div>',
+      '  </div>',
+      '</article>'
+    ].join('\n');
+  }
+
+  function renderMap(scope) {
+    var p = readProgress();
+    var host = document.getElementById('view');
+    var html = [
+      '<div class="wk-hero"><div class="wk-hero-main">',
+      '  <div class="wk-kicker">课程地图</div>',
+      '  <h1>时序预测完整学习路径</h1>',
+      '  <p>8 个模块覆盖数据基础、经典统计、机器学习、深度学习、概率预测、基础模型、评测与业务实践。先修关系明确，每个模块都有演示、练习与可核查来源。</p>',
+      '  <div class="wk-cta-row">',
+      '    <a class="ds-btn ds-btn-primary" href="#/learn/m1">从第 1 模块开始</a>',
+      '    <a class="ds-btn" href="#/lab">进入可视化实验室</a>',
+      '  </div>',
+      '</div>',
+      '<div class="wk-side-stack">',
+      '  <div class="ds-card"><h2 class="ds-card-title">学习进度</h2><p class="ds-card-sub">完成度只保存在本机。</p>',
+      '  <div class="wk-metric-grid"><div class="wk-metric"><span>已完成模块</span><b>' + doneCount(p) + ' / ' + TSJ.courses.length + '</b><small>点击模块内「标记完成」更新</small></div></div>',
+      '</div></div></div>',
+      '<div class="course-map">'
+    ];
+    var sorted = TSJ.courses.slice().sort(function (a, b) { return a.index - b.index; });
+    for (var i = 0; i < sorted.length; i++) html.push(moduleCard(sorted[i], p));
+    html.push('</div>');
+    host.innerHTML = html.join('\n');
+    TSJ.appA11y.setTitle('课程地图');
+  }
+
+  function demoPanel(c) {
+    if (!c.demo) return '';
+    if (c.demo.kind === 'sandbox') {
+      var preset = c.demo.id ? '?demo=' + encodeURIComponent(c.demo.id) : '';
+      return [
+        '<div class="course-panel"><h3>交互演示</h3>',
+        '<p>该演示在实验室中用内置方法实时计算，不执行你的代码，也不使用测试真值调参。</p>',
+        '<p><a class="ds-btn ds-btn-primary" href="#/lab' + preset + '">' + esc(c.demo.label || '打开演示') + '</a></p>',
+        '</div>'
+      ].join('\n');
+    }
+    return [
+      '<div class="course-panel"><h3>引导演示（概念级）</h3>',
+      '<p>' + esc(c.demo.label || '') + '</p>',
+      '<ol><li>输入序列 → 缩放 / 分 patch / token 化</li><li>预训练权重前向推理</li><li>输出分位数 / 区间</li><li>用基线与校准检查评估，不轻信零样本分数</li></ol>',
+      '<p class="md-note"><span>⚠</span><span>概念级：浏览器不下载权重、不训练基础模型；此处只说明流程与边界。</span></p>',
+      '</div>'
+    ].join('\n');
+  }
+
+  function exercisePanel(c) {
+    var problems = (c.exercise && c.exercise.problemIds || []).map(function (id) {
+      var p = TSJ.findProblem(id);
+      return p ? '<li><a href="#/problem/' + encodeURIComponent(id) + '">' + esc(p.title) + '</a></li>' : '';
+    }).join('');
+    return [
+      '<div class="course-panel"><h3>练习与产出</h3>',
+      '<p>' + esc((c.exercise && c.exercise.output) || '') + '</p>',
+      problems ? '<ul>' + problems + '</ul>' : '<p>本模块以文字产出为主，不绑定具体判题题。</p>',
+      '</div>'
+    ].join('\n');
+  }
+
+  function renderModule(id, scope) {
+    var c = content.course(id);
+    var host = document.getElementById('view');
+    if (!c) {
+      host.innerHTML = '<div class="ds-empty"><strong>模块不存在</strong><span>这个课程 ID 没有对应内容。</span><a class="ds-btn" href="#/learn">返回课程地图</a></div>';
+      TSJ.appA11y.setTitle('模块不存在');
+      return;
+    }
+    var p = readProgress();
+    var done = progressOf(p, c.id);
+    var next = content.nextCourse(c.id);
+    var prev = content.prevCourse(c.id);
+    var html = [
+      '<div class="crumb"><a href="#/learn">课程地图</a> / <span>' + esc(c.title) + '</span></div>',
+      '<article class="course-article">',
+      '  <h1>' + esc(c.index + '. ' + c.title) + '</h1>',
+      '  <p class="ds-card-sub">' + esc(c.summary) + '</p>',
+      '  <div class="course-tags"><span class="ds-badge">' + esc(c.level) + '</span><span class="ds-badge">约 ' + c.minutes + ' 分钟</span>' +
+      (done ? '<span class="ds-badge ds-badge-ok">已完成</span>' : '<span class="ds-badge">未完成</span>') + '</div>',
+      content.renderCourseBody(c),
+      demoPanel(c),
+      exercisePanel(c),
+      '<div class="course-panel"><h3>反例与常见错误</h3><ul>' +
+      (c.counterexamples || []).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>',
+      '<div class="course-panel"><h3>参考来源</h3>' + content.referenceListHtml(c.referenceIds) + '</div>',
+      '<div class="course-panel"><h3>完成度</h3><p>标记完成只写入本机，不参与排行榜。</p>',
+      '  <button class="ds-btn ' + (done ? '' : 'ds-btn-primary') + '" id="btnCourseDone" data-done="' + (done ? '1' : '0') + '">' + (done ? '取消完成标记' : '标记本模块完成') + '</button>',
+      '</div>',
+      '<div class="wk-cta-row">',
+      prev ? '<a class="ds-btn" href="#/learn/' + encodeURIComponent(prev.id) + '">上一课：' + esc(prev.title) + '</a>' : '',
+      next ? '<a class="ds-btn ds-btn-primary" href="#/learn/' + encodeURIComponent(next.id) + '">下一课：' + esc(next.title) + '</a>' : '<a class="ds-btn ds-btn-primary" href="#/lab">进入实验室</a>',
+      '</div>',
+      '</article>'
+    ].join('\n');
+    host.innerHTML = html;
+
+    var btn = document.getElementById('btnCourseDone');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        var prog = readProgress();
+        var isDone = btn.getAttribute('data-done') === '1';
+        if (isDone) delete prog[c.id];
+        else prog[c.id] = { done: true, at: Date.now() };
+        writeProgress(prog);
+        TSJ.appA11y.toast(isDone ? '已取消完成标记' : '已标记完成：' + c.title, 'ok');
+        renderModule(c.id, scope);
+      });
+    }
+    TSJ.appA11y.setTitle(c.title + ' · 课程');
+  }
+
+  TSJ.appLearn = { renderMap: renderMap, renderModule: renderModule, readProgress: readProgress, doneCount: doneCount };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app/method-detail.js —— 方法详情页 #/methods/:id
+ *
+ * 卡片字段仍来自 methods.js；本页只追加详情层与出口，不复制方法卡内容。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var content = TSJ.content;
+  var esc = core.esc;
+
+  var RUN_LABEL = {
+    sandbox: { text: '可沙箱运行', cls: 'ds-badge-ok' },
+    precomputed: { text: '预计算演示', cls: 'ds-badge-accent' },
+    concept: { text: '概念级不可沙箱运行', cls: 'ds-badge-warn' }
+  };
+
+  function practiceButton(m) {
+    if (!m.practice) return '<span class="ds-badge">暂无对应题目</span>';
+    var p = TSJ.findProblem(m.practice);
+    if (!p) return '<span class="ds-badge ds-badge-err">题目不存在：' + esc(m.practice) + '</span>';
+    return '<a class="ds-btn ds-btn-primary" href="#/problem/' + encodeURIComponent(m.practice) + '">去练这道题</a>';
+  }
+
+  function render(id, scope) {
+    var m = TSJ.methodsById(id);
+    var host = document.getElementById('view');
+    if (!m) {
+      if (global.location && global.location.replace) global.location.replace('#/methods');
+      host.innerHTML = '<div class="ds-empty"><strong>方法不存在</strong><span>已返回方法库。</span><a class="ds-btn" href="#/methods">返回方法库</a></div>';
+      TSJ.appA11y.setTitle('方法不存在');
+      return;
+    }
+    var d = content.methodDetail(id) || {};
+    var run = RUN_LABEL[d.runLevel] || RUN_LABEL.concept;
+    var problems = TSJ.problems.filter(function (p) { return p.tags && p.tags.indexOf(m.name) >= 0; }).slice(0, 6);
+
+    var html = [
+      '<div class="crumb"><a href="#/methods">方法库</a> / <span>' + esc(m.name) + '</span></div>',
+      '<div class="method-layout"><div>',
+      '  <h1>' + esc(m.name) + '</h1>',
+      '  <p class="ds-card-sub">' + esc(m.title) + ' · ' + esc(m.venue) + '</p>',
+      '  <div class="course-tags"><span class="ds-badge ' + run.cls + '">' + run.text + '</span>' +
+      m.tags.map(function (t) { return '<span class="ds-badge">' + esc(t) + '</span>'; }).join('') + '</div>',
+
+      '  <div class="method-section"><h2>核心思想</h2><p>' + esc(m.idea) + '</p></div>',
+      '  <div class="method-section"><h2>直觉解释</h2><p>' + esc(d.intuition || '') + '</p></div>',
+      '  <div class="method-section"><h2>关键式子</h2><div class="md-formula"><div>' + esc(m.formula) + '</div></div></div>',
+      '  <div class="method-section"><h2>什么时候用</h2><p>' + esc(m.when) + '</p></div>',
+      '  <div class="method-section"><h2>假设与复杂度</h2><ul>' +
+      (d.assumptions || []).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') +
+      (d.complexity ? '<li>复杂度：' + esc(d.complexity) + '</li>' : '') + '</ul></div>',
+      '  <div class="method-section"><h2>局限与反例</h2><p>' + esc(m.limit) + '</p><ul>' +
+      (d.limitations || []).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') +
+      '</ul><p><b>反例：</b>' + esc(d.counterexample || '') + '</p></div>',
+      '  <div class="method-section"><h2>数值小例</h2><p>' + esc(d.workedExample || '') + '</p></div>',
+      '  <div class="method-section"><h2>相关题目</h2>' +
+      (problems.length ? '<ul>' + problems.map(function (p) {
+        return '<li><a href="#/problem/' + encodeURIComponent(p.id) + '">' + esc(p.title) + '</a></li>';
+      }).join('') + '</ul>' : '<p>暂无按标签匹配的题目。</p>') + '</div>',
+      '  <div class="method-section"><h2>参考来源</h2>' + content.referenceListHtml(d.referenceIds || []) + '</div>',
+      '</div>',
+      '<aside class="method-aside">',
+      '  <div class="ds-card"><h2 class="ds-card-title">出口</h2><div class="method-facts">',
+      '    <div class="method-fact"><span>对应题目</span><b>' + (m.practice ? esc(m.practice) : '无') + '</b></div>',
+      '    <div class="method-fact"><span>运行级别</span><b>' + run.text + '</b></div>',
+      '    <div class="method-fact"><span>方法层次</span><b>' + esc(m.tier) + '</b></div>',
+      '  </div>' + practiceButton(m),
+      '  <p><a class="ds-btn" href="#/methods">返回方法库</a></p></div>',
+      '  <div class="ds-card"><h2 class="ds-card-title">方法卡字段</h2><div class="method-facts">',
+      '    <div class="method-fact"><span>发表处</span><b>' + esc(m.venue) + '</b></div>',
+      '    <div class="method-fact"><span>作者</span><b>' + esc(m.authors || '—') + '</b></div>',
+      '    <div class="method-fact"><span>年份</span><b>' + esc(m.year || '—') + '</b></div>',
+      '  </div></div>',
+      '</aside></div>'
+    ].join('\n');
+    host.innerHTML = html;
+    TSJ.appA11y.setTitle(m.name + ' · 方法详情');
+  }
+
+  TSJ.appMethodDetail = { render: render };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app/lab.js —— 可视化实验室 #/lab
+ *
+ * 受控实验：白名单方法、有限参数、确定性回测、诊断图表与最近记录。
+ * 用户不能提交代码；测试真值不参与校准或调参。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var store = TSJ.appStore;
+  var esc = core.esc;
+  var doc = global.document;
+  var panels = TSJ.appLabPanels;
+
+  var KINDS = [
+    { id: 'forecast', label: '预测对比' },
+    { id: 'residual', label: '残差' },
+    { id: 'acf', label: 'ACF' },
+    { id: 'pacf', label: 'PACF' },
+    { id: 'decomposition', label: '季节分解' }
+  ];
+
+  function $(id) { return doc.getElementById(id); }
+
+  function currentConfigFromUI() {
+    var raw = {
+      datasetId: $('labDataset').value,
+      method: $('labMethod').value,
+      params: {},
+      split: {
+        mode: $('labMode').value,
+        horizon: Number($('labHorizon').value),
+        windows: Number($('labWindows').value),
+        originStep: Number($('labOriginStep').value)
+      },
+      metrics: [].map.call(doc.querySelectorAll('.lab-metric:checked'), function (c) {
+        return c.getAttribute('value');
+      }).filter(function (v) { return !!v; }),
+      baseline: $('labBaseline').value,
+      interval: { enabled: $('labInterval').checked, levels: [80, 95] }
+    };
+    var meta = TSJ.labConfig.METHODS[raw.method] || { params: {} };
+    Object.keys(meta.params).forEach(function (key) {
+      var el = $('param-' + key);
+      if (el) raw.params[key] = Number(el.value);
+    });
+    return raw;
+  }
+
+
+  function render(scope) {
+    var initial = TSJ.labConfig.normalize(TSJ.labConfig.defaults());
+    var ctx = {
+      config: initial.config,
+      result: null,
+      originIndex: 0,
+      kind: 'forecast',
+      chart: null,
+      token: 0,
+      busy: false
+    };
+
+    function cleanup() {
+      ctx.token++;
+      ctx.busy = false;
+      if (ctx.chart && ctx.chart.destroy) ctx.chart.destroy();
+      ctx.chart = null;
+    }
+    if (scope && typeof scope.own === 'function') scope.own({ destroy: cleanup });
+
+    function paintChart() {
+      var wrap = $('labChartWrap');
+      var canvas = $('labCanvas');
+      var summary = $('labChartSummary');
+      if (!wrap || !canvas || !ctx.result) return;
+      if (ctx.chart && ctx.chart.destroy) ctx.chart.destroy();
+      var origin = ctx.result.origins[ctx.originIndex] || ctx.result.origins[0];
+      var model;
+      var kind = ctx.kind;
+      if (kind === 'forecast') model = panels.originModel(origin);
+      else if (kind === 'residual') {
+        model = { residuals: origin.actual.map(function (a, i) { return a - origin.prediction[i]; }) };
+      } else if (kind === 'acf' || kind === 'pacf') {
+        var residuals = origin.actual.map(function (a, i) { return a - origin.prediction[i]; });
+        var fn = kind === 'acf' ? TSJ.chartStats.acf : TSJ.chartStats.pacf;
+        var lags = 20;
+        model = {
+          name: kind.toUpperCase(),
+          values: fn(residuals, lags),
+          lags: Array.from({ length: lags + 1 }, function (_, i) { return i; }),
+          conf: new Array(lags + 1).fill(1.96 / Math.sqrt(Math.max(2, residuals.length)))
+        };
+      } else {
+        var season = (TSJ.datasets.find(function (d) { return d.id === ctx.result.config.datasetId; }) || {}).season || 1;
+        var parts = TSJ.chartStats.decomposeAdditive(origin.history, season);
+        model = parts ? { series: origin.history, parts: parts } : { series: [] };
+      }
+      ctx.chart = TSJ.charts.create(canvas, {
+        kind: kind,
+        scope: scope,
+        height: 300,
+        unit: (TSJ.datasets.find(function (d) { return d.id === ctx.result.config.datasetId; }) || {}).unit || '',
+        ariaLabel: KINDS.filter(function (k) { return k.id === kind; })[0].label,
+        onInspect: function () {}
+      });
+      ctx.chart.update(model);
+      summary.textContent = ctx.chart.summary() || '';
+    }
+
+    function paintResults() {
+      var box = $('labResults');
+      if (!ctx.result) {
+        box.innerHTML = '<div class="ds-empty"><strong>还没有运行</strong><span>选好配置后点「运行实验」。</span></div>';
+        return;
+      }
+      var r = ctx.result;
+      var originButtons = r.origins.map(function (o, i) {
+        return '<button class="ds-btn ds-btn-sm' + (i === ctx.originIndex ? ' ds-btn-primary' : '') + '" data-origin="' + i + '">#' + (i + 1) + '</button>';
+      }).join('');
+      var kindButtons = KINDS.map(function (k) {
+        return '<button class="ds-btn ds-btn-sm' + (k.id === ctx.kind ? ' ds-btn-primary' : '') + '" data-kind="' + k.id + '">' + k.label + '</button>';
+      }).join('');
+      var coverage = '';
+      var o = r.origins[ctx.originIndex] || r.origins[0];
+      if (o && o.coverage && o.coverage.length) {
+        coverage = '<p class="chart-v2-summary">经验覆盖：' + o.coverage.map(function (c) {
+          return c.level + '% → ' + (isFinite(c.rate) ? (c.rate * 100).toFixed(0) + '%' : '—') + '（n=' + c.n + '）';
+        }).join(' · ') + '</p>';
+      }
+      box.innerHTML = [
+        '<div class="ds-card"><h2 class="ds-card-title">结果摘要</h2>',
+        '<p class="ds-card-sub">配置指纹 ' + esc(r.configHash) + ' · 数据版本 ' + esc(r.datasetVersion) + ' · 算法版本 ' + esc(r.algorithmVersion) + ' · 耗时 ' + r.durationMs + 'ms</p>',
+        panels.metricTable(r),
+        '<div class="lab-actions">' + originButtons + '</div>',
+        '<div class="lab-actions">' + kindButtons + '</div>',
+        '<div class="chart-v2"><div class="chart-v2-head"><h3>' + esc(KINDS.filter(function (k) { return k.id === ctx.kind; })[0].label) + '</h3>' +
+        '<div class="chart-v2-legend"><span><i style="border-color:var(--v3-chart-history)"></i>历史</span><span><i style="border-color:var(--v3-chart-actual)"></i>真值</span><span><i style="border-color:var(--v3-chart-pred);border-top-style:dashed"></i>预测</span><span><i style="border-color:var(--v3-chart-baseline);border-top-style:dotted"></i>基线</span></div></div>',
+        '<div class="chart-v2-canvas-wrap" id="labChartWrap"><canvas id="labCanvas"></canvas></div>',
+        '<p class="chart-v2-summary" id="labChartSummary"></p>',
+        coverage,
+        '</div></div>'
+      ].join('\n');
+      paintChart();
+      bindResultButtons();
+    }
+
+    function bindResultButtons() {
+      [].forEach.call(doc.querySelectorAll('[data-origin]'), function (b) {
+        b.addEventListener('click', function () {
+          ctx.originIndex = Number(b.getAttribute('data-origin'));
+          paintResults();
+        });
+      });
+      [].forEach.call(doc.querySelectorAll('[data-kind]'), function (b) {
+        b.addEventListener('click', function () {
+          ctx.kind = b.getAttribute('data-kind');
+          paintResults();
+        });
+      });
+    }
+
+    function setStatus(text, busy) {
+      var el = $('labStatus');
+      if (el) el.textContent = text;
+      var run = $('labRun');
+      if (run) run.disabled = !!busy;
+      ctx.busy = !!busy;
+    }
+
+    function run() {
+      if (ctx.busy) return;
+      var raw = currentConfigFromUI();
+      var norm = TSJ.labConfig.normalize(raw);
+      if (!norm.ok) {
+        TSJ.appA11y.toast('配置无效：' + norm.errors[0], 'err');
+        return;
+      }
+      ctx.config = norm.config;
+      cleanup();
+      setStatus('正在运行…', true);
+      var session = {
+        token: ctx.token,
+        onOrigin: function (o, i, total) { setStatus('正在运行… ' + i + '/' + total, true); }
+      };
+      TSJ.labRunner.run(ctx.config, session).then(function (res) {
+        if (res.canceled) return;
+        if (!res.ok) {
+          setStatus('运行失败', false);
+          TSJ.appA11y.toast((res.errors && res.errors[0]) || '运行失败', 'err');
+          return;
+        }
+        ctx.result = res;
+        ctx.originIndex = 0;
+        setStatus('完成 · ' + res.origins.length + ' 个测试点', false);
+        TSJ.appLabStorage.save(res);
+        paintResults();
+        var host = $('labHistory');
+        if (host) host.innerHTML = panels.historyPanel();
+      }).catch(function (err) {
+        setStatus('运行异常', false);
+        TSJ.appA11y.toast((err && err.message) || String(err), 'err');
+      });
+    }
+
+    function bind() {
+      $('labRun').addEventListener('click', run);
+      $('labReset').addEventListener('click', function () {
+        var d = TSJ.labConfig.defaults();
+        render(scope);
+        TSJ.appA11y.toast('已恢复默认配置', 'ok');
+      });
+      $('labMethod').addEventListener('change', function () {
+        var raw = currentConfigFromUI();
+        raw.method = $('labMethod').value;
+        var norm = TSJ.labConfig.normalize(raw);
+        ctx.config = norm.config;
+        render(scope);
+      });
+      $('labMode').addEventListener('change', function () {
+        var raw = currentConfigFromUI();
+        var norm = TSJ.labConfig.normalize(raw);
+        ctx.config = norm.config;
+        render(scope);
+      });
+      var file = $('labImport');
+      if (file) {
+        file.addEventListener('change', function () {
+          var f = file.files && file.files[0];
+          if (!f) return;
+          var reader = new global.FileReader();
+          reader.onload = function () {
+            var res = TSJ.appLabStorage.importJSON(String(reader.result || ''));
+            if (!res.ok) { TSJ.appA11y.toast('导入失败：' + res.error, 'err'); return; }
+            TSJ.appA11y.toast('已导入实验记录', 'ok');
+            var host = $('labHistory');
+            if (host) host.innerHTML = panels.historyPanel();
+          };
+          reader.readAsText(f);
+        });
+      }
+      var exportBtn = $('labExport');
+      if (exportBtn) {
+        exportBtn.addEventListener('click', function () {
+          if (!ctx.result) { TSJ.appA11y.toast('还没有可导出的结果', 'err'); return; }
+          var text = TSJ.appLabStorage.exportJSON(ctx.result);
+          var blob = new global.Blob([text], { type: 'application/json' });
+          var a = doc.createElement('a');
+          a.href = global.URL.createObjectURL(blob);
+          a.download = 'tsoj-lab-' + ctx.result.configHash + '.json';
+          a.click();
+          global.URL.revokeObjectURL(a.href);
+        });
+      }
+      [].forEach.call(doc.querySelectorAll('[data-load]'), function (b) {
+        b.addEventListener('click', function () {
+          var hash = b.getAttribute('data-load');
+          var rec = TSJ.appLabStorage.list().filter(function (r) { return r.configHash === hash; })[0];
+          if (!rec) return;
+          render(scope);
+          // 重新渲染后用记录配置填充
+          var norm = TSJ.labConfig.normalize(rec.config);
+          ctx.config = norm.config;
+          TSJ.appA11y.toast('已载入配置，点「运行实验」复现', 'ok');
+        });
+      });
+    }
+
+    var host = doc.getElementById('view');
+    host.innerHTML = [
+      '<div class="wk-hero"><div class="wk-hero-main">',
+      '  <div class="wk-kicker">可视化实验室</div>',
+      '  <h1>受控回测与诊断</h1>',
+      '  <p>选数据、选白名单方法、调有限参数，立即得到确定性结果与诊断图。候选与基线共享同一切分；测试真值不参与校准。</p>',
+      '</div></div>',
+      '<div class="lab-layout">',
+      panels.configPanel(ctx),
+      '<div class="lab-results">',
+      '  <div class="ds-card"><h2 class="ds-card-title">运行状态</h2><div class="lab-status"><span id="labStatus">空闲</span>' +
+      '    <button class="ds-btn ds-btn-sm" id="labExport">导出当前结果</button>' +
+      '    <label class="ds-btn ds-btn-sm"><input type="file" id="labImport" accept="application/json" style="display:none">导入实验</label></div></div>',
+      '  <div id="labResults"><div class="ds-empty"><strong>还没有运行</strong><span>选好配置后点「运行实验」。</span></div></div>',
+      '  <div class="ds-card"><h2 class="ds-card-title">最近实验</h2><div id="labHistory">' + panels.historyPanel() + '</div></div>',
+      '</div>',
+      '</div>'
+    ].join('\n');
+
+    bind();
+    TSJ.appA11y.setTitle('可视化实验室 · TSOJ');
+  }
+
+  TSJ.appLab = { render: render };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
  * assets/js/app/library.js —— 方法库（知识库）页面：#/methods
  * 加载顺序：… app/pages → app/library → app/boards → app.js　挂载点：window.TSJ.appLibrary
  * 数据来自 assets/js/methods.js（内容层，只读）：本文件只做「筛选 → 卡片」的映射，不改写任何文案。
@@ -10336,6 +15133,12 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
   var library = TSJ.appLibrary;
   var boards = TSJ.appBoards;
   var judge = TSJ.judge;
+  var lifecycle = TSJ.appLifecycle;
+  var theme = TSJ.appTheme;
+  var dashboard = TSJ.appDashboard;
+  var learn = TSJ.appLearn;
+  var methodDetail = TSJ.appMethodDetail;
+  var lab = TSJ.appLab;
 
   var $ = core.$;
   var esc = core.esc;
@@ -10348,10 +15151,15 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
   /* ---------- 1. 路由 ---------- */
   /** 解析 hash 并渲染对应视图。 */
   function route() {
-    var hash = global.location.hash || '#/problems';
+    var hash = global.location.hash || '#/';
     var path = hash.replace(/^#\/?/, '');
     var parts = path.split('/').filter(function (s) { return s.length > 0; });
-    var view = parts[0] || 'problems';
+    var view = parts[0] || 'dashboard';
+
+    // 路由级生命周期：新 Scope 建立前先销毁旧页面的监听 / 图表 / 定时器
+    var scope = lifecycle.createScope('route');
+    if (state.routeScope && typeof state.routeScope.destroy === 'function') state.routeScope.destroy();
+    state.routeScope = scope;
 
     // 切换路由前销毁旧编辑器与旧图表 hover 句柄（否则 pointermove 监听会累积）
     if (state.editor && typeof state.editor.destroy === 'function') state.editor.destroy();
@@ -10374,7 +15182,7 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
     if (view === 'problem' && parts[1]) {
       var p = TSJ.findProblem(decodeURIComponent(parts[1]));
       store.setActiveNav('problems');
-      problem.renderProblem(parts[1]);
+      problem.renderProblem(parts[1], scope);
       a11y.setTitle(p ? p.title : '题目不存在');
     } else if (view === 'submission' && parts[1]) {
       store.setActiveNav('submissions');
@@ -10392,10 +15200,25 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
       store.setActiveNav('path');
       boards.renderPath();
       a11y.setTitle('学习路径');
+    } else if (view === 'methods' && parts[1]) {
+      store.setActiveNav('methods');
+      methodDetail.render(decodeURIComponent(parts[1]), scope);
     } else if (view === 'methods') {
       store.setActiveNav('methods');
       library.renderMethods();
       a11y.setTitle('方法库');
+    } else if (view === 'learn' && parts[1]) {
+      store.setActiveNav('learn');
+      learn.renderModule(decodeURIComponent(parts[1]), scope);
+    } else if (view === 'learn') {
+      store.setActiveNav('learn');
+      learn.renderMap(scope);
+    } else if (view === 'lab') {
+      store.setActiveNav('lab');
+      lab.render(scope);
+    } else if (view === 'dashboard') {
+      store.setActiveNav('dashboard');
+      dashboard.render(scope);
     } else {
       store.setActiveNav('problems');
       views.renderProblemList();
@@ -10529,6 +15352,55 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
   }
 
   /* ---------- 3. 启动 ---------- */
+  /** 绑定主题切换与移动端抽屉（只绑一次，挂在应用级 Scope 上）。 */
+  function bindShell() {
+    var rootScope = lifecycle.createScope('app');
+    state.appScope = rootScope;
+
+    theme.init();
+    var btn = $('#btnTheme');
+    function paintTheme() {
+      if (!btn) return;
+      var mode = theme.get();
+      btn.textContent = mode === 'system' ? '主题：跟随系统' : (mode === 'dark' ? '主题：深色' : '主题：浅色');
+      btn.setAttribute('aria-pressed', theme.resolved() === 'light' ? 'true' : 'false');
+    }
+    paintTheme();
+    theme.onChange(paintTheme);
+    rootScope.own(theme.watchSystem());
+
+    if (btn) {
+      rootScope.listen(btn, 'click', function () {
+        theme.toggle();
+        paintTheme();
+      });
+    }
+
+    var menu = $('#btnMenu');
+    var drawer = $('#drawerNav');
+    function closeDrawer() {
+      if (!drawer || !menu) return;
+      drawer.classList.remove('open');
+      menu.setAttribute('aria-expanded', 'false');
+    }
+    if (menu && drawer) {
+      rootScope.listen(menu, 'click', function () {
+        var open = drawer.classList.toggle('open');
+        menu.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      rootScope.listen(drawer, 'click', function (ev) {
+        if (ev.target && ev.target.tagName === 'A') closeDrawer();
+      });
+      rootScope.listen(doc(), 'keydown', function (ev) {
+        if (ev.key === 'Escape') closeDrawer();
+      });
+    }
+
+    global.addEventListener('hashchange', route);
+  }
+
+  function doc() { return global.document; }
+
   /** 应用初始化。 */
   function init() {
     // 读出的数据一律视为不可信：先过类型守卫（不合法则丢弃并静默重写），再逐字段归一化
@@ -10548,9 +15420,9 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
     store.onExternalChange(function () { route(); });
     storage.bindStorageSync();
 
-    global.addEventListener('hashchange', route);
+    bindShell();
 
-    if (!global.location.hash) global.location.hash = '#/problems';
+    if (!global.location.hash) global.location.hash = '#/';
     route();
     store.updateScoreChip();
 

@@ -19,7 +19,10 @@
 <meta http-equiv="Content-Security-Policy" content="connect-src 'none'">
 <title>时序竞技场 TSOJ · 时间序列预测在线判题</title>
 <meta name="description" content="时序竞技场 TSOJ：写 predict 函数、提交、打败统计基线得分并解锁题解的纯前端时间序列预测判题平台。">
-<link rel="stylesheet" href="assets/css/style.css?v=2.2.0">
+<link rel="stylesheet" href="assets/css/tokens.css?v=3.0.0">
+<link rel="stylesheet" href="assets/css/style.css?v=3.0.0">
+<link rel="stylesheet" href="assets/css/components.css?v=3.0.0">
+<link rel="stylesheet" href="assets/css/pages-v3.css?v=3.0.0">
 
 <!-- 启动自检：脚本被拦 / 加载失败 / 1.5s 内没渲染出内容 → 直接把原因显示出来，绝不留白屏 -->
 <script>
@@ -93,8 +96,8 @@
 <body>
 
 <!-- ============ 顶部固定栏 ============ -->
-<header class="topbar">
-  <a class="brand" href="#/problems" aria-label="时序竞技场 TSOJ 首页">
+<header class="topbar wk-topbar">
+  <a class="brand wk-brand" href="#/" aria-label="时序竞技场 TSOJ 工作台">
     <svg class="brand-logo" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <rect x="1.6" y="1.6" width="20.8" height="20.8" rx="6.4" stroke="currentColor" stroke-width="1.3" opacity="0.5"/>
       <path d="M5 15.6l3.5-3.9 3 2.3L18.6 7.2" stroke="currentColor" stroke-width="1.7"
@@ -104,25 +107,42 @@
     <span class="brand-text">时序竞技场 <b>TSOJ</b></span>
   </a>
 
-  <nav class="nav" id="nav" aria-label="主导航">
+  <nav class="nav wk-nav" id="nav" aria-label="主导航">
+    <a href="#/" data-nav="dashboard">工作台</a>
     <a href="#/problems" data-nav="problems">题库</a>
     <a href="#/methods" data-nav="methods">方法库</a>
+    <a href="#/learn" data-nav="learn">课程</a>
+    <a href="#/lab" data-nav="lab">实验室</a>
     <a href="#/submissions" data-nav="submissions">提交记录</a>
     <a href="#/ranking" data-nav="ranking">排行榜</a>
     <a href="#/path" data-nav="path">学习路径</a>
   </nav>
 
-  <div class="topbar-right">
-    <div class="score-chip" id="scoreChip" title="累计等级分 = 各题历史最高分之和">
+  <div class="topbar-right wk-actions">
+    <button class="ds-btn ds-btn-ghost ds-btn-sm" id="btnTheme" type="button" aria-label="切换深浅主题">主题</button>
+    <div class="score-chip wk-score" id="scoreChip" title="累计等级分 = 各题历史最高分之和">
       <span class="lv" id="lvText">Lv.1</span>
       <span class="pts" id="ptsText">0 分</span>
     </div>
+    <button class="ds-btn ds-btn-sm wk-menu-btn" id="btnMenu" type="button" aria-expanded="false" aria-controls="drawerNav">菜单</button>
   </div>
 </header>
 
+<nav class="wk-drawer" id="drawerNav" aria-label="移动端主导航">
+  <a href="#/" data-nav="dashboard">工作台</a>
+  <a href="#/problems" data-nav="problems">题库</a>
+  <a href="#/methods" data-nav="methods">方法库</a>
+  <a href="#/learn" data-nav="learn">课程</a>
+  <a href="#/lab" data-nav="lab">实验室</a>
+  <a href="#/submissions" data-nav="submissions">提交记录</a>
+  <a href="#/ranking" data-nav="ranking">排行榜</a>
+  <a href="#/path" data-nav="path">学习路径</a>
+</nav>
+
 <!-- ============ 视图容器 ============
      tabindex="-1"：路由切换后把焦点交给 #view，读屏用户能感知「内容已更新」 -->
-<main id="view" class="view" role="main" tabindex="-1"></main>
+<a class="ds-skip-link" href="#view">跳到主要内容</a>
+<main id="view" class="view wk-main" role="main" tabindex="-1"></main>
 
 <!-- ============ 引导 / 弹层 ============
      role/aria-modal 由 app/a11y.js 在打开时再确认一次；关闭后焦点回到 #view -->
@@ -135,24 +155,43 @@
      应用层顺序固定：util → core → schema → store → storage → ui → a11y → views → problem → pages → library → boards → app.js
      （app.js 必须最后，末尾同步 init()） -->
 <noscript><p style="padding:24px;color:#ff9b9b;font:14px system-ui">本页面需要 JavaScript：请在浏览器设置中启用后刷新。</p></noscript>
-<script src="assets/js/datasets.js?v=2.2.0"></script>
-<script src="assets/js/problems.js?v=2.2.0"></script>
-<script src="assets/js/methods.js?v=2.2.0"></script>
-<script src="assets/js/judge.js?v=2.2.0"></script>
-<script src="assets/js/editor.js?v=2.2.0"></script>
-<script src="assets/js/chart.js?v=2.2.0"></script>
-<script src="assets/js/app/util.js?v=2.2.0"></script>
-<script src="assets/js/app/core.js?v=2.2.0"></script>
-<script src="assets/js/app/schema.js?v=2.2.0"></script>
-<script src="assets/js/app/store.js?v=2.2.0"></script>
-<script src="assets/js/app/storage.js?v=2.2.0"></script>
-<script src="assets/js/app/ui.js?v=2.2.0"></script>
-<script src="assets/js/app/a11y.js?v=2.2.0"></script>
-<script src="assets/js/app/views.js?v=2.2.0"></script>
-<script src="assets/js/app/problem.js?v=2.2.0"></script>
-<script src="assets/js/app/pages.js?v=2.2.0"></script>
-<script src="assets/js/app/library.js?v=2.2.0"></script>
-<script src="assets/js/app/boards.js?v=2.2.0"></script>
-<script src="assets/js/app.js?v=2.2.0"></script>
+<script src="assets/js/datasets.js?v=3.0.0"></script>
+<script src="assets/js/problems.js?v=3.0.0"></script>
+<script src="assets/js/methods.js?v=3.0.0"></script>
+<script src="assets/js/content/references.js?v=3.0.0"></script>
+<script src="assets/js/content/courses.js?v=3.0.0"></script>
+<script src="assets/js/content/method-details.js?v=3.0.0"></script>
+<script src="assets/js/content/content.js?v=3.0.0"></script>
+<script src="assets/js/judge.js?v=3.0.0"></script>
+<script src="assets/js/editor.js?v=3.0.0"></script>
+<script src="assets/js/chart.js?v=3.0.0"></script>
+<script src="assets/js/charts/core.js?v=3.0.0"></script>
+<script src="assets/js/charts/series.js?v=3.0.0"></script>
+<script src="assets/js/charts/diagnostics.js?v=3.0.0"></script>
+<script src="assets/js/lab/config.js?v=3.0.0"></script>
+<script src="assets/js/lab/adapters.js?v=3.0.0"></script>
+<script src="assets/js/lab/stats.js?v=3.0.0"></script>
+<script src="assets/js/lab/runner.js?v=3.0.0"></script>
+<script src="assets/js/app/util.js?v=3.0.0"></script>
+<script src="assets/js/app/core.js?v=3.0.0"></script>
+<script src="assets/js/app/schema.js?v=3.0.0"></script>
+<script src="assets/js/app/store.js?v=3.0.0"></script>
+<script src="assets/js/app/storage.js?v=3.0.0"></script>
+<script src="assets/js/app/lifecycle.js?v=3.0.0"></script>
+<script src="assets/js/app/ui.js?v=3.0.0"></script>
+<script src="assets/js/app/a11y.js?v=3.0.0"></script>
+<script src="assets/js/app/theme.js?v=3.0.0"></script>
+<script src="assets/js/app/views.js?v=3.0.0"></script>
+<script src="assets/js/app/problem.js?v=3.0.0"></script>
+<script src="assets/js/app/pages.js?v=3.0.0"></script>
+<script src="assets/js/app/lab-storage.js?v=3.0.0"></script>
+<script src="assets/js/app/lab-panels.js?v=3.0.0"></script>
+<script src="assets/js/app/dashboard.js?v=3.0.0"></script>
+<script src="assets/js/app/learn.js?v=3.0.0"></script>
+<script src="assets/js/app/method-detail.js?v=3.0.0"></script>
+<script src="assets/js/app/lab.js?v=3.0.0"></script>
+<script src="assets/js/app/library.js?v=3.0.0"></script>
+<script src="assets/js/app/boards.js?v=3.0.0"></script>
+<script src="assets/js/app.js?v=3.0.0"></script>
 </body>
 </html>

@@ -48,7 +48,11 @@
     onboarded: 'tsoj:onboarded',
     filter: 'tsoj:filter',
     schema: 'tsoj:schema',
-    edFont: 'tsoj:edFont'
+    edFont: 'tsoj:edFont',
+    theme: 'tsoj:theme',
+    courseProgress: 'tsoj:courseProgress:v1',
+    lab: 'tsoj:lab:v1',
+    labDraft: 'tsoj:labDraft:v1'
   };
 
   /* ---------- 1. 类型守卫 ---------- */

@@ -1,0 +1,11 @@
+classDiagram
+class Scope { +listen() +timeout() +own(child) +destroy() }
+class Chart { +update(model) +resize() +focusIndex(i) +summary() +destroy() }
+class LabRunner { +run(config,session) +cancel(token) }
+class LabAdapter { +validate(params) +forecast(point,horizon,params) }
+class ContentRepository { +course(id) +method(id) +validate() +nextCourse(id) }
+class ExperimentStore { +list() +save(record) +export(record) +import(text) }
+Scope "1" o-- "*" Chart
+LabRunner "1" o-- "1" LabAdapter
+LabRunner ..> ExperimentStore
+ContentRepository ..> LabAdapter : 仅按白名单 methodId 跳转

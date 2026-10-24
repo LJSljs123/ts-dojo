@@ -13,21 +13,40 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { ROOT, JS_DIR } = require('./helpers/engine');
 
-const JS_FILES = ['datasets', 'problems', 'judge', 'editor', 'chart', 'app'].map((n) => path.join(JS_DIR, n + '.js'));
 /**
- * app 层文件（顺序即加载顺序）：util → core → schema → store → storage → ui → a11y
- *   → views → problem → pages → library → boards → app.js
- * T05–T11 把应用层从 1470 行涨到约 2900 行，按职责继续拆分以守住每文件 ≤350 行的可维护性上限。
- * v2.2 新增 app/library.js（方法库页面），插在 pages 与 boards 之间。
+ * 引擎与数据层（顺序即 index.html 加载顺序）
+ * v3.0 新增 content/*（课程与方法详情）、charts/*（图表内核）、lab/*（实验室引擎）。
  */
-const APP_NAMES = ['util', 'core', 'schema', 'store', 'storage', 'ui', 'a11y', 'views', 'problem', 'pages', 'library', 'boards'];
+const ENGINE_NAMES = ['datasets', 'problems', 'methods', 'judge', 'editor', 'chart'];
+const CONTENT_NAMES = ['content/references', 'content/courses', 'content/method-details', 'content/content'];
+const CHART_NAMES = ['charts/core', 'charts/series', 'charts/diagnostics'];
+const LAB_NAMES = ['lab/config', 'lab/adapters', 'lab/stats', 'lab/runner'];
+const ENGINE_FILES = ENGINE_NAMES.map((n) => path.join(JS_DIR, n + '.js'));
+const CONTENT_FILES = CONTENT_NAMES.map((n) => path.join(JS_DIR, n + '.js'));
+const CHART_FILES = CHART_NAMES.map((n) => path.join(JS_DIR, n + '.js'));
+const LAB_FILES = LAB_NAMES.map((n) => path.join(JS_DIR, n + '.js'));
+/**
+ * app 层文件（顺序即加载顺序）：
+ *   util → core → schema → store → storage → lifecycle → ui → a11y → theme
+ *   → views → problem → pages → dashboard → learn → method-detail
+ *   → lab-storage → lab-panels → lab → library → boards → app.js
+ */
+const APP_NAMES = [
+  'util', 'core', 'schema', 'store', 'storage', 'lifecycle', 'ui', 'a11y', 'theme',
+  'views', 'problem', 'pages', 'lab-storage', 'lab-panels', 'dashboard', 'learn',
+  'method-detail', 'lab', 'library', 'boards'
+];
 const APP_FILES = APP_NAMES.map((n) => path.join(JS_DIR, 'app', n + '.js'))
   .concat([path.join(JS_DIR, 'app.js')]);
 /** 全部参与静态审计的脚本（顺序即 index.html 的加载顺序） */
-const ALL_JS = JS_FILES.slice(0, 5).concat(APP_FILES);
+const JS_FILES = ENGINE_FILES.concat(CONTENT_FILES, CHART_FILES, LAB_FILES, APP_FILES);
+const ALL_JS = JS_FILES;
 const read = (p) => fs.readFileSync(p, 'utf8');
 const html = read(path.join(ROOT, 'index.html'));
-const css = read(path.join(ROOT, 'assets', 'css', 'style.css'));
+/** v3.0 样式拆成 tokens / legacy / components / pages，审计必须覆盖全部样式表 */
+const CSS_FILES = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)]
+  .map((m) => path.join(ROOT, m[1].split('?')[0]));
+const css = CSS_FILES.map(read).join('\n');
 const jsAll = JS_FILES.map(read).join('\n');
 /** app 层源码拼接（存储/归一化/转义等审计跨文件进行） */
 const appAll = APP_FILES.map(read).join('\n');
@@ -41,7 +60,7 @@ test('node --check：所有 js 语法合法（含 tests/selftest.js）', () => {
   }
 });
 
-test('app 层 13 个文件都 ≤350 行（可维护性上限）', () => {
+test('app 层全部文件都 ≤350 行（可维护性上限）', () => {
   const over = appLineCounts.filter(([, n]) => n > 350).map(([f, n]) => f + '=' + n);
   assert.deepEqual(over, [], '以下文件超过 350 行：' + over.join(', '));
 });
@@ -57,8 +76,9 @@ test('无 ESM 痕迹：无 import/export、无 type="module"', () => {
 
 test('无外部依赖：没有 http(s):// / //cdn / @import / url() 外链', () => {
   const check = (name, src) => {
-    const hits = [];
-    const re = /(https?:\/\/|\/\/cdn\.|@import|url\(\s*['"]?(https?:)?\/\/)/g;
+  const hits = [];
+  // 只拦「会真正发起加载」的写法；references.js 里的 https 字符串是内容数据，不是依赖
+  const re = /(src\s*=\s*["']https?:|href\s*=\s*["']https?:|@import|url\(\s*["']?https?:)/g;
     let m;
     while ((m = re.exec(src)) !== null) hits.push(m[0] + ' @' + m.index);
     assert.equal(hits.length, 0, name + ' 含外部引用：' + hits.join(', '));
@@ -83,19 +103,38 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/datasets.js',
     'assets/js/problems.js',
     'assets/js/methods.js',
+    'assets/js/content/references.js',
+    'assets/js/content/courses.js',
+    'assets/js/content/method-details.js',
+    'assets/js/content/content.js',
     'assets/js/judge.js',
     'assets/js/editor.js',
     'assets/js/chart.js',
+    'assets/js/charts/core.js',
+    'assets/js/charts/series.js',
+    'assets/js/charts/diagnostics.js',
+    'assets/js/lab/config.js',
+    'assets/js/lab/adapters.js',
+    'assets/js/lab/stats.js',
+    'assets/js/lab/runner.js',
     'assets/js/app/util.js',
     'assets/js/app/core.js',
     'assets/js/app/schema.js',
     'assets/js/app/store.js',
     'assets/js/app/storage.js',
+    'assets/js/app/lifecycle.js',
     'assets/js/app/ui.js',
     'assets/js/app/a11y.js',
+    'assets/js/app/theme.js',
     'assets/js/app/views.js',
     'assets/js/app/problem.js',
     'assets/js/app/pages.js',
+    'assets/js/app/lab-storage.js',
+    'assets/js/app/lab-panels.js',
+    'assets/js/app/dashboard.js',
+    'assets/js/app/learn.js',
+    'assets/js/app/method-detail.js',
+    'assets/js/app/lab.js',
     'assets/js/app/library.js',
     'assets/js/app/boards.js',
     'assets/js/app.js',
@@ -111,7 +150,7 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
 
 test('依赖方向：引擎层不得引用 app 层；app 层只能引用**更早加载**的命名空间', () => {
   // 1) 引擎文件（datasets/problems/judge/editor/chart）不能反向依赖应用层
-  for (const f of JS_FILES.slice(0, 5)) {
+  for (const f of ENGINE_FILES) {
     const src = read(f);
     assert.ok(!/TSJ\.app(Core|Store|Ui|Views)?\b/.test(src), path.basename(f) + ' 反向依赖了应用层');
     assert.ok(!/TSJ\.renderProblem|TSJ\.route\b/.test(src), path.basename(f) + ' 反向依赖了应用层');
@@ -119,7 +158,10 @@ test('依赖方向：引擎层不得引用 app 层；app 层只能引用**更早
   // 2) app 层按固定顺序加载，每个文件只能引用排在自己前面的命名空间
   const namespaces = [
     'TSJ.appUtil', 'TSJ.appCore', 'TSJ.appSchema', 'TSJ.appStore', 'TSJ.appStorage',
-    'TSJ.appUi', 'TSJ.appA11y', 'TSJ.appViews', 'TSJ.appProblem', 'TSJ.appPages',
+    'TSJ.appLifecycle', 'TSJ.appUi', 'TSJ.appA11y', 'TSJ.appTheme', 'TSJ.appViews',
+    'TSJ.appProblem', 'TSJ.appPages', 'TSJ.appLabStorage', 'TSJ.appLabPanels',
+    'TSJ.appDashboard', 'TSJ.appLearn',
+    'TSJ.appMethodDetail', 'TSJ.appLab',
     'TSJ.appLibrary', 'TSJ.appBoards', 'TSJ.app',
   ];
   APP_FILES.forEach((file, idx) => {
@@ -144,7 +186,7 @@ test('app.js 在脚本末尾同步 init()（依赖 body 末尾加载，而非 DO
   assert.equal(src.indexOf('DOMContentLoaded'), -1, '现状为同步 init，若改为 DOMContentLoaded 请同步更新用例');
 });
 
-test('CSS 覆盖率：JS/HTML 里出现的 class 都能在 style.css 找到定义（30+ 个动态 class）', () => {
+test('CSS 覆盖率：JS/HTML 里出现的 class 都能在样式表中找到定义（30+ 个动态 class）', () => {
   const defined = new Set([...css.matchAll(/\.([A-Za-z_][\w-]*)/g)].map((m) => m[1]));
   // 仅语义标记、样式由父选择器或 svg 属性负责，允许无独立定义
   const ALLOW = new Set(['tsj-editor-host', 'brand-logo']);
@@ -174,7 +216,7 @@ test('CSS 覆盖率：JS/HTML 里出现的 class 都能在 style.css 找到定�
 
   assert.ok(used.size >= 30, '抽查的 class 数量太少：' + used.size);
   const missing = [...used].filter(([c]) => !defined.has(c) && !ALLOW.has(c)).map(([c, f]) => c + '(' + f + ')');
-  assert.deepEqual(missing, [], 'style.css 缺少定义：' + missing.join(', '));
+  assert.deepEqual(missing, [], '样式表缺少定义：' + missing.join(', '));
 });
 
 test('localStorage：键名统一 tsoj:*，且没有未捕获的 JSON.parse', () => {
