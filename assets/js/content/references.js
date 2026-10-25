@@ -51,11 +51,11 @@
       title: 'Chronos: Learning the Language of Time Series',
       authors: 'Abdul Fatir Ansari, Lorenzo Stella, Caner Turkmen, et al.',
       year: 2024,
-      venue: 'arXiv:2403.07815',
-      status: 'preprint',
+      venue: 'TMLR / arXiv:2403.07815（2025 正式发表）',
+      status: 'journal',
       url: 'https://arxiv.org/abs/2403.07815',
-      checkedAt: '2026-10-24',
-      note: '把时序值缩放量化成 token，用语言模型做概率预测；概念级，不在浏览器推理。'
+      checkedAt: '2026-10-25',
+      note: '把时序值缩放量化成 token，用 T5 语言模型做概率预测；Bolt 版改 encoder 直出约快 250 倍，Chronos-2 支持协变量。概念级，不在浏览器推理。'
     },
     {
       id: 'aci-2021',
@@ -265,6 +265,184 @@
       url: 'https://arxiv.org/abs/1704.04110',
       checkedAt: '2026-10-24',
       note: 'DeepAR：全球概率模型；输出分位数/区间；概念级。'
+    },
+
+    /* ============ 2024-2026 顶会顶刊新增（v3.2 内容扩充） ============ */
+    {
+      id: 'fits-2024',
+      title: 'FITS: Modeling Time Series with 10k parameters',
+      authors: 'Zhijian Xu, Ailing Zeng, Qiang Xu',
+      year: 2024,
+      venue: 'ICLR / arXiv:2307.03756',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2307.03756',
+      checkedAt: '2026-10-25',
+      note: '频域低通 + 复数线性插值，约 1 万参数比肩 Transformer。'
+    },
+    {
+      id: 'sparsetsf-2024',
+      title: 'SparseTSF: Modeling Long-term Time Series Forecasting with 1k Parameters',
+      authors: 'Shengsheng Lin, Weiwei Lin, Wentai Wu, et al.',
+      year: 2024,
+      venue: 'ICML / arXiv:2405.00946',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2405.00946',
+      checkedAt: '2026-10-25',
+      note: '按季节周期下采样成同相位子序列（LPT），跨参数共享一个线性映射。'
+    },
+    {
+      id: 'cyclenet-2024',
+      title: 'CycleNet: Enhancing Time Series Prediction through Modeling Periodic Patterns',
+      authors: 'Shengsheng Lin, Weiwei Lin, Wentai Wu, et al.',
+      year: 2024,
+      venue: 'NeurIPS（Spotlight）/ arXiv:2409.18479',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2409.18479',
+      checkedAt: '2026-10-25',
+      note: '可学习的循环周期参数 Q：先减周期、对残差做线性、再加回周期。'
+    },
+    {
+      id: 'timemixer-2024',
+      title: 'TimeMixer: Decomposable Multiscale Mixing for Time Series Forecasting',
+      authors: 'Shiyu Wang, Xiaoming Shi, Jianqi Yin, et al.',
+      year: 2024,
+      venue: 'ICLR / arXiv:2405.14616',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2405.14616',
+      checkedAt: '2026-10-25',
+      note: '纯 MLP 多尺度混合：季节自底向上、趋势自顶向下的可分解混合。'
+    },
+    {
+      id: 'moderntcn-2024',
+      title: 'ModernTCN: A Modern Pure Convolution Structure for General Time Series Analysis',
+      authors: 'Donghao Luo, Xin Wang',
+      year: 2024,
+      venue: 'ICLR / arXiv:2310.06625',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2310.06625',
+      checkedAt: '2026-10-25',
+      note: '大卷积核 + 现代化设计（倒瓶颈、深度可分离）的纯卷积通用骨干。'
+    },
+    {
+      id: 'timellm-2024',
+      title: 'Time-LLM: Time Series Forecasting by Reprogramming Large Language Models',
+      authors: 'Ming Jin, Shiyu Wang, Lintao Ma, et al.',
+      year: 2024,
+      venue: 'ICLR / arXiv:2310.01728',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2310.01728',
+      checkedAt: '2026-10-25',
+      note: '冻结 LLM，只训练输入重编程与提示前缀；LLM 做时序预测的代表作。'
+    },
+    {
+      id: 'llm4ts-critique-2024',
+      title: 'Are Language Models Actually Useful for Time Series Forecasting?',
+      authors: 'Mingtian Tan, Yiqun Chen, Ziwei Liu, et al.',
+      year: 2024,
+      venue: 'NeurIPS（Spotlight）/ arXiv:2406.16964',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2406.16964',
+      checkedAt: '2026-10-25',
+      note: '系统消融：去掉 LLM 或换成简单注意力层，时序预测性能不降反升——对 LLM 路线的重要质疑。'
+    },
+    {
+      id: 'timegpt-2023',
+      title: 'TimeGPT-1: The First Foundation Model for Time Series Forecasting',
+      authors: 'Azul Garza, Max Mergenthaler',
+      year: 2023,
+      venue: 'arXiv:2310.03589（Nixtla）',
+      status: 'preprint',
+      url: 'https://arxiv.org/abs/2310.03589',
+      checkedAt: '2026-10-25',
+      note: '首个商用时序基础模型 API：预训练 + 零样本预测范式进入时序领域。'
+    },
+    {
+      id: 'lagllama-2024',
+      title: 'Lag-Llama: Towards Foundation Models for Probabilistic Time Series Forecasting',
+      authors: 'Kashif Rasul, Younes Belkada, Florian Bieder, et al.',
+      year: 2024,
+      venue: 'arXiv:2310.08278',
+      status: 'preprint',
+      url: 'https://arxiv.org/abs/2310.08278',
+      checkedAt: '2026-10-25',
+      note: '约 2M 参数的 decoder-only 概率基础模型，滞后特征 + Student-t 输出，开源。'
+    },
+    {
+      id: 'timer-2024',
+      title: 'Timer: Generative Pre-trained Transformers Are Large Time Series Models',
+      authors: 'Yong Liu, Haoran Zhang, Chenyu Li, et al.',
+      year: 2024,
+      venue: 'ICML / arXiv:2402.02368',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2402.02368',
+      checkedAt: '2026-10-25',
+      note: '时序 GPT 路线：patch 词元化 + 生成式预训练 + 下游微调，附缩放律证据。'
+    },
+    {
+      id: 'moment-2024',
+      title: 'MOMENT: A Family of Open Time-series Foundation Models',
+      authors: 'Mononito Goswami, Arthur Guibadj, MouFi Oussama, et al.',
+      year: 2024,
+      venue: 'ICML / arXiv:2402.03885',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2402.03885',
+      checkedAt: '2026-10-25',
+      note: '开源基础模型家族：掩码重建预训练，一份权重服务预测/分类/异常/插补。'
+    },
+    {
+      id: 'timemoe-2025',
+      title: 'Time-MoE: Billion-Scale Time Series Foundation Models with Mixture of Experts',
+      authors: 'Xiaofang Wang, Yuxuan Wang, Dong Zhou, et al.',
+      year: 2025,
+      venue: 'ICLR / arXiv:2409.16040',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2409.16040',
+      checkedAt: '2026-10-25',
+      note: '首个十亿级开源时序基础模型：稀疏 MoE，配套 Time-300B 预训练语料。'
+    },
+    {
+      id: 'sundial-2025',
+      title: 'Sundial: A Family of Highly Capable Time Series Foundation Models',
+      authors: 'Yong Liu, Helong Hu, Xiangfei Qiu, et al.',
+      year: 2025,
+      venue: 'ICML / arXiv:2502.00816',
+      status: 'conference',
+      url: 'https://arxiv.org/abs/2502.00816',
+      checkedAt: '2026-10-25',
+      note: '生成式 decoder-only 家族：点与概率预测同权重，吞吐约 35 倍于 Chronos。'
+    },
+    {
+      id: 'gift-eval-2024',
+      title: 'GIFT-Eval: A Benchmark For General Time Series Forecasting Model Evaluation',
+      authors: 'Aksu Dognan, Yifu Cai, Kan Wang, et al.',
+      year: 2024,
+      venue: 'arXiv:2410.10393（Salesforce）',
+      status: 'preprint',
+      url: 'https://arxiv.org/abs/2410.10393',
+      checkedAt: '2026-10-25',
+      note: '覆盖 23 个数据集、约 2800 万观测的零样本评测基准；基础模型时代的横向标尺。'
+    },
+    {
+      id: 'crps-2007',
+      title: 'Strictly Proper Scoring Rules, Prediction, and Estimation',
+      authors: 'Tilmann Gneiting, Adrian E. Raftery',
+      year: 2007,
+      venue: 'Journal of the American Statistical Association 101(476)',
+      status: 'journal',
+      url: 'https://doi.org/10.1198/016214506000001437',
+      checkedAt: '2026-10-25',
+      note: '严格正常评分规则与 CRPS：概率预测评估的理论基础。'
+    },
+    {
+      id: 'koenker-1978',
+      title: 'Regression Quantiles',
+      authors: 'Roger Koenker, Gilbert Bassett',
+      year: 1978,
+      venue: 'Econometrica 46(1)',
+      status: 'journal',
+      url: 'https://doi.org/10.2307/1913643',
+      checkedAt: '2026-10-25',
+      note: '分位数回归与 pinball 损失的原始出处。'
     }
   ];
 

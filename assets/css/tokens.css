@@ -34,6 +34,13 @@ html:root {
   --v3-warn:        #f5b942;
   --v3-err:         #f87171;
 
+  /* 方法五层 tier 色：卡片徽标 / 分类点 / 课程级别着色用（深色） */
+  --tier-classic:     #2dd4bf;
+  --tier-competition: #f5b942;
+  --tier-deep:        #c084fc;
+  --tier-foundation:  #7dd3fc;
+  --tier-eval:        #fb7185;
+
   /* 图表语义色：全站固定，不只靠颜色区分 */
   --v3-chart-history: #7dd3fc;
   --v3-chart-actual:  #34d399;
@@ -96,6 +103,12 @@ html[data-theme="light"] {
   --v3-ok:          #047857;
   --v3-warn:        #b45309;
   --v3-err:         #b91c1c;
+
+  --tier-classic:     #0f766e;
+  --tier-competition: #b45309;
+  --tier-deep:        #7c3aed;
+  --tier-foundation:  #0369a1;
+  --tier-eval:        #be123c;
 
   --v3-chart-history: #0369a1;
   --v3-chart-actual:  #047857;

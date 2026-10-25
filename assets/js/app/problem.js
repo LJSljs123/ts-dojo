@@ -184,15 +184,35 @@
     html.push('  <div class="chart-card">\n    <div class="chart-title"><span>数据预览 · ' + esc(ds.name) + '（' + esc(ds.unit) + '）</span>');
     html.push('      <span>共 ' + ds.values.length + ' 点 · 周期 ' + ds.season + '</span></div>');
     html.push('    <canvas id="seriesChart" class="chart-canvas" height="190"></canvas>\n    <div class="chart-legend">');
-    html.push('      <span class="legend-item"><i class="legend-dot" style="border-top-color:#3fb6a8"></i>历史</span>');
-    html.push('      <span class="legend-item"><i class="legend-dot" style="border-top-color:#8a97a8"></i>测试集真实值</span>');
-    html.push('      <span class="legend-item"><i class="legend-dot dash" style="border-top-color:#a5b4fc"></i>你的预测</span>\n    </div>\n  </div>');
+    html.push('      <span class="legend-item"><i class="legend-dot" style="border-top-color:var(--v3-chart-history)"></i>历史</span>');
+    html.push('      <span class="legend-item"><i class="legend-dot" style="border-top-color:var(--v3-chart-actual)"></i>测试集真实值</span>');
+    html.push('      <span class="legend-item"><i class="legend-dot dash" style="border-top-color:var(--v3-chart-pred)"></i>你的预测</span>\n    </div>\n  </div>');
 
     html.push('  <div class="md" style="margin-top:14px">\n    <h3 class="md-h">输入</h3><p class="md-p">' + mdInline(p.inputSpec) + '</p>');
     html.push('    <h3 class="md-h">输出</h3><p class="md-p">' + mdInline(p.outputSpec) + '</p>\n  </div>');
 
     html.push('  <details class="hints"><summary>提示（共 ' + p.hints.length + ' 条，点击展开）</summary>');
     html.push('    <div class="hints-body"><ol>' + hints + '</ol></div>\n  </details>');
+
+    if (p.guide && p.guide.length) {
+      var steps = [];
+      for (var s = 0; s < p.guide.length; s++) {
+        var st = p.guide[s];
+        steps.push('<div class="guide-step">');
+        steps.push('  <div class="guide-step-num">' + (s + 1) + '</div>');
+        steps.push('  <div class="guide-step-main"><h4>' + esc(st.title) + '</h4>');
+        steps.push('    <p>' + mdInline(st.text) + '</p>');
+        if (st.code) {
+          steps.push('    <pre class="guide-code"><code>' +
+            (TSJ.highlightCode ? TSJ.highlightCode(st.code) : esc(st.code)) + '</code></pre>');
+        }
+        steps.push('  </div>');
+        steps.push('</div>');
+      }
+      html.push('  <details class="guide" open><summary>手把手带做（' + p.guide.length +
+        ' 步，零基础照做即可拿第一个 AC）</summary>');
+      html.push('    <div class="guide-body">' + steps.join('\n') + '</div>\n  </details>');
+    }
 
     html.push('  <div id="solutionHost"></div>\n</section>');
 
@@ -256,6 +276,9 @@
       '    <li>全部测试点达标才算通过，通过后可查看参考实现</li>',
       '    <li>代码与成绩都存在浏览器本地，随时可以继续</li>',
       '  </ul>',
+      '  <p style="margin:0 0 6px">完全零基础？先用 25 分钟上' +
+        '<a href="#/learn/m0" style="color:var(--accent)">「零基础第一课」</a>' +
+        '，第 1 题还有手把手带做面板。</p>',
       '  <div class="modal-actions">',
       '    <button type="button" class="btn btn-primary" id="onbStart">开始做题</button>',
       '  </div>',

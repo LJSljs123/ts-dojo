@@ -260,6 +260,156 @@
       counterexample: '短序列上复杂度不必要。',
       referenceIds: ['timesnet-2023']
     },
+    fits: {
+      runLevel: 'sandbox',
+      intuition: '时域卷积等价于频域乘法：与其学复杂时域映射，不如在频域对低频段做一次线性插值。',
+      assumptions: ['信号能量集中在低频', '未来频谱可由历史频谱线性外推'],
+      complexity: 'O(L log L)（FFT 主导），参数量约 1 万',
+      limitations: ['低通截断丢高频突变', '截止频率需按数据调', '非线性趋势表达弱'],
+      workedExample: '对 512 点历史做 RFFT，保留前 1/4 低频，线性映射到未来 96 个频点，逆变换得 96 步预测。',
+      counterexample: '尖峰/节假日型突变集中在高频，FITS 会系统性抹平它们。',
+      referenceIds: ['fits-2024']
+    },
+    sparsetsf: {
+      runLevel: 'sandbox',
+      intuition: '同相位的历史点构成一条慢变子序列；按周期分组后每组只需一个共享线性映射，参数自然省下来。',
+      assumptions: ['季节周期 w 已知且稳定', '同相位子序列近似线性'],
+      complexity: '极低（<1k 参数），最小二乘可解',
+      limitations: ['周期估计错误则分组失效', '无趋势项会长程漂移', '多周期需扩展'],
+      workedExample: 'w=12 时把月度序列拆成 12 条子序列，每条用同一组权重线性外推一步，再按相位拼回。',
+      counterexample: '周期随时间漂移（如闰年、浮动节假日）时同相位假设失效。',
+      referenceIds: ['sparsetsf-2024']
+    },
+    cyclenet: {
+      runLevel: 'sandbox',
+      intuition: '先把「每相位平均长什么样」学成一张循环表 Q，剩下的残差几乎是线性关系，一个线性层就够。',
+      assumptions: ['周期为已知整数', '残差与周期成分可加分离'],
+      complexity: '极低（一张周期表 + 一个线性层）',
+      limitations: ['整数周期假设', '多周期需堆叠多套 Q', '周期漂移退化'],
+      workedExample: '周周期 w=7：7 个可学习周期参数，预测第 t+h 步先查 Q[(t+h) mod 7] 再加线性残差。',
+      counterexample: '周期非整数（如年周期 365.25 天）时相位错位，Q 表对不齐。',
+      referenceIds: ['cyclenet-2024']
+    },
+    timemixer: {
+      runLevel: 'concept',
+      intuition: '不同下采样尺度暴露不同结构：粗尺度看趋势、细尺度看季节；分层混合比单尺度建模更省。',
+      assumptions: ['多尺度结构存在', '季节/趋势可分解'],
+      complexity: '中，纯 MLP 较轻',
+      limitations: ['尺度与采样率是超参', '通道独立为主', '概念级'],
+      workedExample: '日数据下采样 1×/4×/16× 三层，趋势自顶层向下、季节自底层向上混合。',
+      counterexample: '无明确多尺度结构的短序列上，混合层只是徒增参数。',
+      referenceIds: ['timemixer-2024']
+    },
+    moderntcn: {
+      runLevel: 'concept',
+      intuition: '卷积天然保序且并行高效；用 CV 的大核与倒瓶颈设计补上感受野与容量，注意力并非必需。',
+      assumptions: ['长程依赖可由堆叠感受野覆盖', '局部模式为主'],
+      complexity: '推理快、FLOPs 效率高',
+      limitations: ['感受野靠深度累积', '点式卷积容量有限', '概念级'],
+      workedExample: '大核 DWConv（如 k=31）逐层下采样，金字塔顶部感受野覆盖整段历史。',
+      counterexample: '变量间强交互的全局依赖场景，纯卷积可能不如变量维注意力。',
+      referenceIds: ['moderntcn-2024']
+    },
+    timegpt: {
+      runLevel: 'concept',
+      intuition: '把 NLP 的「预训练一次、处处零样本调用」搬进预测：API 接收历史序列，直接返回预测与区间。',
+      assumptions: ['训练语料覆盖目标域', '序列统计特性可迁移'],
+      complexity: '推理即 API 调用',
+      limitations: ['闭源不可审计', '数据外流合规风险', '域外结构未知'],
+      workedExample: '上传 36 个月销量，API 返回未来 12 个月的预测中位数与 80% 区间。',
+      counterexample: '数据敏感不能外发、或序列结构高度领域特异（如设备振动频谱）时不适用。',
+      referenceIds: ['timegpt-2023']
+    },
+    chronos: {
+      runLevel: 'concept',
+      intuition: '数值量化成 token 后，时序预测在形式上就是语言建模——现成 T5 架构与训练技巧全部复用。',
+      assumptions: ['量化粒度足够细', '下一 token 建模能承载时序依赖'],
+      complexity: '训练与推理成本同量级 LLM',
+      limitations: ['量化误差与词表截断', '自回归采样长程漂移', '闭源生态为主'],
+      workedExample: '序列缩放后量化到 4096 个 token，采样 20 条未来路径取分位数即得区间。',
+      counterexample: '极端值超出量化范围（词表外）时预测被硬截断。',
+      referenceIds: ['chronos-2024']
+    },
+    timesfm: {
+      runLevel: 'concept',
+      intuition: '「输入多 patch、只预测最后一个 patch」让训练形态与「长历史预测任意 horizon」的推理形态天然对齐。',
+      assumptions: ['patch 内结构可迁移', '合成+真实混合语料覆盖面广'],
+      complexity: '约 200M 参数，自回归拼接到目标步长',
+      limitations: ['单变量为主', '协变量有限', '域差距大时不及本地训练'],
+      workedExample: '给 512 点历史，模型逐 patch 生成直至补满 128 步 horizon。',
+      counterexample: '强协变量驱动（价格促销）的零售序列上，纯历史输入吃亏。',
+      referenceIds: ['timesfm-2024']
+    },
+    moirai: {
+      runLevel: 'concept',
+      intuition: '训练时随机「抽变量子集 + 掩码区间」，一个模型学会把任意形状的序列集合补全，推理时天然支持任意变量数与频率。',
+      assumptions: ['变量子集间结构可共享', '多频率 patch 能对齐'],
+      complexity: '统一训练，推理按变量数扩展',
+      limitations: ['变量多时注意力开销大', '协变量质量影响大', '概念级'],
+      workedExample: '把销量、价格、温度三条序列整体喂入，掩码未来段让模型补全。',
+      counterexample: '变量间几乎独立且各自结构迥异时，统一建模反而互相干扰。',
+      referenceIds: ['moirai-2024']
+    },
+    'lag-llama': {
+      runLevel: 'concept',
+      intuition: '不追求规模，把「正确的输入特征」（本序列滞后 + 日历滞后）喂给一个学生级 decoder，就能得到可用的概率预测。',
+      assumptions: ['滞后特征覆盖主要依赖', 'Student-t 分布足够刻画噪声'],
+      complexity: '约 2M 参数，可单卡部署',
+      limitations: ['零样本上限有限', '滞后特征需按频率设计', '长 horizon 采样不稳'],
+      workedExample: '输入含 y_{t-1}…y_{t-96} 与星期几 one-hot，输出下个月的分布参数。',
+      counterexample: '长内存依赖（超长周期）超出滞后窗口时无法捕捉。',
+      referenceIds: ['lagllama-2024']
+    },
+    timer: {
+      runLevel: 'concept',
+      intuition: '时序的「GPT 时刻」：patch 当词元、下一 patch 当目标，海量异构序列上预训练，下游各任务只需轻量微调。',
+      assumptions: ['patch 词元化保留足够信息', '下游与预训练分布相近'],
+      complexity: '预训练昂贵，微调轻量',
+      limitations: ['微调仍需数据与算力', '时序缩放律不如 NLP 稳固', '概念级'],
+      workedExample: '预训练后在某工厂传感器序列上微调 5% 参数，预测/插补双任务共用骨干。',
+      counterexample: '只有单条短序列、无法微调时，优势无从发挥。',
+      referenceIds: ['timer-2024']
+    },
+    moment: {
+      runLevel: 'concept',
+      intuition: '掩码重建让模型学到通用表示；一份权重接不同任务头即可服务预测、分类、异常检测与插补。',
+      assumptions: ['公开语料表示可迁移', '多任务共享底层表示有益'],
+      complexity: '小中型 Transformer，开源可复现',
+      limitations: ['规模低于商用模型', '零样本预测非最强项', '概念级'],
+      workedExample: '同一 MOMENT 权重：接线性头做分类，接生成头做预测，接重构误差做异常打分。',
+      counterexample: '追求零样本预测极致精度时，专门的预测基础模型更强。',
+      referenceIds: ['moment-2024']
+    },
+    'time-moe': {
+      runLevel: 'concept',
+      intuition: '稀疏 MoE 把「总容量」与「单 token 计算量」解耦：参数可以堆到十亿级，每个 token 仍只走少数专家。',
+      assumptions: ['token 级路由有效', '专家间分工可学'],
+      complexity: '总参数 2.4B，单 token 稀疏激活',
+      limitations: ['显存需求大', '负载不均降低效率', '小数据业务未必需要'],
+      workedExample: '每 token 由门控选出 top-k 专家 FFN，其余专家跳过计算。',
+      counterexample: '边缘设备或成本敏感场景，十亿级模型的部署成本难以接受。',
+      referenceIds: ['timemoe-2025']
+    },
+    sundial: {
+      runLevel: 'concept',
+      intuition: '生成式骨干同时产出点预测与概率预测：多路并行采样取期望即点值、取分位即区间，无需两套模型。',
+      assumptions: ['生成分布校准', '采样路数足够覆盖尾部'],
+      complexity: '推理吞吐高（约 35× 于 Chronos）',
+      limitations: ['采样随机性需控种子', '极端异常敏感', '域外长周期需验证'],
+      workedExample: '并行采样 32 条未来路径：均值作点预测，2.5%/97.5% 分位作 95% 区间。',
+      counterexample: '需要逐点可解释或严格确定性的场景，采样式输出不合适。',
+      referenceIds: ['sundial-2025']
+    },
+    timellm: {
+      runLevel: 'concept',
+      intuition: '语言模型的世界知识或许能帮助理解时序上下文——重编程层把时序 patch「翻译」成 LLM 听得懂的词元，再附上统计前缀提示。',
+      assumptions: ['LLM 表示对时序有迁移价值', '适配层足以对齐两种模态'],
+      complexity: '推理需承载整个 LLM',
+      limitations: ['消融研究质疑 LLM 贡献', '开销大', '复现依赖特定 LLM'],
+      workedExample: '把 336 点历史重编程为 48 个伪词元，前缀注入「月度、有趋势、冬季高峰」描述后让 LLM 输出。',
+      counterexample: 'NeurIPS 2024 系统消融：把 LLM 换成一层注意力，多数基准不降反升。',
+      referenceIds: ['timellm-2024', 'llm4ts-critique-2024']
+    },
     'dm-test': {
       runLevel: 'concept',
       intuition: '比较两个模型的预测损失差异是否统计显著。',
@@ -299,6 +449,26 @@
       workedExample: '校准残差 90% 分位为 3.2，则区间为 ŷ ± 3.2。',
       counterexample: '把测试真值用于选分位数。',
       referenceIds: ['aci-2021']
+    },
+    crps: {
+      runLevel: 'concept',
+      intuition: '把「整个预测分布」与单个观测的差距积分成一个数：既惩罚报错位置，也惩罚区间过宽。',
+      assumptions: ['模型输出可用分布或分位数近似', '跨序列比较前已归一化'],
+      complexity: '分位数近似下 O(K·H)，K 为分位数个数',
+      limitations: ['精确积分不可行，靠近似', '跨量纲序列需归一化', '对极端观测敏感'],
+      workedExample: '两条 90% 区间都盖住真值，但 A 更窄 → A 的 CRPS 更低，A 更优。',
+      counterexample: '只报区间覆盖率不看宽度：把区间无限拉宽也能「100% 覆盖」。',
+      referenceIds: ['crps-2007']
+    },
+    pinball: {
+      runLevel: 'concept',
+      intuition: '对 τ=0.9 的上界预测，低估罚 0.9 倍、高估只罚 0.1 倍——模型自然学会把上界报高一点。',
+      assumptions: ['目标分位数条件可估', '样本量足以支撑各分位'],
+      complexity: '低（与 MAE 同阶）',
+      limitations: ['多分位需多头', '分位交叉需后处理', '零值密集时分位塌缩'],
+      workedExample: 'τ=0.9，y=10，ŷ=8 → 损失 0.9×2=1.8；ŷ=12 → 损失 0.1×2=0.2。',
+      counterexample: '间歇需求序列 95% 的真值为 0，τ=0.7 分位的最优解就是恒 0，区间失去意义。',
+      referenceIds: ['koenker-1978']
     }
   };
 

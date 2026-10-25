@@ -39,14 +39,14 @@
     }
 
     var rows = [
-      { name: '参考解法（Holt-Winters）', you: false, total: refTotal, passed: refPassed, note: '每题由参考实现自动评分' },
+      { name: '参考解法（各题参考实现）', you: false, total: refTotal, passed: refPassed, note: '每题由参考实现自动评分' },
       { name: '你', you: true, total: myTotal, passed: myPassed, note: '本地成绩' }
     ];
     rows.sort(function (a, b) { return b.total - a.total; });
 
     var html = [];
     html.push('<div class="page">\n<div class="page-head"><h1>排行榜</h1>' +
-      '<p class="sub">本地榜单 · 虚拟对手「参考解法（Holt-Winters）」的每题分数由参考实现实时计算</p></div>');
+      '<p class="sub">本地榜单 · 虚拟对手「参考解法」的每题分数由该题参考实现实时计算（各题参考实现不同，并非单一模型）</p></div>');
 
     html.push('<div class="table-wrap"><table class="ptable"><thead><tr>\n<th style="width:60px">排名</th><th>选手</th>' +
       '<th class="num" style="width:100px">总分</th>\n<th class="num" style="width:100px">通过题数</th>' +

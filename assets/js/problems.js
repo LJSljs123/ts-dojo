@@ -130,14 +130,18 @@
    */
   function solSes(history, horizon, ctx) {
     var alpha = 0.28;
-    var n = history.length;
-    var level = history[0];
+    var n = history.length;              // n：历史一共有几个数（数组的 .length 属性）
+    var level = history[0];              // level：当前「水平」估计，先用第 1 个值当起点
+    // for 循环从第 2 个数走到最后一个（下标 1 到 n-1）
     for (var i = 1; i < n; i++) {
+      // 核心一步（加权平均）：新水平 = α×新观测 + (1−α)×旧水平
+      // α 大 → 更相信最新观测（记性短）；α 小 → 更相信历史（记性长）
       level = alpha * history[i] + (1 - alpha) * level;
     }
-    var out = [];
+    var out = [];                        // 装预测值的空数组
+    // SES 假设没有趋势/季节：未来每一步都等于最终水平，循环 horizon 次填满
     for (var h = 0; h < horizon; h++) out.push(level);
-    return out;
+    return out;                          // 返回数组的长度必须等于 horizon
   }
 
   /**
@@ -146,17 +150,24 @@
   function solHolt(history, horizon, ctx) {
     var alpha = 0.42;
     var beta = 0.10;
-    var n = history.length;
-    var level = history[0];
+    var n = history.length;              // 历史长度
+    var level = history[0];              // 水平（现在多高）：从第 1 个值起步
+    // 趋势（每步走多远）初始化为前两值之差；三目运算符：条件 ? 真值 : 假值
+    // 只有一个点时没有差可算，取 0
     var trend = n > 1 ? history[1] - history[0] : 0;
 
+    // 逐期更新两条状态：每来一个新观测，循环体执行一遍
     for (var i = 1; i < n; i++) {
-      var prevLevel = level;
+      var prevLevel = level;             // 先存旧水平：下一行会覆盖它，趋势更新还要用
+      // 水平更新（加权平均）：新水平 = α×新观测 + (1−α)×(按趋势外推的旧水平)
+      // 与 SES 的差别：旧状态先加一个 trend 提前量，而不是原地不动
       level = alpha * history[i] + (1 - alpha) * (level + trend);
+      // 趋势更新（也是加权平均）：新趋势 = β×(刚发生的水平变化) + (1−β)×旧趋势
+      // β 小 → 趋势变化慢、抗噪声；β 大 → 追踪快但容易被噪声带偏
       trend = beta * (level - prevLevel) + (1 - beta) * trend;
     }
 
-    var out = [];
+    var out = [];                        // 从当前水平出发，每步抬一个 trend（线性外推）
     for (var h = 1; h <= horizon; h++) out.push(level + trend * h);
     return out;
   }
@@ -179,31 +190,39 @@
     var beta = 0.06;
     var gamma = 0.28;
 
+    // ---- 初始化：用头两个周期把三条状态估出来 ----
     var i;
-    var s1 = 0;
+    var s1 = 0;                          // s1/s2：第 1、第 2 个周期的累加器
     var s2 = 0;
     for (i = 0; i < m; i++) {
-      s1 += history[i];
-      s2 += history[m + i];
+      s1 += history[i];                  // 第 1 个周期的 m 个数之和
+      s2 += history[m + i];              // 第 2 个周期（下标整体右移 m）
     }
-    s1 /= m;
+    s1 /= m;                             // 复合赋值：s1 = s1 / m → 周期均值
     s2 /= m;
 
-    var level = s1;
-    var trend = (s2 - s1) / m;
-    var season = [];
+    var level = s1;                      // 初始水平 = 第 1 个周期均值
+    var trend = (s2 - s1) / m;           // 初始趋势 = 两周期均值之差 ÷ 周期长（每步抬升）
+    var season = [];                     // 季节项：每个相位一个数（观测减掉水平后的余量）
     for (i = 0; i < m; i++) season.push(history[i] - s1);
 
+    // ---- 逐期更新三条状态 ----
+    // t % m 是取余：当前时刻落在周期内的第几个相位（0..m-1 循环）
     for (var t = 1; t < n; t++) {
-      var si = season[t % m];
-      var prevLevel = level;
+      var si = season[t % m];            // 取出当前相位的旧季节项
+      var prevLevel = level;             // 存旧水平（趋势更新要用）
+      // 水平更新：先把季节项从观测里扣掉（去季节），再与「趋势外推的旧水平」加权平均
       level = alpha * (history[t] - si) + (1 - alpha) * (level + trend);
+      // 趋势更新：与 Holt 完全相同
       trend = beta * (level - prevLevel) + (1 - beta) * trend;
+      // 季节更新：只更新当前相位 = γ×(观测 − 新水平) + (1−γ)×旧季节项
       season[t % m] = gamma * (history[t] - level) + (1 - gamma) * si;
     }
 
+    // ---- 外推：水平 + h 步趋势 + 未来相位的季节项 ----
     var out = [];
     for (var h = 1; h <= horizon; h++) {
+      // (n + h - 1) % m：第 h 步未来时刻对应的相位；三条状态在同一时刻相加
       out.push(level + h * trend + season[(n + h - 1) % m]);
     }
     return out;
@@ -458,18 +477,20 @@
   function solArYW(history, horizon, ctx) {
     var n = history.length;
     var p = Math.min(10, Math.max(1, Math.floor(n / 4)));
-    var i, k;
+    var i, k;                            // 循环变量先声明、两处复用
 
-    var mu = 0;
+    // ---- 1) 去均值：AR 假设序列围绕某个水平波动，先把水平减掉 ----
+    var mu = 0;                          // mu：均值（先累加、再除以 n）
     for (i = 0; i < n; i++) mu += history[i];
     mu /= n;
-    var x = [];
+    var x = [];                          // 中心化序列：每项 = 原值 − 均值（偏离平均多少）
     for (i = 0; i < n; i++) x.push(history[i] - mu);
 
-    // 自协方差 γ(0..p)
+    // ---- 2) 自协方差 γ(0..p)：隔 k 步的两个值「同涨同跌」的程度 ----
+    // γ(0) 是方差（自己乘自己）；γ(k) ÷ γ(0) 就是自相关系数（ACF）
     var g = [];
     for (k = 0; k <= p; k++) {
-      var acc = 0;
+      var acc = 0;                       // 累加器：Σ x[i]·x[i+k]（对应相乘再求和，即点积）
       for (i = 0; i + k < n; i++) acc += x[i] * x[i + k];
       g.push(acc / n);
     }
@@ -480,41 +501,44 @@
       return flat;
     }
 
-    // Levinson-Durbin：递推解 Toeplitz 方程 Γ_p φ = γ_p
+    // ---- 3) Levinson-Durbin 递推解 Γ_p·φ = γ_p ----
+    // 目标：解出 p 个未知数 φ（自回归系数）。方程组的矩阵沿对角线取值相同（Toeplitz），
+    // 普通高斯消元是 O(p³)；这里从 AR(1) 逐阶升到 AR(p)，只要 O(p²)。
     var prev = null, err = g[0], phi = null;
-    for (k = 0; k < p; k++) {
-      var cur = new Array(p + 1).fill(0);
+    for (k = 0; k < p; k++) {            // 第 k 轮 = 求解 AR(k+1)
+      var cur = new Array(p + 1).fill(0); // new Array(len).fill(0)：造一个全 0 数组
       if (k === 0) {
+        // AR(1) 有直接解：φ1 = γ(1)/γ(0)
         cur[1] = g[1] / g[0];
-        err = g[0] * (1 - cur[1] * cur[1]);
+        err = g[0] * (1 - cur[1] * cur[1]);   // err：当前阶的一步预测误差方差
       } else {
+        // 分子 = γ(k+1) − 旧系数与 γ 的「倒序点积」：还没被解释掉的新息
         var num = g[k + 1];
         for (i = 1; i <= k; i++) num -= prev[i] * g[k + 1 - i];
-        var refl = num / err;
+        var refl = num / err;            // 反射系数：这一阶新加的第 k+1 步依赖有多强
         cur[k + 1] = refl;
+        // 旧系数整体修正：减去反射系数 × 旧系数的镜像（倒序重放）
         for (i = 1; i <= k; i++) cur[i] = prev[i] - refl * prev[k + 1 - i];
-        err = err * (1 - refl * refl);
+        err = err * (1 - refl * refl);   // 误差方差按 (1 − refl²) 收缩
       }
-      if (!(err > 1e-12)) { cur = new Array(p + 1).fill(0); err = 1e-12; }
-      prev = cur;
+      if (!(err > 1e-12)) { cur = new Array(p + 1).fill(0); err = 1e-12; }  // 防数值崩坏
+      prev = cur;                        // 本轮结果成为下一轮的「旧系数」
       phi = cur;
     }
 
-    // 多步递推：用已预测的值回填
-    var ext = x.slice();
+    // ---- 4) 多步递推预测：ŷ(t) = φ1·x(t−1) + … + φp·x(t−p) ----
+    // 走过一步之后就没有真值了，把预测值补进 ext 再继续往后算（递归式多步）
+    var ext = x.slice();                 // slice()：复制一份，不动原数组
     for (var h = 1; h <= horizon; h++) {
       var v = 0;
-      for (i = 1; i <= p; i++) v += phi[i] * ext[ext.length - i];
-      ext.push(v);
+      for (i = 1; i <= p; i++) v += phi[i] * ext[ext.length - i];  // 取末尾 p 个值做点积
+      ext.push(v);                       // 预测值入列，成为下一轮的「历史」
     }
     var out = [];
-    for (var j = 0; j < horizon; j++) out.push(mu + ext[n + j]);
+    for (var j = 0; j < horizon; j++) out.push(mu + ext[n + j]);    // 记得把均值加回去
     return out;
   }
 
-  /**
-   * P12 Croston 法（含 SBA 偏差修正）：需求量与需求间隔分开平滑。
-   */
   /**
    * P12 TSB（Teunter-Syntetos-Babai, IJPE 2011）：
    * 不估「间隔」而直接估「本月有需求」的概率 q，预测 q · z。
@@ -924,6 +948,54 @@
         '注意返回数组长度必须严格等于 horizon，否则会被判为运行时错误。'
       ],
 
+      /* 零基础手把手带做（problem.js 会渲染成折叠面板；只给第一题配，之后要自己飞） */
+      guide: [
+        {
+          title: '先跑一遍，认识 57 分',
+          text: '什么代码都不用写。编辑器里的模板已经是一个能跑的朴素法（drift 是 0）。点右上角「运行」，' +
+            '看结果面板：verdict 是 WA，分数 57，ratio 恰好 1.00 —— 因为你照抄最后值，对照组 naive 也是照抄最后值，打平不算赢。'
+        },
+        {
+          title: '看图，找到差在哪',
+          text: '回看上方数据预览图：右边浅色高亮带是藏起来的 12 个月真值，它们整体在往上爬；' +
+            '而朴素法的预测是一条水平线。差距就是「每个月抬升了多少」—— 这就是趋势（drift，漂移）。'
+        },
+        {
+          title: '把漂移补上（复制这段）',
+          text: '用最近一年（12 个月）的平均水平和上一年平均水平的差，换算成「每步抬升量」。' +
+            '把编辑器里的 TODO 那几行换成下面这段（或整段替换函数）：',
+          code: [
+            'function predict(history, horizon, ctx) {',
+            '  var n = history.length;',
+            '  var m = ctx.season > 1 ? ctx.season : 12;   // 周期：月度数据就是 12',
+            '',
+            '  var last = history[n - 1];                  // 朴素法的起点：最后一个值',
+            '',
+            '  // 最近一个周期的总和 与 上一个周期的总和',
+            '  var cur = 0, prev = 0;',
+            '  for (var i = 0; i < m; i++) {',
+            '    cur  += history[n - m + i];               // 最后 m 个数之和',
+            '    prev += history[n - 2 * m + i];           // 再往前 m 个数之和',
+            '  }',
+            '  // 两个周期总和的差 = m 步里一共抬升了 (cur-prev) ，',
+            '  // 除以 m 是"平均每步差"、再除以 m 是换算回"每步抬升"——所以是 m*m',
+            '  var drift = (cur - prev) / (m * m);',
+            '',
+            '  var out = [];                               // 从 last 出发，每步抬 drift',
+            '  for (var h = 1; h <= horizon; h++) {',
+            '    out.push(last + drift * h);',
+            '  }',
+            '  return out;                                 // 长度正好是 horizon',
+            '}'
+          ].join('\n')
+        },
+        {
+          title: '运行 → 提交 → 解锁题解',
+          text: '先点「运行」：大约 73 分、verdict AC。再点「提交判题」正式记分，通过后「查看题解」按钮亮起。' +
+            '然后自己动手玩：把 drift 乘 0.5 或 1.5 再跑，看分数怎么掉 —— 你会直观感受到「过犹不及」。'
+        }
+      ],
+
       solution: toPredictSource(solNaiveDrift),
 
       starter: [
@@ -1268,7 +1340,8 @@
         '先修水平项：它应该是「当前观测」与「上一期水平 + 趋势」的加权平均，权重是 α 与 (1-α)。',
         '趋势项本身已经写好了，注意它用的是「本期的水平增量」`level - prevLevel`，所以 `prevLevel` 必须在更新前保存。',
         '预测公式是 `level + trend * h`（h 从 1 开始），不要写成 `h - 1`。',
-        'α 建议 0.35~0.5，β 建议 0.05~0.15；β 太大容易把噪声当成趋势。'
+        'α 建议 0.35~0.5，β 建议 0.05~0.15；β 太大容易把噪声当成趋势。',
+        '数学补给：两条更新式都是[[term:weighted-average|加权平均]]——新信息占 α/β、旧状态占 1−α/1−β；trend 项估计的就是直线的[[term:derivative|斜率]]。'
       ],
 
       solution: toPredictSource(solHolt),
@@ -1481,7 +1554,8 @@
         '残差剖面的含义：每个相位（`t % m`）上，「观测值比直线高多少 / 低多少」的平均值。你需要遍历全部历史，把残差按相位累加。',
         '累加之后别忘了除以「该相位的样本数」才是均值；如果某个相位一个样本都没有，要给出一个安全的默认值。',
         '外推时，直线值应该用未来时刻的下标（历史长度之后），相位残差用同一个时刻的 `% m` —— 两者必须对应同一个时间点。',
-        '注意不要写成递归：`out[h]` 不能依赖 `out[h-1]`，否则就不是直接法了。'
+        '注意不要写成递归：`out[h]` 不能依赖 `out[h-1]`，否则就不是直接法了。',
+        '数学补给：第一步的直线拟合是[[term:least-squares|最小二乘法]]（[[term:linear-regression|线性回归]]）；分母 n·Σx²−(Σx)² 趋近 0 时把斜率置 0，防止除零。'
       ],
 
       solution: toPredictSource(solDirect),
@@ -1813,7 +1887,8 @@
         '先跑一次模板：它只输出了 θ=0 线（纯直线 + 季节项），θ=2 线完全没实现。',
         '季节项不要直接拿残差均值用 —— 52 个相位的均值加起来通常不为 0，会让整体水平被抬高或压低。先求平均再整体减去这个平均。',
         'θ=2 线是指数平滑：`level = a * d[t] + (1 - a) * level`，取循环结束时的 `level`，不要再拟合一次直线。',
-        '外推时两条线用的是同一个未来时刻 `t = n + h`，季节项也用同一个时刻的 `t % m` —— 三者必须对齐。'
+        '外推时两条线用的是同一个未来时刻 `t = n + h`，季节项也用同一个时刻的 `t % m` —— 三者必须对齐。',
+        '数学补给：θ=0 线的斜率来自[[term:least-squares|最小二乘法]]；「两条 θ 线组合」本质上是对序列做一次[[term:weighted-average|加权平均]]。'
       ],
 
       solution: toPredictSource(solTheta),
@@ -1929,7 +2004,8 @@
         '正确的做法是解方程：Γ_p φ = γ_p。Γ_p 的第 (i,j) 个元素是 γ(|i-j|)，右边是 γ(1..p)。',
         'Levinson-Durbin 递推：从一阶开始，每阶用反射系数把上一阶的系数更新到本阶，同时更新预测误差方差。',
         '多步预测要把刚预测出来的值回填进历史再预测下一步（`ext` 数组边算边推）。',
-        '如果 γ(0) 接近 0（序列几乎是常数），直接返回均值，不要除零。'
+        '如果 γ(0) 接近 0（序列几乎是常数），直接返回均值，不要除零。',
+        '数学补给：Γφ=γ 就是一个[[term:linear-system|线性方程组]]；Γ 沿对角线取值相同（Toeplitz [[term:matrix|矩阵]]），Levinson-Durbin 利用这点把 O(p³) 的消元降到 O(p²)。'
       ],
 
       solution: toPredictSource(solArYW),
@@ -2144,7 +2220,8 @@
         '周期图的做法：先减掉线性趋势，再对每个候选周期 P 算 `Σ d[t]·cos(2πt/P)` 与 `Σ d[t]·sin(2πt/P)`，功率 = (实部² + 虚部²) / n。',
         '取功率最大的前 3 个周期，但要把彼此成倍数关系的去掉（同一个物理周期的谐波）。',
         '解最小二乘要自己写正规方程 + 高斯消元；对角上加 1e-8 的 ridge 防止奇异。',
-        '外推时用的是未来的时刻 `t = n + h`，设计矩阵的列要和外推时的列完全一致。'
+        '外推时用的是未来的时刻 `t = n + h`，设计矩阵的列要和外推时的列完全一致。',
+        '数学补给：第 2 步在解[[term:least-squares|最小二乘法]]的正规方程（[[term:transpose|转置]]矩阵 Aᵀ·A，加 1e-8 防奇异）；cos/sin 基来自[[term:fourier|傅里叶分解]]。'
       ],
 
       solution: toPredictSource(solHarmonic),
@@ -2383,7 +2460,8 @@
         '线性映射的拟合：对每个起点 r，输入 `seq[r .. r+L-1]`，目标 `seq[r+L .. r+L+hz-1]`，',
         '累加出 `A = XᵀX`（L×L）与 `B = XᵀY`（L×hz），对角加 1e-6 的 ridge。',
         '然后对每个预测步 k 解一个 L 元线性方程组 —— 写一个列主元高斯消元，别用迭代法。',
-        '历史长度不足以构造训练窗口时，退化为「重复最后一个观测值」，不要报错。'
+        '历史长度不足以构造训练窗口时，退化为「重复最后一个观测值」，不要报错。',
+        '数学补给：Linear 层就是一次[[term:matrix-multiply|矩阵乘法]]（权重矩阵 × 输入[[term:vector|向量]]）；这里的权重用[[term:least-squares|最小二乘法]]在历史窗口上直接解出。'
       ],
 
       solution: toPredictSource(solDLinear),

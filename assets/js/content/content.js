@@ -32,6 +32,13 @@
 
   var courseIndex = indexBy(courses, 'id');
   var methodIndex = indexBy(methods, 'id');
+  // 术语索引必须惰性构建：index.html 里 glossary.js 排在 content.js 之后，
+  // 加载时一次构建会拿到空表（浏览器上术语链接全部失效），渲染时现查即可。
+  var termIndex = null;
+  function termIndexOf(id) {
+    if (!termIndex) termIndex = indexBy(TSJ.glossary || [], 'id');
+    return termIndex[id] || null;
+  }
 
   /* ---------- 索引与查询 ---------- */
   function course(id) { return courseIndex[id] || null; }
@@ -80,6 +87,11 @@
       if (!r) return '<span class="ds-badge ds-badge-err">缺失引用 ' + esc(id) + '</span>';
       return '<sup class="md-ref"><a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer"' +
         ' title="' + esc(r.title + ' · ' + r.venue) + '">[' + esc(r.id) + ']</a></sup>';
+    });
+    s = s.replace(/\[\[term:([a-z0-9\-]+)(?:\|([^\]\n]+))?\]\]/gi, function (_, id, label) {
+      var t = termIndexOf(id);
+      if (!t) return '<span class="ds-badge ds-badge-err">缺失术语 ' + esc(id) + '</span>';
+      return '<a class="md-term" href="#/glossary" title="术语表：' + esc(t.term) + '">' + esc(label || t.term) + '</a>';
     });
     s = s.replace(/\[\[method:([a-z0-9\-]+)\]\]/gi, function (_, id) {
       var m = methodIndex[id];
@@ -205,7 +217,7 @@
   function validate() {
     var errors = [];
 
-    if (courses.length !== 8) errors.push('课程模块应为 8 个，实际 ' + courses.length);
+    if (courses.length !== 9) errors.push('课程模块应为 9 个（m0 零基础第一课 + m1-m8），实际 ' + courses.length);
 
     var ids = {};
     courses.forEach(function (c) {
@@ -228,6 +240,11 @@
       });
       (c.referenceIds || []).forEach(function (rid) {
         if (!refIndex[rid]) errors.push(c.id + ' 引用了不存在的来源：' + rid);
+      });
+      // 正文里的 [[term:]]（含 [[term:id|别名]] 写法）必须指向真实术语（防手滑拼错 id）
+      String(c.body || '').replace(/\[\[term:([a-z0-9-]+)(?:\|[^\]]*)?\]\]/gi, function (_, id) {
+        if (!termIndexOf(id)) errors.push(c.id + ' 引用了不存在的术语：' + id);
+        return _;
       });
       (c.prereq || []).forEach(function (p) {
         if (!courseIndex[p]) errors.push(c.id + ' 先修不存在：' + p);
