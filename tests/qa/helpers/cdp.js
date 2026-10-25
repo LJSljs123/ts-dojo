@@ -67,12 +67,14 @@ async function launch(url, opts) {
   let target = null;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch('http://127.0.0.1:' + port + '/json/list');
+      // 每次探测都带超时：浏览器卡死时 /json/list 可能永不返回，
+      // 不加超时会让 launch 永远停在轮询里（整套测试随之挂死）。
+      const res = await fetch('http://127.0.0.1:' + port + '/json/list', { signal: AbortSignal.timeout(2000) });
       const list = await res.json();
       target = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
       if (target) break;
     } catch (e) {
-      /* 还没起来 */
+      /* 还没起来 / 探测超时：继续轮询直到 deadline */
     }
     await sleep(200);
   }
@@ -130,8 +132,24 @@ async function launch(url, opts) {
   function send(method, params) {
     const id = ++seq;
     return new Promise((resolve, reject) => {
-      pending.set(id, { resolve, reject });
-      ws.send(JSON.stringify({ id, method, params: params || {} }));
+      // 必须有超时：浏览器卡死 / WebSocket 断开时 CDP 永远不回包，
+      // 没有超时会把整个测试文件挂死（而不是失败）。
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error('CDP 请求超时（20s）：' + method));
+      }, 20000);
+      timer.unref ? timer.unref() : void 0;
+      pending.set(id, {
+        resolve: (v) => { clearTimeout(timer); resolve(v); },
+        reject: (e) => { clearTimeout(timer); reject(e); },
+      });
+      try {
+        ws.send(JSON.stringify({ id, method, params: params || {} }));
+      } catch (err) {
+        clearTimeout(timer);
+        pending.delete(id);
+        reject(err);
+      }
     });
   }
 

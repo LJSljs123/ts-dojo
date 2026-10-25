@@ -36,9 +36,11 @@
    * @param {Function} runJobs 适配器批量执行函数
    * @param {number[]} values 完整序列
    * @param {number} minHistory 方法最小历史
+   * @param {Object} [opts] { season }：必须与最终预测一致，否则残差来自不同参数形态的模型
    * @returns {number[]} 残差数组（已排序）
    */
-  function trainingResiduals(runJobs, values, minHistory) {
+  function trainingResiduals(runJobs, values, minHistory, opts) {
+    var season = (opts && typeof opts.season === 'number') ? opts.season : 1;
     var start = Math.max(minHistory, 2);
     if (values.length <= start + 1) return [];
     var jobs = [];
@@ -47,7 +49,7 @@
       jobs.push({
         history: values.slice(0, t),
         horizon: 1,
-        ctx: { season: 0, datasetId: 'lab-train', index: t }
+        ctx: { season: season, datasetId: 'lab-train', index: t }
       });
       index.push(t);
     }

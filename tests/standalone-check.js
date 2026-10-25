@@ -55,13 +55,15 @@ check('无外部资源引用', () => {
   assert.deepEqual(refs, [], '仍有外部引用：' + refs.join(', '));
 });
 
-check('19 个脚本全部内联，关键命名空间齐全', () => {
+check('全部脚本内联，关键命名空间齐全', () => {
   const html = fs.readFileSync(OUT, 'utf8');
   const inlineCount = (html.match(/<script>/g) || []).length;
-  assert.ok(inlineCount >= 20, '内联脚本数量偏少：' + inlineCount + '（应为 19 个模块 + 启动自检）');
+  // 40 个模块脚本 + 1 个启动自检（数量与 index.html 的 <script src> 一致）
+  assert.ok(inlineCount >= 41, '内联脚本数量偏少：' + inlineCount + '（应为 40 个模块 + 启动自检）');
   ['TSJ.datasets', 'TSJ.problems', 'TSJ.methods', 'TSJ.judge', 'TSJ.createEditor', 'TSJ.drawSeries',
+    'TSJ.glossary', 'TSJ.charts', 'TSJ.labConfig', 'TSJ.labRunner',
     'TSJ.appCore', 'TSJ.appStore', 'TSJ.appStorage', 'TSJ.appViews', 'TSJ.appProblem',
-    'TSJ.appPages', 'TSJ.appLibrary', 'TSJ.appBoards', 'TSJ.app'].forEach((ns) => {
+    'TSJ.appPages', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appLabLive', 'TSJ.appStudio', 'TSJ.appCmdk', 'TSJ.app'].forEach((ns) => {
     assert.ok(html.indexOf(ns) >= 0, '缺少命名空间：' + ns);
   });
 });

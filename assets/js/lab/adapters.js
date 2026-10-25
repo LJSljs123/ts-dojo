@@ -25,7 +25,12 @@
     ],
     ar: [{ from: 'var p = Math.min(10, Math.max(1, Math.floor(n / 4)));', param: 'order' }],
     theta: [{ from: 'var alpha = 0.2;', param: 'alpha' }],
-    dlinear: []
+    dlinear: [],
+    tsb: [
+      { from: 'var alpha = 0.05;', param: 'alpha' },
+      { from: 'var beta = 0.1;', param: 'beta' }
+    ],
+    combination: []
   };
 
   var SOURCE_PROBLEM = {
@@ -34,7 +39,9 @@
     'holt-winters': 'p6-holt-winters',
     ar: 'p11-ar-yw',
     theta: 'p10-theta',
-    dlinear: 'p15-dlinear'
+    dlinear: 'p15-dlinear',
+    tsb: 'p12-croston',
+    combination: 'p14-combination'
   };
 
   function replaceOnce(src, anchor, replacement, label) {
@@ -47,7 +54,9 @@
   function buildSource(method, params) {
     if (!config.METHODS[method]) throw new Error('方法不在白名单：' + method);
     var problemId = SOURCE_PROBLEM[method];
-    if (!problemId) return null;
+    // 既不是基线、又没有参考解的白名单方法属于配置错误：必须抛错，
+    // 不能返回 null —— 否则 null 会被当成源码字符串编译成 "predict is not defined"。
+    if (!problemId) throw new Error('方法缺少基线与参考解的适配：' + method);
     var p = TSJ.findProblem(problemId);
     if (!p || !p.solution) throw new Error('找不到参考解：' + problemId);
     var src = p.solution;
@@ -63,18 +72,28 @@
   }
 
   /**
+   * 白名单键 → judge.baselines 键的映射。
+   * 白名单用连字符（seasonal-naive），judge 基线用下划线（seasonal_naive）——
+   * 不映射的话这两个方法会走「参考解」分支并因找不到来源而失败。
+   */
+  function baselineKeyOf(method) {
+    return method.indexOf('-') >= 0 ? method.replace(/-/g, '_') : method;
+  }
+
+  /**
    * 批量执行同一方法的一组任务：参考方法只编译一次，避免逐点重复编译。
    * @returns {{results:Array}} 与 judge.runInProcess 同构
    */
   function runJobs(method, params, jobs) {
     if (!config.METHODS[method]) throw new Error('方法不在白名单：' + method);
     params = params || {};
-    if (judge.baselines[method]) {
+    var baseline = judge.baselines[baselineKeyOf(method)];
+    if (baseline) {
       var results = [];
       for (var i = 0; i < jobs.length; i++) {
         var job = jobs[i];
         try {
-          var out = judge.baselines[method](job.history.slice(), job.horizon, job.ctx);
+          var out = baseline(job.history.slice(), job.horizon, job.ctx);
           if (!Array.isArray(out) || out.length !== job.horizon) throw new Error('基线输出长度不正确');
           results.push({ status: 'ok', value: out });
         } catch (err) {
@@ -112,6 +131,7 @@
   TSJ.labAdapters = {
     ANCHORS: ANCHORS,
     SOURCE_PROBLEM: SOURCE_PROBLEM,
+    baselineKeyOf: baselineKeyOf,
     buildSource: buildSource,
     runJobs: runJobs,
     createRunner: createRunner,

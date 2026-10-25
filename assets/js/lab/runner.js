@@ -64,6 +64,10 @@
       freq: ds.freq,
       datasetId: ds.id
     });
+    // 防御：即使配置校验漏过，也不允许在“训练段不足 4 点”的荒谬状态下继续
+    if (!points.length || !points[0].history || points[0].history.length < 4) {
+      return Promise.resolve({ ok: false, errors: ['数据集太短：无法按当前配置构造任何训练/测试点'] });
+    }
 
     var meta = TSJ.labConfig.METHODS[cfg.method];
     var runJobs = adapters.createRunner(cfg.method, cfg.params);
@@ -88,7 +92,10 @@
       if (cfg.interval.enabled) {
         var start = Math.max(meta.minHistory, 2);
         for (var t = start; t < point.history.length; t++) {
-          jobs.push({ history: point.history.slice(0, t), horizon: 1, ctx: { season: 0, datasetId: ds.id, index: t } });
+          // 校准任务必须携带与最终预测相同的 season：多数参考解读取 ctx.season
+          // （Holt-Winters/Theta/组合/DLinear），season 不一致会让校准残差
+          // 来自另一个参数形态的模型，区间与覆盖率系统性失真。
+          jobs.push({ history: point.history.slice(0, t), horizon: 1, ctx: { season: ds.season, datasetId: ds.id, index: t } });
           trainIndex.push(t);
         }
       }
@@ -174,7 +181,7 @@
         ok: true,
         canceled: false,
         schema: 1,
-        appVersion: '3.0.0',
+        appVersion: '3.2.0',
         algorithmVersion: 'lab-1',
         datasetVersion: 'datasets-' + ((TSJ.datasets || []).length),
         createdAt: Date.now(),

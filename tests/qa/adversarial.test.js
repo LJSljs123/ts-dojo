@@ -191,8 +191,10 @@ async function evalSandbox(code, over, limits) {
     const guard = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('判题在 6s 内没有返回（疑似挂死）')), 6000).unref()
     );
+    // perJob 600ms：载荷全部同步抛错、不依赖等待；300ms 在整套 QA 并发负载下
+    // 会被事件循环饥饿误判成 TLE（曾两次在全量运行中偶发翻车），放宽不弱化断言。
     const res = await Promise.race([
-      judge.evaluate({ problem, dataset, code, limits: limits || { perJob: 300, total: 1500 } }),
+      judge.evaluate({ problem, dataset, code, limits: limits || { perJob: 600, total: 2500 } }),
       guard,
     ]);
     return { res, stat: fw.stat };
@@ -308,4 +310,84 @@ test('沙箱：语法错误在 worker 内被捕获，不触发 onerror 死循环
   const { res } = await evalSandbox('function predict( { ');
   assert.equal(res.verdict, 'RE');
   assert.match(res.cases[0].error, /语法错误/);
+});
+
+test('沙箱：异步抛错（worker.onerror）不得把后续测试点误判为 TLE（孤儿定时器回归）', async () => {
+  /*
+   * 场景：用户代码留下 setTimeout 回调异步抛错（沙箱允许函数形式的 setTimeout），
+   * 错误事件在下一个测试点在飞时到达主线程 worker.onerror。
+   * 旧实现 onerror 不清 jobTimer 就 next()：旧定时器被新赋值覆盖成为孤儿，
+   * 到期后 finish(true)，把仍在正常跑的后续测试点整题误判 TLE、总分记 0。
+   * 修复后：onerror 先清定时器；只有出错的那个点记 RE，其余点照常完成。
+   */
+  const fw = installFakeWorker(judge, { hangMs: 200 });
+  try {
+    const RealWorker = globalThis.Worker;
+    globalThis.Worker = class extends RealWorker {
+      constructor(url) {
+        super(url);
+        const self = this;
+        let handler = null;
+        Object.defineProperty(this, 'onmessage', {
+          configurable: true,
+          get() { return handler; },
+          set(fn) {
+            // 第 2 个测试点（id=1）的结果送达前，先模拟一次异步 onerror；
+            // 之后每个测试点延迟 150ms 送达 —— 模拟真实耗时，让孤儿定时器有机会在
+            // 「后续测试点仍在飞」时到期（旧 bug 正是这时把整题误判 TLE）。
+            handler = function (ev) {
+              const id = ev.data && ev.data.id;
+              if (id === 1 && !self.__qaBoom) {
+                self.__qaBoom = true;
+                if (typeof self.onerror === 'function') self.onerror({ message: 'Uncaught Error: boom (async)' });
+              }
+              if (id >= 2) {
+                setTimeout(function () { fn(ev); }, 150);
+                return;
+              }
+              fn(ev);
+            };
+          },
+        });
+      }
+    };
+    const values = [];
+    for (let i = 0; i < 60; i++) values.push(1 + (i % 4));
+    const { problem, dataset } = makeCase(
+      { horizon: 4, mode: 'rolling', windows: 12, originStep: 4, baselines: ['naive'], threshold: 0.9 },
+      values
+    );
+    const guard = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('判题在 40s 内没有返回（疑似挂死）')), 40000).unref()
+    );
+    const res = await Promise.race([
+      judge.evaluate({
+        problem, dataset,
+        code: 'function predict(h,n,c){ return new Array(n).fill(1.5); }',
+        /*
+         * 时序设计（对并行负载鲁棒）：12 个滚动窗口、送达延迟 d=150ms。
+         * onerror 在 id=1（第 2 个 job）送达时触发，孤儿定时器 = 该 job 的 perJob，
+         * 从 T1（其派发时刻）起算；其余 10 个 job 的结果在 T1 + k·d 逐个到达，
+         * 全部完成于 T1 + 10d = 1500ms。
+         * 旧代码变红：孤儿须落在最后一个窗口的在飞区间 (9d, 10d) = (1350, 1500)
+         * → perJob=1425 ✓（负载膨胀 L 倍时完成时刻 1500·L ≥ 1425 恒成立 → 恒红）。
+         * 新代码变绿：每个 job 的送达间隔 150·L 必须小于 perJob=1425
+         * → 容忍 L ≤ 9.5 倍并行负载膨胀。正常并行负载（≤3 倍）下稳定。
+         */
+        limits: { perJob: 1425, total: 30000 },
+      }),
+      guard,
+    ]);
+    assert.equal(res.cases.length, 12, '应有 12 个测试点');
+    const verdicts = res.cases.map((c) => c.verdict);
+    assert.ok(verdicts.indexOf('TLE') < 0, '任何测试点都不应被判 TLE，实际：' + JSON.stringify(verdicts));
+    assert.notEqual(res.verdict, 'TLE', '整题不应被判 TLE');
+    // 出错只应落在异步错误波及的那个点上（其余点正常完成）
+    assert.equal(verdicts[1], 'RE', '异步错误应记到在飞的第 2 个点上：' + JSON.stringify(verdicts));
+    assert.match(res.cases[1].error, /boom/);
+    assert.notEqual(verdicts[0], 'RE');
+    assert.notEqual(verdicts[verdicts.length - 1], 'RE');
+  } finally {
+    fw.restore();
+  }
 });

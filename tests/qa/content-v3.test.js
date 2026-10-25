@@ -16,12 +16,20 @@ require('../../assets/js/methods.js');
 require('../../assets/js/content/references.js');
 require('../../assets/js/content/courses.js');
 require('../../assets/js/content/method-details.js');
+require('../../assets/js/content/glossary.js');
 require('../../assets/js/content/content.js');
 
-test('内容完整性：8 课程 / 29 方法详情 / 引用全部通过 validate()', () => {
-  assert.equal(TSJ.courses.length, 8);
-  assert.equal(TSJ.methods.length, 29);
-  assert.equal(Object.keys(TSJ.methodDetails).length, 29);
+/** 内容规模契约：v3.2 扩充后为 46 方法（13/3/14/10/6 五层）+ 8 课程 + 术语表。 */
+const METHOD_COUNT = 46;
+const TIER_COUNTS = { classic: 13, competition: 3, deep: 14, foundation: 10, eval: 6 };
+
+test('内容完整性：9 课程（含 m0 零基础课）/ 46 方法详情 / 引用全部通过 validate()', () => {
+  assert.equal(TSJ.courses.length, 9);
+  assert.equal(TSJ.methods.length, METHOD_COUNT);
+  assert.equal(Object.keys(TSJ.methodDetails).length, METHOD_COUNT);
+  const byTier = {};
+  for (const m of TSJ.methods) byTier[m.tier] = (byTier[m.tier] || 0) + 1;
+  assert.deepEqual(byTier, TIER_COUNTS, '五层数量与内容契约不一致');
   const errors = TSJ.content.validate();
   assert.deepEqual(errors, [], '内容校验失败：' + errors.join('; '));
 });
@@ -72,5 +80,25 @@ test('方法详情覆盖所有卡片的关键字段，且不与方法卡重复�
     assert.ok(d.assumptions.length && d.limitations.length, m.id + ' 缺少假设/局限');
     assert.ok(d.workedExample && d.counterexample, m.id + ' 缺少小例/反例');
     assert.notEqual(d.intuition, m.idea, m.id + ' 详情直接复制了方法卡 idea');
+  }
+});
+
+test('术语表：字段齐全、分类合法、see 与 links 全部指向真实目标', () => {
+  const terms = TSJ.glossary;
+  const cats = new Set(TSJ.glossaryCategories.map((c) => c.id));
+  const termIds = new Set(terms.map((t) => t.id));
+  assert.ok(terms.length >= 50, '术语应至少 50 条，实际 ' + terms.length);
+
+  for (const t of terms) {
+    assert.ok(t.id && t.term && t.en && t.def, (t.id || '?') + ' 缺基础字段');
+    assert.ok(t.def.length >= 10, t.id + ' 定义过短');
+    assert.ok(cats.has(t.cat), t.id + ' 分类非法：' + t.cat);
+    for (const s of t.see || []) {
+      assert.ok(termIds.has(s), t.id + ' 的 see 指向不存在的术语：' + s);
+    }
+    const L = t.links || {};
+    if (L.course) assert.ok(TSJ.content.course(L.course), t.id + ' 链接的课程不存在：' + L.course);
+    if (L.method) assert.ok(TSJ.methodsById(L.method), t.id + ' 链接的方法不存在：' + L.method);
+    if (L.problem) assert.ok(TSJ.findProblem(L.problem), t.id + ' 链接的题目不存在：' + L.problem);
   }
 });

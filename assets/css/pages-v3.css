@@ -296,3 +296,332 @@
   .lab-config-row { grid-template-columns: 1fr; }
   .wk-list-item { align-items: flex-start; flex-direction: column; }
 }
+
+/* =========================================================================
+   v3.3 可视化美化（实验室 / 图表 / 表格）
+   ========================================================================= */
+
+/* 紧凑 hero：实验室这类没有右侧栏的页面不再撑出半幅空白 */
+.wk-hero-slim {
+  grid-template-columns: minmax(0, 1fr);
+}
+.wk-hero-slim .wk-hero-main p {
+  margin-bottom: 0;
+}
+
+/* 结果工具条：测试点序号 + 诊断图分段控件同一行，窄屏折行 */
+.lab-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--v3-space-3);
+  margin-bottom: var(--v3-space-4);
+}
+
+/* 分段控件（连体按钮）：比一排独立小按钮更像「视图切换」 */
+.lab-seg {
+  display: inline-flex;
+  border: 1px solid var(--v3-line);
+  border-radius: var(--v3-radius);
+  overflow: hidden;
+  background: var(--v3-panel-2);
+}
+.lab-seg-btn {
+  appearance: none;
+  border: 0;
+  border-right: 1px solid var(--v3-line);
+  background: transparent;
+  color: var(--v3-text-dim);
+  font: inherit;
+  font-size: var(--v3-fs-sm);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.lab-seg-btn:last-child { border-right: 0; }
+.lab-seg-btn:hover { color: var(--v3-text); background: color-mix(in srgb, var(--v3-accent) 8%, transparent); }
+.lab-seg-on {
+  color: var(--v3-panel);
+  background: var(--v3-accent);
+  font-weight: 600;
+}
+.lab-seg-on:hover { color: var(--v3-panel); background: var(--v3-accent); }
+
+/* 指标表区（图表下方）：给表一个明确的小节标题 */
+.lab-metrics { margin-top: var(--v3-space-5); }
+.lab-metrics-title {
+  margin: 0 0 var(--v3-space-3);
+  font-size: var(--v3-fs-md);
+  font-weight: 600;
+  color: var(--v3-text);
+}
+
+/* 表格：行悬停反馈 + 末列不贴边 */
+.ds-table td:last-child,
+.ds-table th:last-child { padding-right: 16px; }
+.ds-table-hover tbody tr { transition: background 0.12s ease; }
+.ds-table-hover tbody tr:hover td { background: color-mix(in srgb, var(--v3-accent) 7%, transparent); }
+
+/* 候选 vs 基线的优势/劣势标记 */
+.cell-good { color: var(--v3-ok); font-size: var(--v3-fs-xs); font-weight: 600; }
+.cell-bad { color: var(--v3-err); font-size: var(--v3-fs-xs); font-weight: 600; }
+
+/* 窄屏：工具条与分段控件占满一行，按钮可换行 */
+@media (max-width: 640px) {
+  .lab-toolbar { flex-direction: column; align-items: stretch; }
+  .lab-seg { display: flex; width: 100%; }
+  .lab-seg-btn { flex: 1 1 auto; padding: 7px 6px; }
+}
+
+/* =========================================================================
+   v3.4 视觉打磨：顶栏 / 工作台 / 图表容器 / 课程地图
+   ========================================================================= */
+
+/* ---- 顶栏：毛玻璃 + 细分割线 ---- */
+.topbar {
+  background: color-mix(in srgb, var(--v3-panel) 86%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--v3-line);
+}
+.nav a {
+  position: relative;
+  transition: color 0.12s ease;
+}
+.nav a::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--v3-accent);
+  transform: scaleX(0);
+  transition: transform 0.15s ease;
+}
+.nav a.on::after { transform: scaleX(1); }
+
+/* ---- 工作台 hero：更强的空间感 ---- */
+.wk-hero-main {
+  background:
+    radial-gradient(1200px 320px at 85% -60%,
+      color-mix(in srgb, var(--v3-accent) 16%, transparent), transparent 70%),
+    linear-gradient(135deg, color-mix(in srgb, var(--v3-accent) 12%, transparent), transparent 55%),
+    var(--v3-panel);
+}
+.wk-kicker { letter-spacing: 0.14em; }
+/* 标题渐变字：仅在支持 background-clip:text 的内核启用（否则保持纯色可读） */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .wk-hero-main h1 {
+    background: linear-gradient(120deg, var(--v3-text) 55%, color-mix(in srgb, var(--v3-accent) 72%, var(--v3-text)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+.wk-list-item {
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+}
+.wk-list-item:hover {
+  border-color: color-mix(in srgb, var(--v3-accent) 42%, var(--v3-line));
+  background: color-mix(in srgb, var(--v3-accent) 5%, transparent);
+  transform: translateX(2px);
+}
+.wk-metric b, .method-fact b { font-variant-numeric: tabular-nums; }
+
+/* ---- 图表容器：内嵌画布圆角裁切 + 图例微调 ---- */
+.chart-v2-canvas-wrap {
+  border: 1px solid var(--v3-line);
+  border-radius: var(--v3-radius);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--v3-panel-2) 55%, transparent);
+}
+.chart-v2-legend span {
+  color: var(--v3-text-dim);
+  font-size: var(--v3-fs-xs);
+}
+
+/* ---- 课程地图：模块卡完成态描边 ---- */
+.course-module:has(.ds-badge-ok) {
+  border-color: color-mix(in srgb, var(--v3-ok) 40%, var(--v3-line));
+}
+
+/* ---- 方法详情 aside 卡片吸顶（宽屏） ---- */
+@media (min-width: 961px) {
+  .method-aside { position: sticky; top: 64px; align-self: start; }
+}
+
+/* =========================================================================
+   v3.5 顶级交互：实验室实时滑杆 / 全局命令面板 / 工作台进度环
+   ========================================================================= */
+
+/* ---- 实验室：实时调节滑杆 ---- */
+.lab-live {
+  margin-top: var(--v3-space-5);
+  border: 1px solid color-mix(in srgb, var(--v3-accent) 34%, var(--v3-line));
+  border-radius: var(--v3-radius);
+  padding: var(--v3-space-4);
+  background: color-mix(in srgb, var(--v3-accent) 5%, var(--v3-panel-2));
+}
+.lab-live-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: var(--v3-space-3); }
+.lab-live-title b { font-size: var(--v3-fs-md); color: var(--v3-accent); }
+.lab-live-title span { font-size: var(--v3-fs-xs); color: var(--v3-muted); }
+.lab-live-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--v3-space-3) var(--v3-space-4); }
+.lab-live-head { display: flex; justify-content: space-between; align-items: baseline; }
+.lab-live-head label { font-family: var(--v3-mono); font-size: var(--v3-fs-sm); color: var(--v3-text-dim); }
+.lab-live-head output { font-family: var(--v3-mono); font-size: var(--v3-fs-md); font-weight: 600; color: var(--v3-accent); font-variant-numeric: tabular-nums; }
+.lab-live-param input[type="range"] {
+  width: 100%;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--v3-accent) 26%, var(--v3-line));
+  outline-offset: 4px;
+  cursor: ew-resize;
+}
+.lab-live-param input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--v3-accent);
+  border: 2px solid var(--v3-panel);
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--v3-accent) 50%, transparent);
+}
+.lab-live-param input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--v3-accent); border: 2px solid var(--v3-panel);
+}
+
+/* ---- 命令面板 Ctrl/Cmd + K ---- */
+.cmdk { display: flex; flex-direction: column; gap: 10px; }
+.cmdk-input {
+  width: 100%;
+  padding: 13px 16px;
+  font-size: var(--v3-fs-md);
+  font-family: var(--v3-sans);
+  color: var(--v3-text);
+  background: var(--v3-panel-2);
+  border: 1px solid var(--v3-accent);
+  border-radius: var(--v3-radius);
+  outline: none;
+}
+.cmdk-input::placeholder { color: var(--v3-muted); }
+.cmdk-results {
+  max-height: 46vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  font: inherit;
+  color: var(--v3-text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--v3-radius);
+  cursor: pointer;
+}
+.cmdk-item:hover { background: color-mix(in srgb, var(--v3-accent) 7%, transparent); }
+.cmdk-active {
+  background: color-mix(in srgb, var(--v3-accent) 13%, transparent) !important;
+  border-color: color-mix(in srgb, var(--v3-accent) 42%, transparent);
+}
+.cmdk-icon { flex: 0 0 auto; font-size: 15px; }
+.cmdk-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.cmdk-label { font-size: var(--v3-fs-sm); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmdk-sub { font-size: var(--v3-fs-xs); color: var(--v3-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmdk-go { flex: 0 0 auto; color: var(--v3-muted); font-size: var(--v3-fs-xs); }
+.cmdk-active .cmdk-go { color: var(--v3-accent); }
+.cmdk-empty { padding: 22px 10px; text-align: center; color: var(--v3-muted); font-size: var(--v3-fs-sm); }
+.cmdk-foot {
+  display: flex; gap: 14px; justify-content: flex-end;
+  font-size: var(--v3-fs-xs); color: var(--v3-muted);
+}
+
+/* ---- 工作台：进度环 + 分难度条 ---- */
+.wk-overview { display: flex; align-items: center; gap: var(--v3-space-4); }
+.wk-ring { flex: 0 0 96px; width: 96px; height: 96px; }
+.wk-ring-bg { fill: none; stroke: var(--v3-line); stroke-width: 7; }
+.wk-ring-fg {
+  fill: none;
+  stroke: var(--v3-accent);
+  stroke-width: 7;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 42px 42px;
+  transition: stroke-dashoffset 0.4s ease;
+}
+.wk-ring-num { text-anchor: middle; font-size: 15px; font-weight: 700; fill: var(--v3-text); font-variant-numeric: tabular-nums; }
+.wk-ring-sub { text-anchor: middle; font-size: 9.5px; fill: var(--v3-muted); }
+.wk-overview-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.wk-dbar { display: flex; align-items: center; gap: 8px; }
+.wk-dbar-name { flex: 0 0 34px; font-size: var(--v3-fs-xs); color: var(--v3-text-dim); }
+.wk-dbar-track {
+  flex: 1 1 auto; height: 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--v3-accent) 14%, var(--v3-line));
+  overflow: hidden;
+}
+.wk-dbar-fill { display: block; height: 100%; border-radius: 999px; background: var(--v3-accent); }
+.wk-dbar-n { flex: 0 0 42px; text-align: right; font-size: var(--v3-fs-xs); color: var(--v3-muted); font-variant-numeric: tabular-nums; }
+.wk-mini-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 4px; font-size: var(--v3-fs-xs); color: var(--v3-muted); }
+@media (max-width: 640px) {
+  .wk-ring { flex-basis: 84px; width: 84px; height: 84px; }
+}
+
+/* 命令面板容器：比普通弹层更宽更靠上（类 Spotlight / Ctrl+K 观感） */
+#overlay:has(.cmdk) {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+#overlay .cmdk {
+  width: min(620px, 92vw);
+  background: var(--v3-panel);
+  border: 1px solid color-mix(in srgb, var(--v3-accent) 38%, var(--v3-line));
+  border-radius: var(--v3-radius-lg);
+  padding: 14px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+}
+
+/* =========================================================================
+   v3.6 模型工坊 #/studio
+   ========================================================================= */
+
+/* 拆分协议条：train / val / test 三段配色（与图表分界线同语义） */
+.studio-splits { margin-top: var(--v3-space-3); }
+.studio-split-row {
+  display: flex;
+  gap: 8px;
+  font-family: var(--v3-mono);
+  font-size: var(--v3-fs-sm);
+  margin-bottom: 6px;
+}
+.studio-split-row span {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--v3-accent) 13%, transparent);
+  color: var(--v3-accent);
+}
+.studio-split-row .studio-split-val { background: color-mix(in srgb, var(--v3-warn) 14%, transparent); color: var(--v3-warn); }
+.studio-split-row .studio-split-test { background: color-mix(in srgb, var(--v3-err) 13%, transparent); color: var(--v3-err); }
+
+/* 报告头徽标行 */
+.studio-report-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: var(--v3-space-3);
+}
+
+/* 左栏编辑器高度匹配题目页（编辑器自身已有样式，这里只收紧结果卡间距） */
+#studioReport .notice { margin: 8px 0; }
+#studioReport .err-box { margin: 8px 0; }

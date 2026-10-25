@@ -602,6 +602,10 @@
       var key = ev.key;
       var mod = ev.ctrlKey || ev.metaKey;
 
+      // 输入法合成中（拼音候选框开着）：一切快捷行为都必须放行，
+      // 否则按 Enter 确认候选词会被劫持成换行、Tab 会打断选字。
+      if (ev.isComposing || ev.keyCode === 229) return;
+
       // Ctrl / Cmd + Enter：运行
       if (mod && (key === 'Enter' || key === '\n')) {
         ev.preventDefault();

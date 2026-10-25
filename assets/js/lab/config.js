@@ -34,7 +34,16 @@
     },
     ar: { label: 'AR(p) Yule-Walker', params: { order: { min: 1, max: 10, step: 1, def: 4 } }, minHistory: 8 },
     theta: { label: 'Theta 方法', params: { alpha: { min: 0.05, max: 0.5, step: 0.01, def: 0.2 } }, minHistory: 6 },
-    dlinear: { label: 'DLinear', params: {}, minHistory: 8 }
+    dlinear: { label: 'DLinear', params: {}, minHistory: 8 },
+    tsb: {
+      label: 'TSB 间歇需求',
+      params: {
+        alpha: { min: 0.02, max: 0.4, step: 0.01, def: 0.05 },
+        beta: { min: 0.02, max: 0.4, step: 0.01, def: 0.1 }
+      },
+      minHistory: 6
+    },
+    combination: { label: '组合预测（中位数）', params: {}, minHistory: 8 }
   };
 
   var METRICS = {
@@ -97,8 +106,9 @@
     }
 
     var meta = METHODS[cfg.method] || METHODS[base.method];
-    var defParams = METHODS[base.method].params;
-    Object.keys(defParams).forEach(function (k) { cfg.params[k] = defParams[k].def; });
+    // 关键：默认参数必须跟随目标方法，而不是永远取 base.method（否则会把
+    // Holt-Winters 的 beta/gamma 泄漏进 SES/AR 等方法的配置里）
+    Object.keys(meta.params).forEach(function (k) { cfg.params[k] = meta.params[k].def; });
     if (raw.params && typeof raw.params === 'object') {
       Object.keys(meta.params).forEach(function (key) {
         var rule = meta.params[key];
@@ -142,6 +152,24 @@
     }
     cfg.interval.levels = cfg.interval.levels.filter(function (l) { return l === 80 || l === 95; });
     if (!cfg.interval.levels.length) cfg.interval.levels = [80, 95];
+
+    // 数据集长度校验：horizon/rolling 窗口/方法最小历史都必须同时装得下
+    var ds = null;
+    for (var i = 0; i < (TSJ.datasets || []).length; i++) {
+      if (TSJ.datasets[i].id === cfg.datasetId) ds = TSJ.datasets[i];
+    }
+    if (ds) {
+      var need = cfg.split.horizon +
+        (cfg.split.mode === 'rolling' ? (cfg.split.windows - 1) * cfg.split.originStep : 0) +
+        Math.max(4, meta.minHistory || 4);
+      if (ds.values.length < need) {
+        errors.push('数据集太短：' + ds.id + ' 只有 ' + ds.values.length +
+          ' 点，当前配置至少需要 ' + need + ' 点');
+        cfg.split.horizon = Math.max(1, Math.min(cfg.split.horizon, Math.max(1, ds.values.length - 8)));
+        cfg.split.windows = 1;
+        cfg.split.originStep = cfg.split.horizon;
+      }
+    }
 
     return { ok: errors.length === 0, errors: errors, config: cfg };
   }

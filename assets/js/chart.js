@@ -18,8 +18,10 @@
 
   var TSJ = global.TSJ || (global.TSJ = {});
 
-  var COLOR = {
-    bg: '#131a22',
+  /* 深色兜底色板：正常情况下每次绘制都从 CSS 变量读取（跟随深浅主题），
+     只有在无 DOM / 变量缺失时才用这里的硬编码值。 */
+  var FALLBACK = {
+    bg: 'transparent',
     grid: '#1f2833',
     axis: '#2a3542',
     text: '#6f7d8d',
@@ -31,10 +33,43 @@
     actual: '#8a97a8',
     cross: 'rgba(165, 180, 252, 0.55)',
     tipBg: 'rgba(8, 12, 17, 0.94)',
-    tipBorder: 'rgba(139, 156, 255, 0.45)'
+    tipBorder: 'rgba(139, 156, 255, 0.45)',
+    tipText: '#a5b2c1',
+    tipTitle: '#c8d4e0'
   };
 
-  var PAD = { left: 52, right: 14, top: 12, bottom: 20 };
+  /** 读取文档根上的 CSS 变量（主题切换后取值自动跟随）。 */
+  function cssVar(name, fallback) {
+    if (!global.document || !global.document.documentElement || !global.getComputedStyle) return fallback;
+    var v = global.getComputedStyle(global.document.documentElement).getPropertyValue(name);
+    return v && v.trim() ? v.trim() : fallback;
+  }
+
+  /** 读取带透明度的 CSS 颜色变量：tokens 里没有的衍生色（区间带等）按主题手动给出。 */
+  function palette() {
+    var light = !!(global.document && global.document.documentElement &&
+      global.document.documentElement.getAttribute('data-theme') === 'light');
+    return {
+      bg: FALLBACK.bg,
+      grid: cssVar('--v3-chart-grid', FALLBACK.grid),
+      axis: cssVar('--v3-line', FALLBACK.axis),
+      text: cssVar('--v3-chart-axis', FALLBACK.text),
+      history: cssVar('--v3-chart-history', FALLBACK.history),
+      band: light ? 'rgba(3, 105, 161, 0.08)' : 'rgba(45, 212, 191, 0.09)',
+      bandEdge: light ? 'rgba(3, 105, 161, 0.45)' : FALLBACK.bandEdge,
+      bandEdgeHot: light ? 'rgba(3, 105, 161, 0.85)' : FALLBACK.bandEdgeHot,
+      predict: cssVar('--v3-chart-pred', FALLBACK.predict),
+      actual: cssVar('--v3-chart-actual', FALLBACK.actual),
+      cross: light ? 'rgba(3, 105, 161, 0.5)' : FALLBACK.cross,
+      tipBg: light ? 'rgba(255, 255, 255, 0.96)' : FALLBACK.tipBg,
+      tipBorder: light ? 'rgba(3, 105, 161, 0.35)' : FALLBACK.tipBorder,
+      tipText: light ? '#475569' : FALLBACK.tipText,
+      tipTitle: light ? '#0f172a' : FALLBACK.tipTitle,
+      font: cssVar('--v3-mono', 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace')
+    };
+  }
+
+  var PAD = { left: 52, right: 14, top: 14, bottom: 22 };
   var DEFAULT_HEIGHT = 180;
 
   /**
@@ -50,6 +85,25 @@
     if (span >= 10) return v.toFixed(1);
     if (span >= 1) return v.toFixed(2);
     return v.toFixed(3);
+  }
+
+  /**
+   * 「整洁刻度」：把值域扩展到 1/2/5×10^k 的整数倍，让网格线落在好读的数字上。
+   * @param {number} rawMin 数据最小值（已含少量呼吸空间）
+   * @param {number} rawMax 数据最大值
+   * @returns {{min:number, max:number}} 对齐后的值域
+   */
+  function niceDomain(rawMin, rawMax) {
+    var span = rawMax - rawMin;
+    if (!(span > 0) || !isFinite(span)) return { min: rawMin, max: rawMax };
+    var step = Math.pow(10, Math.floor(Math.log(span / 4) / Math.LN10));
+    var err = span / 4 / step;
+    var mult = err >= 7.5 ? 10 : err >= 3.5 ? 5 : err >= 1.5 ? 2 : 1;
+    step *= mult;
+    return {
+      min: Math.floor(rawMin / step) * step,
+      max: Math.ceil(rawMax / step) * step
+    };
   }
 
   /**
@@ -75,6 +129,7 @@
     var preds = opts.predictions || null;
     var height = opts.height || DEFAULT_HEIGHT;
     var dpr = global.devicePixelRatio || 1;
+    var C = palette();
 
     var cssWidth = canvas.clientWidth || canvas.parentNode && canvas.parentNode.clientWidth || 520;
     if (cssWidth <= 0) cssWidth = 520;
@@ -88,10 +143,6 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssWidth, height);
 
-    // 背景
-    ctx.fillStyle = COLOR.bg;
-    ctx.fillRect(0, 0, cssWidth, height);
-
     var plotW = Math.max(1, cssWidth - PAD.left - PAD.right);
     var plotH = Math.max(1, height - PAD.top - PAD.bottom);
     var n = values.length;
@@ -100,7 +151,7 @@
       return;
     }
 
-    // ---- 值域 ----
+    // ---- 值域（对齐整洁刻度） ----
     var min = Infinity;
     var max = -Infinity;
     var i;
@@ -116,10 +167,11 @@
     }
     if (!isFinite(min) || !isFinite(max)) { min = 0; max = 1; }
     if (max - min < 1e-9) { max = min + 1; min = min - 1; }
+    var dom = niceDomain(min - (max - min) * 0.04, max + (max - min) * 0.04);
+    var yMin = dom.min;
+    var yMax = dom.max;
+    var ySpan = yMax - yMin || 1;
     var span = max - min;
-    var yMin = min - span * 0.08;
-    var yMax = max + span * 0.08;
-    var ySpan = yMax - yMin;
 
     /**
      * x 坐标：按下标映射。
@@ -145,9 +197,9 @@
     // ---- 测试区间高亮带 ----
     if (testStart < n) {
       var bx = xOf(Math.max(0, testStart));
-      ctx.fillStyle = COLOR.band;
+      ctx.fillStyle = C.band;
       ctx.fillRect(bx, PAD.top, PAD.left + plotW - bx, plotH);
-      ctx.strokeStyle = COLOR.bandEdge;
+      ctx.strokeStyle = C.bandEdge;
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 3]);
       ctx.beginPath();
@@ -159,31 +211,31 @@
 
     // ---- 水平网格线 + y 轴刻度 ----
     var gridCount = 4;
-    ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+    ctx.font = '11px ' + C.font;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     for (var g = 0; g <= gridCount; g++) {
       var ratio = g / gridCount;
       var y = PAD.top + plotH * (1 - ratio);
-      ctx.strokeStyle = COLOR.grid;
+      ctx.strokeStyle = C.grid;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(PAD.left, Math.round(y) + 0.5);
       ctx.lineTo(PAD.left + plotW, Math.round(y) + 0.5);
       ctx.stroke();
 
-      ctx.fillStyle = COLOR.text;
+      ctx.fillStyle = C.text;
       ctx.fillText(axisLabel(yMin + ySpan * ratio, span), PAD.left - 8, y);
     }
 
     // ---- x 轴 ----
-    ctx.strokeStyle = COLOR.axis;
+    ctx.strokeStyle = C.axis;
     ctx.beginPath();
     ctx.moveTo(PAD.left, PAD.top + plotH + 0.5);
     ctx.lineTo(PAD.left + plotW, PAD.top + plotH + 0.5);
     ctx.stroke();
 
-    ctx.fillStyle = COLOR.text;
+    ctx.fillStyle = C.text;
     ctx.textAlign = 'left';
     ctx.fillText('0', PAD.left, height - 8);
     ctx.textAlign = 'right';
@@ -193,9 +245,9 @@
       ctx.fillText('测试区间', xOf(testStart) + (PAD.left + plotW - xOf(testStart)) / 2, height - 8);
     }
 
-    // ---- 历史折线 ----
+    // ---- 历史折线（下方渐变面积增强体量感） ----
     var histEnd = Math.min(n, testStart);
-    ctx.strokeStyle = COLOR.history;
+    ctx.strokeStyle = C.history;
     ctx.lineWidth = 1.6;
     ctx.lineJoin = 'round';
     ctx.beginPath();
@@ -206,10 +258,23 @@
       else ctx.lineTo(hx, hy);
     }
     ctx.stroke();
+    if (histEnd > 1) {
+      var baseY = PAD.top + plotH;
+      var grad = ctx.createLinearGradient(0, PAD.top, 0, baseY);
+      grad.addColorStop(0, hexAlpha(C.history, 0.22));
+      grad.addColorStop(1, hexAlpha(C.history, 0.02));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(xOf(0), baseY);
+      for (i = 0; i < histEnd; i++) ctx.lineTo(xOf(i), yOf(values[i]));
+      ctx.lineTo(xOf(histEnd - 1), baseY);
+      ctx.closePath();
+      ctx.fill();
+    }
 
     // ---- 测试区间真实值（淡色）----
     if (testStart < n) {
-      ctx.strokeStyle = COLOR.actual;
+      ctx.strokeStyle = C.actual;
       ctx.lineWidth = 1.2;
       ctx.globalAlpha = 0.55;
       ctx.beginPath();
@@ -223,9 +288,9 @@
       ctx.globalAlpha = 1;
     }
 
-    // ---- 预测折线（虚线强调色）----
+    // ---- 预测折线（虚线强调色 + 空心端点）----
     if (preds && preds.length > 0) {
-      ctx.strokeStyle = COLOR.predict;
+      ctx.strokeStyle = C.predict;
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 4]);
       ctx.beginPath();
@@ -239,14 +304,18 @@
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // 预测点
-      ctx.fillStyle = COLOR.predict;
+      // 预测点：空心圆（填充底色 + 彩色描边，和实线历史点区分）
       for (i = 0; i < preds.length; i++) {
         var cx = xOf(testStart + i);
         if (cx > PAD.left + plotW) break;
+        var cy = yOf(preds[i]);
         ctx.beginPath();
-        ctx.arc(cx, yOf(preds[i]), 1.8, 0, Math.PI * 2);
+        ctx.arc(cx, cy, 2.4, 0, Math.PI * 2);
+        ctx.fillStyle = canvasCardBg();
         ctx.fill();
+        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = C.predict;
+        ctx.stroke();
       }
     }
 
@@ -268,6 +337,20 @@
     };
   }
 
+  /** 图表所在卡片的底色（空心点填充用，避免点里露出页面背景）。 */
+  function canvasCardBg() {
+    return cssVar('--v3-panel-2', cssVar('--v3-panel', '#131a22'));
+  }
+
+  /** 给 #rrggbb 颜色加透明度（渐变用）；非 # 格式原样返回。 */
+  function hexAlpha(color, alpha) {
+    if (typeof color !== 'string' || color.charAt(0) !== '#' || color.length !== 7) return color;
+    var r = parseInt(color.slice(1, 3), 16);
+    var g = parseInt(color.slice(3, 5), 16);
+    var b = parseInt(color.slice(5, 7), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }
+
   /**
    * 在已绘制的图上叠加「十字线 + tooltip」。
    * @param {HTMLCanvasElement} canvas 画布
@@ -279,6 +362,7 @@
     if (!ctx) return null;
     var dpr = global.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var C = palette();
 
     var x = g.xOf(idx);
     var v = g.values[idx];
@@ -291,7 +375,7 @@
     // 测试区间描边加重（让「哪一段是考你的」一眼可见）
     if (g.testStart < g.n) {
       var bx = g.xOf(Math.max(0, g.testStart));
-      ctx.strokeStyle = inTest ? COLOR.bandEdgeHot : COLOR.bandEdge;
+      ctx.strokeStyle = inTest ? C.bandEdgeHot : C.bandEdge;
       ctx.lineWidth = inTest ? 2 : 1;
       ctx.setLineDash([4, 3]);
       ctx.beginPath();
@@ -302,7 +386,7 @@
     }
 
     // 十字线
-    ctx.strokeStyle = COLOR.cross;
+    ctx.strokeStyle = C.cross;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath();
@@ -313,19 +397,22 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
+    /** 悬停高亮点：彩色实心 + 底色描边，任何底色上都立得住。 */
+    function dot(px, py, color) {
+      ctx.beginPath();
+      ctx.arc(px, py, 3.6, 0, Math.PI * 2);
+      ctx.fillStyle = canvasCardBg();
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+    }
+
     // 真值点
-    ctx.fillStyle = COLOR.actual;
-    ctx.beginPath();
-    ctx.arc(x, y, 3.2, 0, Math.PI * 2);
-    ctx.fill();
+    dot(x, y, C.actual);
 
     // 预测点
-    if (hasPred) {
-      ctx.fillStyle = COLOR.predict;
-      ctx.beginPath();
-      ctx.arc(x, g.yOf(predVal), 3.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    if (hasPred) dot(x, g.yOf(predVal), C.predict);
 
     // tooltip
     var lines = [
@@ -337,7 +424,7 @@
       lines.push('差值 ' + (predVal - v >= 0 ? '+' : '') + axisLabel(predVal - v, g.span));
     }
 
-    ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+    ctx.font = '11px ' + C.font;
     var boxW = 0;
     var i;
     for (i = 0; i < lines.length; i++) boxW = Math.max(boxW, ctx.measureText(lines[i]).width);
@@ -348,8 +435,8 @@
     if (bxPos < PAD.left) bxPos = PAD.left + 2;
     var byPos = Math.max(PAD.top, Math.min(y - boxH / 2, PAD.top + g.plotH - boxH));
 
-    ctx.fillStyle = COLOR.tipBg;
-    ctx.strokeStyle = COLOR.tipBorder;
+    ctx.fillStyle = C.tipBg;
+    ctx.strokeStyle = C.tipBorder;
     ctx.lineWidth = 1;
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(bxPos, byPos, boxW, boxH, 6);
@@ -360,7 +447,7 @@
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     for (i = 0; i < lines.length; i++) {
-      ctx.fillStyle = i === 0 ? '#c8d4e0' : (i === 3 ? COLOR.predict : '#a5b2c1');
+      ctx.fillStyle = i === 0 ? C.tipTitle : (i === 3 ? C.predict : C.tipText);
       ctx.fillText(lines[i], bxPos + 8, byPos + 6 + i * 15);
     }
     return { index: idx, lines: lines, values: { actual: v, predicted: predVal } };
@@ -463,6 +550,27 @@
     global.addEventListener('resize', function () {
       if (resizeTimer) global.clearTimeout(resizeTimer);
       resizeTimer = global.setTimeout(redrawAll, 110);
+    });
+  }
+
+  /*
+   * 主题切换重绘：颜色从 CSS 变量读取后，「切换深浅主题」本身不会触发画布重绘，
+   * 图表会停留在旧主题的配色上，直到下一次 resize / 路由切换。
+   * 这里观察 documentElement 的 data-theme 属性，变化时把 v1 图表（redrawAll）
+   * 与 v3 图表内核（TSJ.charts.redrawAll，见 charts/core.js）一起重画。
+   */
+  if (typeof global.document !== 'undefined' && typeof global.MutationObserver === 'function' &&
+      global.document.documentElement) {
+    var themeObserver = new global.MutationObserver(function () {
+      if (resizeTimer) global.clearTimeout(resizeTimer);
+      resizeTimer = global.setTimeout(function () {
+        redrawAll();
+        if (TSJ.charts && typeof TSJ.charts.redrawAll === 'function') TSJ.charts.redrawAll();
+      }, 60);
+    });
+    themeObserver.observe(global.document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
     });
   }
 

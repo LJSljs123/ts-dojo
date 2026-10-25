@@ -13,8 +13,17 @@
 
   TSJ.charts = TSJ.charts || {};
   var registry = TSJ.charts.renderers || (TSJ.charts.renderers = {});
+  /** 活着的图表实例（主题切换时统一重绘用；destroy 时移除） */
+  var instances = [];
 
   function register(kind, renderer) { registry[kind] = renderer; }
+
+  /** 重绘全部活着的 v3 图表（颜色每次 draw 都从 CSS 变量读取，主题切换后调用即可换色）。 */
+  function redrawAll() {
+    for (var i = 0; i < instances.length; i++) {
+      if (instances[i] && typeof instances[i].resize === 'function') instances[i].resize();
+    }
+  }
 
   function cssVar(name, fallback) {
     if (!doc || !doc.documentElement || !global.getComputedStyle) return fallback;
@@ -198,17 +207,23 @@
       paintFocus(next);
     }
 
-    // 生命周期登记：全部通过 scope 解绑
+    // 生命周期登记：scope 路径保存 off 句柄（destroy 时立即解绑，
+    // 同一路由内反复换图才不会把监听压进 scope 里累积到路由销毁）；无 scope 时自行解绑。
+    var offs = [];
     if (scope && typeof scope.listen === 'function') {
-      scope.listen(canvas, 'pointermove', onMove);
-      scope.listen(canvas, 'pointerleave', onLeave);
-      scope.listen(canvas, 'keydown', onKey);
-      scope.listen(global, 'resize', scheduleResize);
+      offs.push(scope.listen(canvas, 'pointermove', onMove));
+      offs.push(scope.listen(canvas, 'pointerleave', onLeave));
+      offs.push(scope.listen(canvas, 'keydown', onKey));
+      offs.push(scope.listen(global, 'resize', scheduleResize));
     } else {
       canvas.addEventListener('pointermove', onMove);
       canvas.addEventListener('pointerleave', onLeave);
       canvas.addEventListener('keydown', onKey);
       global.addEventListener('resize', scheduleResize);
+      offs.push(function () { canvas.removeEventListener('pointermove', onMove); });
+      offs.push(function () { canvas.removeEventListener('pointerleave', onLeave); });
+      offs.push(function () { canvas.removeEventListener('keydown', onKey); });
+      offs.push(function () { global.removeEventListener('resize', scheduleResize); });
     }
 
     if (global.ResizeObserver) {
@@ -221,7 +236,7 @@
 
     resize();
 
-    return {
+    var api = {
       kind: kind,
       update: function (next) {
         model = next;
@@ -242,14 +257,23 @@
       destroy: function () {
         if (destroyed) return;
         destroyed = true;
+        var at = instances.indexOf(api);
+        if (at >= 0) instances.splice(at, 1);
+        for (var i = 0; i < offs.length; i++) {
+          try { if (typeof offs[i] === 'function') offs[i](); } catch (e) { /* 解绑失败不影响后续 */ }
+        }
+        offs = [];
         if (ro && ro.disconnect) ro.disconnect();
         if (raf) global.cancelAnimationFrame(raf);
         hideTip();
         delete canvas.__tsjGeom;
       }
     };
+    instances.push(api);
+    return api;
   }
 
+  TSJ.charts.redrawAll = redrawAll;
   TSJ.charts.register = register;
   TSJ.charts.create = create;
   TSJ.charts.sampleMap = sampleMap;

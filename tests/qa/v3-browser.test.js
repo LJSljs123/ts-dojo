@@ -43,12 +43,40 @@ async function goto(hash) {
 
 test('v3 新路由全部可渲染，且旧路由不回归', async (t) => {
   if (!page) return t.skip('无浏览器');
-  for (const hash of ['#/', '#/problems', '#/methods', '#/learn', '#/learn/m1', '#/lab', '#/methods/dlinear']) {
+  for (const hash of ['#/', '#/problems', '#/methods', '#/learn', '#/learn/m1', '#/lab', '#/methods/dlinear', '#/glossary']) {
     const r = await goto(hash);
     assert.ok(r.html > 500, hash + ' 渲染内容过少（' + r.html + ' 字节）');
     assert.ok(r.text.length > 0, hash + ' 文本为空');
   }
   assert.deepEqual(page.exceptions, [], '新路由出现未捕获异常：' + JSON.stringify(page.exceptions));
+});
+
+test('术语表：默认全量、搜索与分类筛选取交集、站内跳转可用', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await goto('#/glossary');
+  const base = await page.evaluate('document.querySelectorAll(".gcard").length');
+  assert.ok(base >= 50, '术语表默认应至少 50 张卡，实际 ' + base);
+
+  // 搜索「季节」应命中多个术语
+  await page.evaluate(
+    '(function(){var el=document.getElementById("glossarySearch");el.value="季节";' +
+    'el.dispatchEvent(new Event("input",{bubbles:true}));})()'
+  );
+  await sleep(300);
+  const searched = await page.evaluate('document.querySelectorAll(".gcard").length');
+  assert.ok(searched >= 1 && searched < base, '搜索「季节」应缩小结果：' + searched + '/' + base);
+
+  // 分类筛选 chips 数量现算
+  const chips = await page.evaluate(
+    '[].map.call(document.querySelectorAll(".chip[data-cat]"), function(c){return c.textContent;})'
+  );
+  assert.ok(chips[0].indexOf('全部(' + base + ')') === 0, '全部 chip 应现算总数：' + chips.join(','));
+
+  // 清除筛选回全量
+  await page.evaluate('document.getElementById("btnGlossaryClear").click()');
+  await sleep(300);
+  assert.equal(await page.evaluate('document.querySelectorAll(".gcard").length'), base, '清除筛选未回到全量');
+  assert.deepEqual(page.exceptions, [], '术语表页出现未捕获异常：' + JSON.stringify(page.exceptions));
 });
 
 test('课程页：正文、公式面板、参考来源与练习出口都在', async (t) => {
@@ -184,4 +212,165 @@ test('课程模块数量与内容层一致', async (t) => {
   await goto('#/learn');
   const cards = await page.evaluate('document.querySelectorAll(".course-module").length');
   assert.equal(cards, COURSE_COUNT, '课程地图模块数与内容层不一致');
+});
+
+test('实验室：切换方法不再把整个表单重置回默认（v3.2 P1 回归）', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await goto('#/lab');
+  // 把数据集先改成非默认（electricity），再切换方法到 SES —— 两项选择都必须保留
+  await page.evaluate(
+    '(function(){' +
+    'var ds=document.getElementById("labDataset");ds.value="electricity";' +
+    'ds.dispatchEvent(new Event("change",{bubbles:true}));' +
+    'var m=document.getElementById("labMethod");m.value="ses";' +
+    'm.dispatchEvent(new Event("change",{bubbles:true}));' +
+    '})()'
+  );
+  await sleep(500);
+  const state = await page.evaluate(`JSON.stringify({
+    method: document.getElementById('labMethod').value,
+    dataset: document.getElementById('labDataset').value,
+    params: [].map.call(document.querySelectorAll('#labParams input'), function(i){return i.id + '=' + i.value;})
+  })`);
+  const s = JSON.parse(state);
+  assert.equal(s.method, 'ses', '方法选择被重置回默认（旧 P1 bug）：' + state);
+  assert.equal(s.dataset, 'electricity', '数据集选择被重置回默认（旧 P1 bug）：' + state);
+  assert.deepEqual(s.params, ['param-alpha=0.28'], 'SES 的参数块应重绘为单参数默认值：' + state);
+  assert.deepEqual(page.exceptions, [], '切换方法过程出现异常：' + JSON.stringify(page.exceptions));
+});
+
+test('实验室实时滑杆：拖动即重算，同步数字输入框，不写记录', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await goto('#/lab');
+  // 切到 SES（单参数，实时重算最快）
+  await page.evaluate(
+    '(function(){var m=document.getElementById("labMethod");m.value="ses";' +
+    'm.dispatchEvent(new Event("change",{bubbles:true}));})()'
+  );
+  await sleep(300);
+  await page.evaluate('document.getElementById("labRun").click()');
+  const done = await (async () => {
+    const end = Date.now() + 15000;
+    while (Date.now() < end) {
+      const s = await page.evaluate('(document.getElementById("labStatus")||{}).textContent');
+      if (s && s.indexOf('完成') === 0) return s;
+      await sleep(120);
+    }
+    return null;
+  })();
+  assert.ok(done, '正式运行未在 15s 内完成');
+  const before = await page.evaluate(
+    'document.querySelector("#labMetricsZone .ds-table tbody td.num").textContent'
+  );
+  // 拖滑杆到 0.6（默认 0.28）→ 触发实时重算
+  await page.evaluate(
+    '(function(){var s=document.getElementById("live-alpha");s.value="0.6";' +
+    's.dispatchEvent(new Event("input",{bubbles:true}));})()'
+  );
+  await sleep(600);
+  const after = await page.evaluate(
+    'document.querySelector("#labMetricsZone .ds-table tbody td.num").textContent'
+  );
+  assert.notEqual(before, after, '拖动滑杆后指标未变化（实时重算未生效）');
+  const status = await page.evaluate('(document.getElementById("labStatus")||{}).textContent');
+  assert.match(status, /实时预览/, '状态应显示实时预览：' + status);
+  // 数字输入框同步（保证「所见 = 所保存」）
+  const synced = await page.evaluate('document.getElementById("param-alpha").value');
+  assert.equal(Number(synced), 0.6, '滑杆值未同步到配置面板数字输入框');
+  const records = await page.evaluate('TSJ.appLabStorage.list().length');
+  const recsAfter = await page.evaluate(
+    '(function(){var s=document.getElementById("labRun");return TSJ.appLabStorage.list().length;})()'
+  );
+  assert.equal(records, recsAfter, '实时预览不应写实验记录');
+  assert.deepEqual(page.exceptions, [], '实时滑杆出现异常：' + JSON.stringify(page.exceptions));
+});
+
+test('命令面板 Ctrl+K：搜索、键盘导航、跳转', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await goto('#/');
+  await page.evaluate(
+    'document.dispatchEvent(new KeyboardEvent("keydown",{key:"k",ctrlKey:true,bubbles:true,cancelable:true}))'
+  );
+  await sleep(300);
+  const openState = await page.evaluate(
+    '[!!document.getElementById("cmdkInput"), document.querySelectorAll("#cmdkResults .cmdk-item").length]'
+  );
+  assert.equal(openState[0], true, 'Ctrl+K 未打开命令面板');
+  assert.ok(openState[1] >= 3, '空态结果过少：' + openState[1]);
+  // 输入 holt → 应命中方法与题目
+  await page.evaluate(
+    '(function(){var i=document.getElementById("cmdkInput");i.value="holt";' +
+    'i.dispatchEvent(new Event("input",{bubbles:true}));})()'
+  );
+  await sleep(250);
+  const found = await page.evaluate(
+    '[].map.call(document.querySelectorAll("#cmdkResults .cmdk-label"), function(b){return b.textContent;})'
+  );
+  assert.ok(found.some((s) => /Holt|holt/.test(s)), '搜索 holt 应命中 Holt 相关条目：' + JSON.stringify(found.slice(0, 5)));
+  // 键盘 Enter 跳转到第一个结果
+  await page.evaluate(
+    'document.getElementById("cmdkInput").dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true,cancelable:true}))'
+  );
+  await sleep(450);
+  const hash = await page.evaluate('location.hash');
+  assert.ok(/#\/(methods|problem)\//.test(hash), 'Enter 未跳转：' + hash);
+  const closed = await page.evaluate('!document.getElementById("cmdkInput")');
+  assert.equal(closed, true, '跳转后面板未关闭');
+  // 再按 Ctrl+K 可再次打开（关闭状态可复开）
+  await page.evaluate(
+    'document.dispatchEvent(new KeyboardEvent("keydown",{key:"k",ctrlKey:true,bubbles:true,cancelable:true}))'
+  );
+  await sleep(250);
+  assert.equal(await page.evaluate('!!document.getElementById("cmdkInput")'), true, '面板无法再次打开');
+  await page.evaluate(
+    'document.dispatchEvent(new KeyboardEvent("keydown",{key:"k",ctrlKey:true,bubbles:true,cancelable:true}))'
+  );
+  await sleep(250);
+  assert.equal(await page.evaluate('!document.getElementById("cmdkInput")'), true, 'Ctrl+K 切换关闭失败');
+  assert.deepEqual(page.exceptions, [], '命令面板出现异常：' + JSON.stringify(page.exceptions));
+});
+
+test('模型工坊：两阶段实验流程端到端（验证集 → 最终评测 → 记录留档）', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await goto('#/studio');
+  assert.ok(await page.evaluate('!!document.getElementById("studioEditorHost")'), '工坊页未渲染');
+  const splits = await page.evaluate('document.getElementById("studioSplits").textContent');
+  assert.ok(/train \d+/.test(splits) && /val \d+/.test(splits) && /test \d+/.test(splits), '拆分协议未显示：' + splits);
+
+  // ① 验证集评估（示例模板 = SES + 网格搜索，可跑完）
+  await page.evaluate('document.getElementById("studioRunVal").click()');
+  const valOk = await (async () => {
+    const end = Date.now() + 20000;
+    while (Date.now() < end) {
+      const badge = await page.evaluate('(document.querySelector("#studioReport .ds-badge")||{}).textContent');
+      if (badge && badge.indexOf('验证集评估') >= 0) return true;
+      await sleep(150);
+    }
+    return false;
+  })();
+  assert.ok(valOk, '验证集评估未完成');
+  const valMse = await page.evaluate('(document.querySelector("#studioReport tbody td.num")||{}).textContent');
+  assert.ok(/^\d/.test(valMse), 'val MSE 未渲染：' + valMse);
+  const canvasOk = await page.evaluate('!!(document.getElementById("studioCanvas")||{}).__tsjGeom');
+  assert.ok(canvasOk, '预测对比图未绘制');
+
+  // ② 最终评测（train+val 拟合 → test 打分），记录留档
+  await page.evaluate('document.getElementById("studioRunFinal").click()');
+  const finalOk = await (async () => {
+    const end = Date.now() + 20000;
+    while (Date.now() < end) {
+      const badge = await page.evaluate('(document.querySelector("#studioReport .ds-badge")||{}).textContent');
+      if (badge && badge.indexOf('最终评测') >= 0) return true;
+      await sleep(150);
+    }
+    return false;
+  })();
+  assert.ok(finalOk, '最终评测未完成');
+  const recCount = await page.evaluate('TSJ.appStudioStorage.list().length');
+  assert.ok(recCount >= 2, '实验记录未留档：' + recCount);
+  const hasFinal = await page.evaluate(
+    'TSJ.appStudioStorage.list().some(function(r){return r.kind==="final" && r.testMetrics && isFinite(r.testMetrics.mse);})'
+  );
+  assert.ok(hasFinal, '最终记录缺少 test MSE');
+  assert.deepEqual(page.exceptions, [], '模型工坊出现异常：' + JSON.stringify(page.exceptions));
 });

@@ -11,6 +11,15 @@
   var core = TSJ.appCore;
   var esc = core.esc;
 
+  /** 诊断图类型（lab.js 与结果外壳共用同一份注册表）。 */
+  var KINDS = [
+    { id: 'forecast', label: '预测对比' },
+    { id: 'residual', label: '残差' },
+    { id: 'acf', label: 'ACF' },
+    { id: 'pacf', label: 'PACF' },
+    { id: 'decomposition', label: '季节分解' }
+  ];
+
   function paramsHtml(method) {
     var meta = TSJ.labConfig.METHODS[method];
     if (!meta || !Object.keys(meta.params).length) return '<p class="ds-card-sub">该方法无可调参数。</p>';
@@ -44,7 +53,7 @@
         return '<option value="' + esc(m) + '"' + (m === cfg.method ? ' selected' : '') + '>' + esc(TSJ.labConfig.METHODS[m].label) + '</option>';
       }).join(''),
       '  </select></label>',
-      paramsHtml(cfg.method),
+      '<div id="labParams">' + paramsHtml(cfg.method) + '</div>',
       '  <div class="lab-config-row">',
       '    <label class="ds-field"><span>切分</span><select id="labMode">',
       '      <option value="holdout"' + (cfg.split.mode === 'holdout' ? ' selected' : '') + '>留出法</option>',
@@ -66,6 +75,38 @@
       '    <button class="ds-btn" id="labReset">恢复默认</button>',
       '  </div>',
       '  <p class="md-note"><span>⚠</span><span>区间由训练段内部一步残差分位构造，是教学演示，不是模型原生概率输出；测试真值不参与校准。</span></p>',
+      '</div>'
+    ].join('\n');
+  }
+
+  /**
+   * 结果卡外壳：工具条 + 图表区 + 指标区 + 实时滑杆区。
+   * 图表区 / 指标区 / 覆盖说明都带独立 id，lab.js 的轻量重绘只替换这些区域，
+   * 不重建工具条与滑杆（保持拖动状态）。滑杆渲染委托给 app/lab-live.js。
+   */
+  function resultShell(r, state) {
+    var originButtons = r.origins.map(function (o, i) {
+      return '<button class="ds-btn ds-btn-sm' + (i === state.originIndex ? ' ds-btn-primary' : '') + '" data-origin="' + i + '">#' + (i + 1) + '</button>';
+    }).join('');
+    var kindButtons = '<div class="lab-seg" role="group" aria-label="诊断图类型">' + KINDS.map(function (k) {
+      return '<button type="button" class="lab-seg-btn' + (k.id === state.kind ? ' lab-seg-on' : '') +
+        '" data-kind="' + k.id + '">' + k.label + '</button>';
+    }).join('') + '</div>';
+    var kindLabel = KINDS.filter(function (k) { return k.id === state.kind; })[0].label;
+    return [
+      '<div class="ds-card"><h2 class="ds-card-title">结果摘要</h2>',
+      '<p class="ds-card-sub">配置指纹 ' + esc(r.configHash) + ' · 数据版本 ' + esc(r.datasetVersion) + ' · 算法版本 ' + esc(r.algorithmVersion) + ' · 耗时 ' + r.durationMs + 'ms</p>',
+      '<div class="lab-toolbar"><div class="lab-actions" aria-label="测试点">' + originButtons + '</div>' + kindButtons + '</div>',
+      '<div id="labChartZone"><div class="chart-v2"><div class="chart-v2-head"><h3>' + esc(kindLabel) + '</h3>',
+      '<div class="chart-v2-legend"><span><i style="border-color:var(--v3-chart-history)"></i>历史</span><span><i style="border-color:var(--v3-chart-actual)"></i>真值</span><span><i style="border-color:var(--v3-chart-pred);border-top-style:dashed"></i>预测</span><span><i style="border-color:var(--v3-chart-baseline);border-top-style:dotted"></i>基线</span></div></div>',
+      '<div class="chart-v2-canvas-wrap" id="labChartWrap"><canvas id="labCanvas"></canvas></div>',
+      '<p class="chart-v2-summary" id="labChartSummary"></p>',
+      '<p class="chart-v2-summary" id="labCoverage"></p>',
+      '</div></div>',
+      '<div class="lab-metrics" id="labMetricsZone"><h3 class="lab-metrics-title">指标对比</h3>',
+      metricTable(r),
+      '</div>',
+      '<div id="labLiveZone">' + (TSJ.appLabLive ? TSJ.appLabLive.render(r.config) : '') + '</div>',
       '</div>'
     ].join('\n');
   }
@@ -96,13 +137,20 @@
   function metricTable(result) {
     var rows = result.config.metrics.map(function (m) {
       function fmt(v) { return typeof v === 'number' && isFinite(v) ? v.toFixed(3) : '—'; }
+      // 候选 vs 基线均值：全部指标都是越小越好；优势格着色 + 方向标
+      var meanV = result.metrics.mean[m];
+      var baseV = result.metrics.baselineMean[m];
+      var hasBoth = isFinite(meanV) && isFinite(baseV);
+      var win = hasBoth && meanV < baseV;
+      var lose = hasBoth && meanV > baseV;
+      var meanCell = fmt(meanV) + (win ? ' <span class="cell-good">▼优</span>' : lose ? ' <span class="cell-bad">▲劣</span>' : '');
       return '<tr><td>' + esc(TSJ.labConfig.METRICS[m].label) + '</td>' +
-        '<td class="num">' + fmt(result.metrics.mean[m]) + '</td>' +
+        '<td class="num">' + meanCell + '</td>' +
         '<td class="num">' + fmt(result.metrics.worst[m]) + '</td>' +
         '<td class="num">' + fmt(result.metrics.baselineMean[m]) + '</td>' +
         '<td class="num">' + fmt(result.metrics.baselineWorst[m]) + '</td></tr>';
     }).join('');
-    return '<div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>指标</th><th class="num">均值</th><th class="num">最差窗口</th><th class="num">基线均值</th><th class="num">基线最差</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    return '<div class="ds-table-wrap"><table class="ds-table ds-table-hover"><thead><tr><th>指标</th><th class="num">均值</th><th class="num">最差窗口</th><th class="num">基线均值</th><th class="num">基线最差</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
 
   function historyPanel() {
@@ -117,9 +165,11 @@
   }
 
   TSJ.appLabPanels = {
+    KINDS: KINDS,
     paramsHtml: paramsHtml,
     metricChecks: metricChecks,
     configPanel: configPanel,
+    resultShell: resultShell,
     originModel: originModel,
     metricTable: metricTable,
     historyPanel: historyPanel

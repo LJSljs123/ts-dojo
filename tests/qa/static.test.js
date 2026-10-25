@@ -18,7 +18,7 @@ const { ROOT, JS_DIR } = require('./helpers/engine');
  * v3.0 新增 content/*（课程与方法详情）、charts/*（图表内核）、lab/*（实验室引擎）。
  */
 const ENGINE_NAMES = ['datasets', 'problems', 'methods', 'judge', 'editor', 'chart'];
-const CONTENT_NAMES = ['content/references', 'content/courses', 'content/method-details', 'content/content'];
+const CONTENT_NAMES = ['content/references', 'content/courses', 'content/method-details', 'content/content', 'content/glossary'];
 const CHART_NAMES = ['charts/core', 'charts/series', 'charts/diagnostics'];
 const LAB_NAMES = ['lab/config', 'lab/adapters', 'lab/stats', 'lab/runner'];
 const ENGINE_FILES = ENGINE_NAMES.map((n) => path.join(JS_DIR, n + '.js'));
@@ -29,12 +29,12 @@ const LAB_FILES = LAB_NAMES.map((n) => path.join(JS_DIR, n + '.js'));
  * app 层文件（顺序即加载顺序）：
  *   util → core → schema → store → storage → lifecycle → ui → a11y → theme
  *   → views → problem → pages → dashboard → learn → method-detail
- *   → lab-storage → lab-panels → lab → library → boards → app.js
+ *   → lab-storage → lab-panels → lab → library → glossary → boards → app.js
  */
 const APP_NAMES = [
   'util', 'core', 'schema', 'store', 'storage', 'lifecycle', 'ui', 'a11y', 'theme',
-  'views', 'problem', 'pages', 'lab-storage', 'lab-panels', 'dashboard', 'learn',
-  'method-detail', 'lab', 'library', 'boards'
+  'views', 'problem', 'pages', 'lab-storage', 'lab-panels', 'lab-live', 'dashboard',
+  'learn', 'method-detail', 'lab', 'library', 'glossary', 'boards', 'studio-storage', 'studio-report', 'studio', 'cmdk'
 ];
 const APP_FILES = APP_NAMES.map((n) => path.join(JS_DIR, 'app', n + '.js'))
   .concat([path.join(JS_DIR, 'app.js')]);
@@ -107,6 +107,7 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/content/courses.js',
     'assets/js/content/method-details.js',
     'assets/js/content/content.js',
+    'assets/js/content/glossary.js',
     'assets/js/judge.js',
     'assets/js/editor.js',
     'assets/js/chart.js',
@@ -131,12 +132,18 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/app/pages.js',
     'assets/js/app/lab-storage.js',
     'assets/js/app/lab-panels.js',
+    'assets/js/app/lab-live.js',
     'assets/js/app/dashboard.js',
     'assets/js/app/learn.js',
     'assets/js/app/method-detail.js',
     'assets/js/app/lab.js',
     'assets/js/app/library.js',
+    'assets/js/app/glossary.js',
     'assets/js/app/boards.js',
+    'assets/js/app/studio-storage.js',
+    'assets/js/app/studio-report.js',
+    'assets/js/app/studio.js',
+    'assets/js/app/cmdk.js',
     'assets/js/app.js',
   ]);
   // 每个文件必须真实存在
@@ -162,7 +169,7 @@ test('依赖方向：引擎层不得引用 app 层；app 层只能引用**更早
     'TSJ.appProblem', 'TSJ.appPages', 'TSJ.appLabStorage', 'TSJ.appLabPanels',
     'TSJ.appDashboard', 'TSJ.appLearn',
     'TSJ.appMethodDetail', 'TSJ.appLab',
-    'TSJ.appLibrary', 'TSJ.appBoards', 'TSJ.app',
+    'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appStudioStorage', 'TSJ.appStudioReport', 'TSJ.appStudio', 'TSJ.appCmdk', 'TSJ.app',
   ];
   APP_FILES.forEach((file, idx) => {
     const src = read(file);

@@ -79,11 +79,10 @@
     if (min === max) {
       var pad = Math.max(1, Math.abs(min) * 0.05);
       min -= pad; max += pad;
-    } else {
-      var span = max - min;
-      min -= span * 0.06;
-      max += span * 0.06;
     }
+    // 整洁刻度：把值域对齐到 1/2/5×10^k 的整数倍，网格标签落在好读的数字上
+    var dom = niceDomain(min, max);
+    min = dom.min; max = dom.max;
     var padL = 52, padR = 16, padT = 16, padB = 30;
     var plotW = Math.max(10, env.width - padL - padR);
     var plotH = Math.max(10, env.height - padT - padB);
@@ -104,6 +103,29 @@
     return { min: min, max: max, padL: padL, padR: padR, padT: padT, padB: padB, plotW: plotW, plotH: plotH, xOf: xOf, yOf: yOf, indexAt: indexAt };
   }
 
+  /** 把值域扩展到整洁刻度的整数倍（与 chart.js 的 niceDomain 同一套规则）。 */
+  function niceDomain(rawMin, rawMax) {
+    var span = rawMax - rawMin;
+    if (!(span > 0) || !isFinite(span)) return { min: rawMin, max: rawMax };
+    var step = Math.pow(10, Math.floor(Math.log(span / 4) / Math.LN10));
+    var err = span / 4 / step;
+    var mult = err >= 7.5 ? 10 : err >= 3.5 ? 5 : err >= 1.5 ? 2 : 1;
+    step *= mult;
+    return {
+      min: Math.floor(rawMin / step) * step,
+      max: Math.ceil(rawMax / step) * step
+    };
+  }
+
+  /** 给 #rrggbb 颜色加透明度；非 # 格式原样返回（渐变填充用）。 */
+  function hexAlpha(color, alpha) {
+    if (typeof color !== 'string' || color.charAt(0) !== '#' || color.length !== 7) return color;
+    var r = parseInt(color.slice(1, 3), 16);
+    var g = parseInt(color.slice(3, 5), 16);
+    var b = parseInt(color.slice(5, 7), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }
+
   function drawGrid(ctx, sc, env) {
     ctx.save();
     ctx.strokeStyle = env.colors.grid;
@@ -120,6 +142,12 @@
       ctx.stroke();
       ctx.fillText(fmt(v), 6, y + 3);
     }
+    // 底轴线：比网格略实，收住整个图面
+    ctx.strokeStyle = env.colors.axis;
+    ctx.beginPath();
+    ctx.moveTo(sc.padL, Math.round(sc.padT + sc.plotH) + 0.5);
+    ctx.lineTo(sc.padL + sc.plotW, Math.round(sc.padT + sc.plotH) + 0.5);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -174,6 +202,38 @@
     ctx.setLineDash(style === 'pred' ? [6, 4] : style === 'baseline' ? [2, 3] : []);
     linePath(ctx, sc, indices, values, sc.xOf, sc.yOf);
     ctx.stroke();
+    // 历史主线下方加一层渐变面积，增强体量感（只在折线连续段上填充）
+    if (style === 'history') {
+      var baseY = sc.padT + sc.plotH;
+      var grad = ctx.createLinearGradient(0, sc.padT, 0, baseY);
+      grad.addColorStop(0, hexAlpha(color, 0.20));
+      grad.addColorStop(1, hexAlpha(color, 0.02));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      var started = false;
+      var firstX = 0, lastX = 0;
+      for (var k = 0; k < indices.length; k++) {
+        var i = indices[k];
+        var v = values[i];
+        if (!finite(v)) { started = false; continue; }
+        var x = sc.xOf(i), y = sc.yOf(v);
+        if (!started) {
+          ctx.moveTo(x, baseY);
+          ctx.lineTo(x, y);
+          firstX = x;
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+        lastX = x;
+      }
+      if (started) {
+        ctx.lineTo(lastX, baseY);
+        ctx.lineTo(firstX, baseY);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
     ctx.restore();
   }
 

@@ -2,10 +2,10 @@
  * library.test.js —— v2.2 第一批：方法库（知识库）页面验收
  *
  * 覆盖（对应施工图 5.2 的 6 条）：
- *   1. 数据层完整性：29 条、tier 只有四个合法值、必填字段齐全、id 唯一；
+ *   1. 数据层完整性：46 条、tier 只有五个合法值、必填字段齐全、id 唯一；
  *   2. practice 引用的题目必须存在（第二批的 6 道新题尚未落地，用精确白名单兜住）；
  *   3. runnable 与 practice 的一致性（可跑且有题 / 有题必须可跑）；
- *   4. 无头浏览器：#/methods 默认 29 张、搜索 patch、层筛选 9 张、只看能练的 13 张、清空回 29；
+ *   4. 无头浏览器：#/methods 默认 46 张、搜索 patch、层筛选 14 张、只看能练的 13 张、清空回 46；
  *   5. 点「去练这道题」→ hash 变成对应 #/problem/<id>；
  *   6. 375px 下 scrollWidth === 375，展开区两栏改堆叠、卡片不溢出。
  *
@@ -83,8 +83,8 @@ async function resetMethods() {
   );
   await page.reload();
   await page.evaluate('if (location.hash !== "#/methods") location.hash = "#/methods";');
-  const ok = await waitFor('document.querySelectorAll(".mcard").length === 29');
-  assert.ok(ok, '方法库未渲染出 29 张卡片');
+  const ok = await waitFor('document.querySelectorAll(".mcard").length === 46');
+  assert.ok(ok, '方法库未渲染出 46 张卡片');
 }
 
 /** 当前卡片数。 */
@@ -108,9 +108,9 @@ async function setSearch(q, expect) {
  * 1–3 数据层（纯 Node，无浏览器）
  * ================================================================== */
 
-test('L01 数据层：29 条方法，tier 只有四个合法值，必填字段齐全且 id 唯一', () => {
-  assert.equal(methods.length, 29, '方法数应为 29，实际 ' + methods.length);
-  assert.deepEqual(TIERS, ['classic', 'competition', 'deep', 'eval'], '分层定义与施工图不一致');
+test('L01 数据层：46 条方法，tier 只有五个合法值，必填字段齐全且 id 唯一', () => {
+  assert.equal(methods.length, 46, '方法数应为 46，实际 ' + methods.length);
+  assert.deepEqual(TIERS, ['classic', 'competition', 'deep', 'foundation', 'eval'], '分层定义与施工图不一致');
 
   const required = ['id', 'name', 'venue', 'year', 'idea', 'when', 'limit', 'runnable'];
   const seen = new Set();
@@ -132,9 +132,10 @@ test('L01 数据层：29 条方法，tier 只有四个合法值，必填字段�
   // 每层数量（页面 chips 上的数字就是这四个）
   const byTier = (t) => methods.filter((m) => m.tier === t).length;
   assert.deepEqual(
-    { classic: byTier('classic'), competition: byTier('competition'), deep: byTier('deep'), eval: byTier('eval') },
-    { classic: 13, competition: 3, deep: 9, eval: 4 },
-    '四层数量与施工图不一致'
+    { classic: byTier('classic'), competition: byTier('competition'), deep: byTier('deep'),
+      foundation: byTier('foundation'), eval: byTier('eval') },
+    { classic: 13, competition: 3, deep: 14, foundation: 10, eval: 6 },
+    '五层数量与内容契约不一致'
   );
   assert.equal(methods.filter((m) => !!m.practice).length, 13, '「可练」应为 13 条');
 });
@@ -176,7 +177,7 @@ test('L03 runnable 与 practice 一致：有题的必须可跑，可跑的题必
  * 4–6 真实浏览器
  * ================================================================== */
 
-test('L04 #/methods 默认 29 张卡片；搜索 patch；层筛选 9 张；只看能练的 13 张；清空回 29', async (t) => {
+test('L04 #/methods 默认 46 张卡片；搜索 patch；层筛选 14 张；只看能练的 13 张；清空回 46', async (t) => {
   if (!(await ensurePage())) return t.skip('无浏览器');
   await resetMethods();
 
@@ -196,32 +197,33 @@ test('L04 #/methods 默认 29 张卡片；搜索 patch；层筛选 9 张；只�
   );
   console.log('    chips：' + JSON.stringify(chips));
   assert.deepEqual(chips, expectChips);
-  assert.deepEqual(chips, ['全部(29)', '经典统计(13)', '竞赛级方法(3)', '顶会深度学习(9)', '评估方法论(4)']);
+  assert.deepEqual(chips, ['全部(46)', '经典统计(13)', '竞赛级方法(3)', '顶会深度学习(14)', '时序基础模型(10)', '评估方法论(6)']);
 
-  // 默认态：29 张，且没有任何预置筛选
+  // 默认态：46 张，且没有任何预置筛选
   const base = await cardCount();
   console.log('    默认卡片数=' + base + ' · 搜索框初值=' +
     JSON.stringify(await page.evaluate('document.getElementById("methodSearch").value')) +
     ' · 开关=' + (await page.evaluate('document.getElementById("onlyPractice").checked')));
-  assert.equal(base, 29, '默认态必须是 29 张卡片');
+  assert.equal(base, 46, '默认态必须是 46 张卡片');
 
-  // 搜索 patch（命中 PatchTST 的 name / idea）
-  assert.ok(await setSearch('patch', '<= 2 && document.querySelectorAll(".mcard").length >= 1'),
-    '搜索 patch 没有收敛到 1–2 张');
+  // 搜索 patch（命中 PatchTST 的 name / idea；v3.2 起 patch 已是通用术语，
+  // TimesFM/Timer/Sundial/Time-LLM 等新卡的 idea 里也会出现，只约束上界）
+  assert.ok(await setSearch('patch', '<= 8 && document.querySelectorAll(".mcard").length >= 1'),
+    '搜索 patch 没有收敛');
   const patch = await cardCount();
   const patchIds = await page.evaluate(
     '[].map.call(document.querySelectorAll(".mcard"), function(c){return c.getAttribute("data-mid");})'
   );
   console.log('    搜索 "patch" → ' + patch + ' 张：' + JSON.stringify(patchIds));
-  assert.ok(patch >= 1 && patch <= 2, '搜索 patch 应命中 1–2 张，实际 ' + patch);
+  assert.ok(patch >= 1 && patch <= 8, '搜索 patch 应命中 1–8 张，实际 ' + patch);
   assert.ok(patchIds.includes('patchtst'), 'patch 必须命中 PatchTST');
 
   // 清空搜索 → 回 29
-  assert.ok(await setSearch('', '=== 29'), '清空搜索后应回到 29 张');
+  assert.ok(await setSearch('', '=== 46'), '清空搜索后应回到 46 张');
 
   // 层筛选「顶会深度学习」= 9 张
   await page.evaluate('document.querySelector(".chip[data-tier=\\"deep\\"]").click()');
-  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === 9'), '深度学习层应为 9 张');
+  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === 14'), '深度学习层应为 14 张');
   const deepIds = await page.evaluate(
     '[].map.call(document.querySelectorAll(".mcard"), function(c){return c.getAttribute("data-tier");})'
   );
@@ -234,7 +236,7 @@ test('L04 #/methods 默认 29 张卡片；搜索 patch；层筛选 9 张；只�
 
   // 回到全部 + 空搜索
   await page.evaluate('document.querySelector(".chip[data-tier=\\"all\\"]").click()');
-  assert.ok(await setSearch('', '=== 29'), '层回到全部、搜索清空后应回 29 张');
+  assert.ok(await setSearch('', '=== 46'), '层回到全部、搜索清空后应回 46 张');
 
   // 「只看能练的」= 13 张
   await page.evaluate(
@@ -257,10 +259,10 @@ test('L04 #/methods 默认 29 张卡片；搜索 patch；层筛选 9 张；只�
   assert.equal(empty.has, true, '无结果必须有空态');
   assert.equal(empty.btn, true, '空态里要有「清除筛选」');
 
-  // 清除筛选 → 回 29 张
+  // 清除筛选 → 回 46 张
   await page.evaluate('document.querySelector("#btnMethodClear").click()');
-  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === 29'), '清除筛选后应回到 29 张');
-  console.log('    清除筛选 → 29 张');
+  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === 46'), '清除筛选后应回到 46 张');
+  console.log('    清除筛选 → 46 张');
   assert.deepEqual(page.exceptions, [], '方法库出现未捕获异常：' + JSON.stringify(page.exceptions));
 });
 
@@ -363,7 +365,7 @@ test('L06 375px：scrollWidth === 375，展开区两栏改堆叠，卡片不溢�
 
     assert.equal(m.client, 375, '视口不是 375（CDP 覆盖失败）');
     assert.equal(m.scroll, 375, '375px 下整页横向溢出：scrollWidth=' + m.scroll);
-    assert.equal(m.cards, 29, '375px 下仍应渲染 29 张卡片');
+    assert.equal(m.cards, 46, '375px 下仍应渲染 46 张卡片');
     assert.ok(m.maxRight <= 375, '卡片右侧超出视口：' + m.maxRight);
     assert.equal(m.cols.split(' ').length, 1, '窄屏展开区应堆叠成一栏，实际列宽「' + m.cols + '」');
     assert.ok(m.formulaRight <= 375, '关键式子块溢出：' + m.formulaRight);

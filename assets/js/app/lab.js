@@ -13,14 +13,7 @@
   var esc = core.esc;
   var doc = global.document;
   var panels = TSJ.appLabPanels;
-
-  var KINDS = [
-    { id: 'forecast', label: '预测对比' },
-    { id: 'residual', label: '残差' },
-    { id: 'acf', label: 'ACF' },
-    { id: 'pacf', label: 'PACF' },
-    { id: 'decomposition', label: '季节分解' }
-  ];
+  var KINDS = panels.KINDS;   // 诊断图类型注册在 panels（外壳渲染需要），这里只引用
 
   function $(id) { return doc.getElementById(id); }
 
@@ -50,8 +43,10 @@
   }
 
 
-  function render(scope) {
-    var initial = TSJ.labConfig.normalize(TSJ.labConfig.defaults());
+  function render(scope, initialRaw) {
+    // 初始配置：默认值，或调用方传入（载入历史记录时）。
+    // 注意不能在这里无条件用 defaults —— 否则「载入配置 / 恢复记录」会被默认值覆盖。
+    var initial = TSJ.labConfig.normalize(initialRaw || TSJ.labConfig.defaults());
     var ctx = {
       config: initial.config,
       result: null,
@@ -59,12 +54,17 @@
       kind: 'forecast',
       chart: null,
       token: 0,
-      busy: false
+      busy: false,
+      activeSession: null
     };
 
     function cleanup() {
       ctx.token++;
       ctx.busy = false;
+      // 作废在途实验：runner 在每个 origin 开始前检查 session.token，失配即取消，
+      // 避免路由切走后旧实验继续占满主线程、再向已拆掉的 DOM 写结果。
+      if (ctx.activeSession) ctx.activeSession.token = -1;
+      ctx.activeSession = null;
       if (ctx.chart && ctx.chart.destroy) ctx.chart.destroy();
       ctx.chart = null;
     }
@@ -111,52 +111,80 @@
 
     function paintResults() {
       var box = $('labResults');
+      if (!box) return;   // 路由已切走：结果面板不存在，静默放弃（结果仍已存入 labStorage）
       if (!ctx.result) {
         box.innerHTML = '<div class="ds-empty"><strong>还没有运行</strong><span>选好配置后点「运行实验」。</span></div>';
         return;
       }
-      var r = ctx.result;
-      var originButtons = r.origins.map(function (o, i) {
-        return '<button class="ds-btn ds-btn-sm' + (i === ctx.originIndex ? ' ds-btn-primary' : '') + '" data-origin="' + i + '">#' + (i + 1) + '</button>';
-      }).join('');
-      var kindButtons = KINDS.map(function (k) {
-        return '<button class="ds-btn ds-btn-sm' + (k.id === ctx.kind ? ' ds-btn-primary' : '') + '" data-kind="' + k.id + '">' + k.label + '</button>';
-      }).join('');
-      var coverage = '';
-      var o = r.origins[ctx.originIndex] || r.origins[0];
-      if (o && o.coverage && o.coverage.length) {
-        coverage = '<p class="chart-v2-summary">经验覆盖：' + o.coverage.map(function (c) {
-          return c.level + '% → ' + (isFinite(c.rate) ? (c.rate * 100).toFixed(0) + '%' : '—') + '（n=' + c.n + '）';
-        }).join(' · ') + '</p>';
-      }
-      box.innerHTML = [
-        '<div class="ds-card"><h2 class="ds-card-title">结果摘要</h2>',
-        '<p class="ds-card-sub">配置指纹 ' + esc(r.configHash) + ' · 数据版本 ' + esc(r.datasetVersion) + ' · 算法版本 ' + esc(r.algorithmVersion) + ' · 耗时 ' + r.durationMs + 'ms</p>',
-        panels.metricTable(r),
-        '<div class="lab-actions">' + originButtons + '</div>',
-        '<div class="lab-actions">' + kindButtons + '</div>',
-        '<div class="chart-v2"><div class="chart-v2-head"><h3>' + esc(KINDS.filter(function (k) { return k.id === ctx.kind; })[0].label) + '</h3>' +
-        '<div class="chart-v2-legend"><span><i style="border-color:var(--v3-chart-history)"></i>历史</span><span><i style="border-color:var(--v3-chart-actual)"></i>真值</span><span><i style="border-color:var(--v3-chart-pred);border-top-style:dashed"></i>预测</span><span><i style="border-color:var(--v3-chart-baseline);border-top-style:dotted"></i>基线</span></div></div>',
-        '<div class="chart-v2-canvas-wrap" id="labChartWrap"><canvas id="labCanvas"></canvas></div>',
-        '<p class="chart-v2-summary" id="labChartSummary"></p>',
-        coverage,
-        '</div></div>'
-      ].join('\n');
+      // 外壳（工具条 / 图表区 / 指标区 / 实时滑杆区）由 panels 生成；
+      // 之后 origin/kind 切换与实时调节都走 repaintResult 轻量重绘，不重建滑杆。
+      box.innerHTML = panels.resultShell(ctx.result, { kind: ctx.kind, originIndex: ctx.originIndex });
       paintChart();
       bindResultButtons();
+      TSJ.appLabLive.bind({ onChange: liveRerun });
+    }
+
+    /**
+     * 轻量重绘：只更新图表、覆盖说明与指标表（origin/kind 切换、实时调节共用）。
+     * 不重建工具条与滑杆，保持拖动状态。
+     */
+    function repaintResult() {
+      var r = ctx.result;
+      if (!r) return;
+      var o = r.origins[ctx.originIndex] || r.origins[0];
+      var cov = $('labCoverage');
+      if (cov) {
+        cov.innerHTML = (o && o.coverage && o.coverage.length)
+          ? '经验覆盖：' + o.coverage.map(function (c) {
+              return c.level + '% → ' + (isFinite(c.rate) ? (c.rate * 100).toFixed(0) + '%' : '—') + '（n=' + c.n + '）';
+            }).join(' · ')
+          : '';
+      }
+      var mz = $('labMetricsZone');
+      if (mz) mz.innerHTML = panels.metricTable(r);
+      paintChart();
+    }
+
+    /** 同步工具条按钮的激活态（origin / kind）。 */
+    function syncToolbarActive() {
+      [].forEach.call(doc.querySelectorAll('[data-origin]'), function (b) {
+        b.classList[Number(b.getAttribute('data-origin')) === ctx.originIndex ? 'add' : 'remove']('ds-btn-primary');
+      });
+      [].forEach.call(doc.querySelectorAll('[data-kind]'), function (b) {
+        b.classList[b.getAttribute('data-kind') === ctx.kind ? 'add' : 'remove']('lab-seg-on');
+      });
+    }
+
+    /** 实时重算回调（滑杆拖动，防抖后到达）：不写记录、不动正式配置指纹。 */
+    function liveRerun() {
+      if (ctx.busy || !ctx.result) return;
+      var raw = currentConfigFromUI();
+      raw.params = TSJ.appLabLive.currentParams();
+      var norm = TSJ.labConfig.normalize(raw);
+      if (!norm.ok) return;
+      TSJ.labRunner.run(norm.config, { token: ctx.token }).then(function (res) {
+        if (res.canceled || !res.ok) return;
+        ctx.result = res;
+        ctx.originIndex = 0;
+        repaintResult();
+        var el = $('labStatus');
+        if (el) el.textContent = '实时预览（未保存）· ' + res.origins.length + ' 个测试点';
+      });
     }
 
     function bindResultButtons() {
       [].forEach.call(doc.querySelectorAll('[data-origin]'), function (b) {
         b.addEventListener('click', function () {
           ctx.originIndex = Number(b.getAttribute('data-origin'));
-          paintResults();
+          syncToolbarActive();
+          repaintResult();
         });
       });
       [].forEach.call(doc.querySelectorAll('[data-kind]'), function (b) {
         b.addEventListener('click', function () {
           ctx.kind = b.getAttribute('data-kind');
-          paintResults();
+          syncToolbarActive();
+          repaintResult();
         });
       });
     }
@@ -184,6 +212,7 @@
         token: ctx.token,
         onOrigin: function (o, i, total) { setStatus('正在运行… ' + i + '/' + total, true); }
       };
+      ctx.activeSession = session;
       TSJ.labRunner.run(ctx.config, session).then(function (res) {
         if (res.canceled) return;
         if (!res.ok) {
@@ -204,26 +233,40 @@
       });
     }
 
+    /** 切分模式下窗口数 / 起点步长的可用性（holdout 用不到这两个输入）。 */
+    function syncSplitInputs() {
+      var mode = $('labMode');
+      var win = $('labWindows');
+      var step = $('labOriginStep');
+      var rolling = !!(mode && mode.value === 'rolling');
+      if (win) win.disabled = !rolling;
+      if (step) step.disabled = !rolling;
+    }
+
     function bind() {
       $('labRun').addEventListener('click', run);
       $('labReset').addEventListener('click', function () {
-        var d = TSJ.labConfig.defaults();
         render(scope);
         TSJ.appA11y.toast('已恢复默认配置', 'ok');
       });
+      /*
+       * 方法切换：只局部重绘参数块，不整页重建。
+       * 旧实现 render(scope) 会用默认配置重建整个表单 —— 用户刚选的方法立刻
+       * 弹回 holt-winters，数据集 / 指标 / 区间 / 结果全被重置（11/12 个方法在
+       * UI 上不可达）。运行时 run() 会从 UI 现读全部字段，这里只需同步参数块。
+       */
       $('labMethod').addEventListener('change', function () {
         var raw = currentConfigFromUI();
-        raw.method = $('labMethod').value;
         var norm = TSJ.labConfig.normalize(raw);
         ctx.config = norm.config;
-        render(scope);
+        var box = $('labParams');
+        if (box) box.innerHTML = panels.paramsHtml(norm.config.method);
+        TSJ.appLabLive.reset();   // 旧方法的滑杆对新方法无意义：清空，待下次运行重建
       });
       $('labMode').addEventListener('change', function () {
-        var raw = currentConfigFromUI();
-        var norm = TSJ.labConfig.normalize(raw);
-        ctx.config = norm.config;
-        render(scope);
+        syncSplitInputs();
       });
+      syncSplitInputs();
       var file = $('labImport');
       if (file) {
         file.addEventListener('change', function () {
@@ -258,10 +301,8 @@
           var hash = b.getAttribute('data-load');
           var rec = TSJ.appLabStorage.list().filter(function (r) { return r.configHash === hash; })[0];
           if (!rec) return;
-          render(scope);
-          // 重新渲染后用记录配置填充
-          var norm = TSJ.labConfig.normalize(rec.config);
-          ctx.config = norm.config;
+          // 用记录的配置重建页面（旧实现 render 后再写旧闭包的 ctx，是死代码）
+          render(scope, rec.config);
           TSJ.appA11y.toast('已载入配置，点「运行实验」复现', 'ok');
         });
       });
@@ -269,7 +310,7 @@
 
     var host = doc.getElementById('view');
     host.innerHTML = [
-      '<div class="wk-hero"><div class="wk-hero-main">',
+      '<div class="wk-hero wk-hero-slim"><div class="wk-hero-main">',
       '  <div class="wk-kicker">可视化实验室</div>',
       '  <h1>受控回测与诊断</h1>',
       '  <p>选数据、选白名单方法、调有限参数，立即得到确定性结果与诊断图。候选与基线共享同一切分；测试真值不参与校准。</p>',

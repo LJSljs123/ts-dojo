@@ -910,6 +910,12 @@
 
       worker.onerror = function (ev) {
         if (finished) return;
+        // 关键：先清掉在飞测试点的超时定时器，否则 next() 会用新定时器覆盖 jobTimer，
+        // 旧定时器成为孤儿并在到期后把「还在正常跑的后续测试点」整题误判为 TLE。
+        if (jobTimer) { clearTimeout(jobTimer); jobTimer = null; }
+        if (ev && typeof ev.preventDefault === 'function') {
+          try { ev.preventDefault(); } catch (e) { /* 忽略：部分引擎不支持 */ }
+        }
         var text = (ev && ev.message) ? ev.message : '沙箱内部错误';
         results.push({ status: 'error', error: text, line: null });
         index++;

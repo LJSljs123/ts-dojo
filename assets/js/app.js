@@ -7,7 +7,12 @@
  *
  * 路由表：
  *   #/problems            题库（搜索 / 标签 / 难度）
- *   #/methods             方法库（29 条方法卡片，按 4 个层次检索）
+ *   #/methods             方法库（46 条方法卡片，按 5 个层次检索）
+ *   #/method/:id          方法详情（直觉 / 公式 / 假设 / 反例 / 引用）
+ *   #/glossary            术语表（新手术语速查）
+ *   #/learn[/:id]         课程地图与模块页（9 模块）
+ *   #/lab                 可视化实验室（受控回测）
+ *   #/studio              模型工坊（自己搓模型跑完整实验）
  *   #/problem/<id>        题目页（题面 + 编辑器）
  *   #/submission/<id>     提交详情（代码快照 + 逐测试点）
  *   #/submissions         提交记录（含导出 / 导入 / 清空）
@@ -28,6 +33,7 @@
   var pages = TSJ.appPages;
   var library = TSJ.appLibrary;
   var boards = TSJ.appBoards;
+  var glossary = TSJ.appGlossary;
   var judge = TSJ.judge;
   var lifecycle = TSJ.appLifecycle;
   var theme = TSJ.appTheme;
@@ -35,6 +41,7 @@
   var learn = TSJ.appLearn;
   var methodDetail = TSJ.appMethodDetail;
   var lab = TSJ.appLab;
+  var studio = TSJ.appStudio;
 
   var $ = core.$;
   var esc = core.esc;
@@ -74,6 +81,7 @@
 
     // 路由切换时如果有弹层打开，先关掉（避免弹层浮在新页面上）
     if (a11y.modalOpen()) a11y.closeModal();
+    document.body.classList.remove('dragging');   // 分栏拖拽中途切路由：DOM 已换、pointerup 不再触发，摘掉防光标困住
 
     if (view === 'problem' && parts[1]) {
       var p = TSJ.findProblem(decodeURIComponent(parts[1]));
@@ -88,14 +96,10 @@
       store.setActiveNav('submissions');
       pages.renderSubmissions();
       a11y.setTitle('提交记录');
-    } else if (view === 'ranking') {
-      store.setActiveNav('ranking');
-      boards.renderRanking();
-      a11y.setTitle('排行榜');
-    } else if (view === 'path') {
-      store.setActiveNav('path');
-      boards.renderPath();
-      a11y.setTitle('学习路径');
+    } else if (view === 'ranking' || view === 'path') {
+      store.setActiveNav(view);
+      if (view === 'ranking') { boards.renderRanking(); a11y.setTitle('排行榜'); }
+      else { boards.renderPath(); a11y.setTitle('学习路径'); }
     } else if (view === 'methods' && parts[1]) {
       store.setActiveNav('methods');
       methodDetail.render(decodeURIComponent(parts[1]), scope);
@@ -103,6 +107,10 @@
       store.setActiveNav('methods');
       library.renderMethods();
       a11y.setTitle('方法库');
+    } else if (view === 'glossary') {
+      store.setActiveNav('glossary');
+      glossary.renderGlossary();
+      a11y.setTitle('术语表');
     } else if (view === 'learn' && parts[1]) {
       store.setActiveNav('learn');
       learn.renderModule(decodeURIComponent(parts[1]), scope);
@@ -112,6 +120,9 @@
     } else if (view === 'lab') {
       store.setActiveNav('lab');
       lab.render(scope);
+    } else if (view === 'studio') {
+      store.setActiveNav('studio');
+      studio.render(scope);
     } else if (view === 'dashboard') {
       store.setActiveNav('dashboard');
       dashboard.render(scope);
@@ -254,6 +265,7 @@
     state.appScope = rootScope;
 
     theme.init();
+    TSJ.appCmdk.install();   // Ctrl/Cmd + K 命令面板（模块内部自持监听，随页面生存）
     var btn = $('#btnTheme');
     function paintTheme() {
       if (!btn) return;
