@@ -10,7 +10,7 @@
   'use strict';
   var TSJ = global.TSJ || (global.TSJ = {});
   var core = TSJ.appCore, $ = core.$, $$ = core.$$, esc = core.esc;
-  var TIER_MARK = { deep: 'DL', eval: 'EVAL' };   // 标题旁小标：只有深度学习 / 评估方法论有
+  var TIER_MARK = { deep: 'DL', foundation: 'FM', eval: 'EVAL' };   // 标题旁小标：深度学习 / 基础模型 / 评估方法论
   var MAX_TAGS = 3;                               // 收起态最多显示的标签数，超出折叠为 +N
   var view = { query: '', tier: 'all', onlyPractice: false, open: {} };   // 每次进入重建为默认态
 

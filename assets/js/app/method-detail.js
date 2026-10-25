@@ -24,6 +24,14 @@
     return '<a class="ds-btn ds-btn-primary" href="#/problem/' + encodeURIComponent(m.practice) + '">去练这道题</a>';
   }
 
+  /** v3.1：方法已在实验室白名单内时给一个直达出口（不预设参数，避免“看起来像一键最优”）。 */
+  function labButton(m) {
+    if (!TSJ.labConfig || !TSJ.labConfig.METHODS[m.id]) {
+      return '<span class="ds-badge">实验室未收录该方法</span>';
+    }
+    return '<a class="ds-btn" href="#/lab">去实验室对比该方法</a>';
+  }
+
   function render(id, scope) {
     var m = TSJ.methodsById(id);
     var host = document.getElementById('view');
@@ -68,6 +76,7 @@
       '    <div class="method-fact"><span>运行级别</span><b>' + run.text + '</b></div>',
       '    <div class="method-fact"><span>方法层次</span><b>' + esc(m.tier) + '</b></div>',
       '  </div>' + practiceButton(m),
+      '  ' + labButton(m),
       '  <p><a class="ds-btn" href="#/methods">返回方法库</a></p></div>',
       '  <div class="ds-card"><h2 class="ds-card-title">方法卡字段</h2><div class="method-facts">',
       '    <div class="method-fact"><span>发表处</span><b>' + esc(m.venue) + '</b></div>',

@@ -5,8 +5,8 @@
 - **无需安装任何东西**：双击 `index.html` 即可使用（`file://` 协议下完整可用）。
 - **无外部依赖**：不引 CDN、不引外部字体、不引图片、不引 npm 包。图标是内联 SVG，字体是系统字体栈。
 - **无构建步骤**：纯 HTML + CSS + 原生 JavaScript（ES2019），经典 `<script>` 顺序加载，全部挂在全局命名空间 `window.TSJ` 上。
-- **方法库：29 个方法 / 4 个层次**，可检索、可展开、可跳题 —— 把「题库」从 9 道练习扩成一条有文献脉络的训练场。
-- **v3.0 研究工作台**：新增 `#/` 工作台、8 模块课程、29 个方法详情页、**可视化实验室**（白名单方法 + 受控回测 + 诊断图）、深浅主题与三档响应式；所有实验固定数据版本、切分协议与指标，测试真值不参与校准。
+- **方法库：46 个方法 / 5 个层次**（含 2024-2026 顶会顶刊新知识：FITS / SparseTSF / CycleNet / TimeMixer / ModernTCN / TimeGPT / Chronos / TimesFM / Moirai / Lag-Llama / Timer / MOMENT / Time-MoE / Sundial / Time-LLM），可检索、可展开、可跳题 —— 把「题库」从 15 道练习扩成一条有文献脉络的训练场。
+- **v3.2 研究工作台**：`#/` 工作台、8 模块课程（m4/m6 已扩至 2024-2026 前沿）、46 个方法详情页、**可视化实验室**（12 个白名单方法 + 受控回测 + 诊断图）、**`#/glossary` 新手术语表**（约 70 条行话大白话速查 + 站内跳转）、深浅主题与三档响应式；所有实验固定数据版本、切分协议与指标，测试真值不参与校准。
 - **隔离执行环境判题**：用户代码在 `Blob URL` 创建的 Web Worker 中执行，单次 1500ms / 整题 8000ms 超时保护，网络与 DOM 类 API 全部封禁；无 Worker 时**拒绝提交**而不是降级卡死页面。
 
 ---
@@ -35,12 +35,12 @@ python -m http.server 8080
 # 然后访问 http://localhost:8080
 ```
 
-模块化版有 19 个 `<script src>` + 1 个样式表，**必须保证 assets 目录随行**。
+模块化版有 38 个 `<script src>` + 4 个样式表，**必须保证 assets 目录随行**。
 如果它白屏，页面会自己显示「启动失败」面板并给出原因（脚本被拦截 / 资源 404 / 旧缓存），不会再无声无息。
 
 浏览器要求：Chrome / Edge / Firefox / Safari 近三年版本（需要 `Worker`、`canvas`、`localStorage`、`Proxy`）。
 
-首次进入会有一个简短引导，说明「写 `predict` 函数 → 提交 → 打败基线得分 → 解锁题解」。
+首次进入会有一个简短引导，说明「写 `predict` 函数 → 提交 → 打败基线得分 → 解锁题解」，并附「零基础第一课」（`#/learn/m0`，25 分钟）入口；第 1 题题面下方默认展开「手把手带做」四步面板。
 
 ### 改了源码后如何更新单文件版
 
@@ -57,18 +57,21 @@ node tests/standalone-check.js      # 校验产物与源码一致、无外部引
 
 | 模块 | 能力 |
 |---|---|
-| 工作台 | `#/` 汇总本机学习进度、最近提交、最近实验与继续学习入口；空态给出明确下一步 |
+| 工作台 | `#/` 汇总本机学习进度（**进度环 + 分难度通过条**）、最近提交、最近实验与继续学习入口；快捷入口含模型工坊；**Ctrl/Cmd+K 全局命令面板**可直达任意题目/方法/课程/术语与快捷动作 |
 | 题库 | 15 道题（入门→挑战）、难度筛选、**标签筛选**、**搜索**（题号/标题/标签）、**随机一题**（优先未通过）、三条件取交集；窄屏标签云默认折叠 |
-| 方法库 | **29 个方法卡片 · 4 个层次**（经典统计 13 / 竞赛级方法 3 / 顶会深度学习 9 / 评估方法论 4）；搜索覆盖 name / title / venue / tags / idea，与层筛选、「只看能练的」取交集；**方法详情页**含直觉 / 公式 / 假设 / 复杂度 / 局限 / 反例 / 数值小例 / 运行级别 / 一手来源 |
-| 课程 | **8 个模块**：数据基础 → 经典统计 → 特征与 ML → 深度学习 → 概率预测 → 基础模型 → 评测与泄漏 → 业务与结构化预测；先修关系、正文、公式小例、演示出口、练习产出、参考来源与完成度 |
-| 实验室 | `#/lab` 受控回测：9 条数据、白名单方法、有限参数、holdout/rolling、MSE/MAE/sMAPE；输出指标对比、预测/残差/ACF/PACF/季节分解图；最近 20 组本地记录、导出/导入、确定性复现 |
+| 方法库 | **46 个方法卡片 · 5 个层次**（经典统计 13 / 竞赛级方法 3 / 顶会深度学习 14 / 时序基础模型 10 / 评估方法论 6）；搜索覆盖 name / title / venue / tags / idea，与层筛选、「只看能练的」取交集；**方法详情页**含直觉 / 公式 / 假设 / 复杂度 / 局限 / 反例 / 数值小例 / 运行级别 / 一手来源 |
+| 课程 | **9 个模块（含零基础第一课 m0）**：零基础第一课（奶茶店例子 + predict 逐行 + 报错翻译 + JS 十行速成）→ 数据基础 → 经典统计 → 特征与 ML → 深度学习 → 概率预测 → 基础模型 → 评测与泄漏 → 业务与结构化预测；m4 已扩至 2024「线性复兴」、m6 已扩至 2023-2026 基础模型全景；先修关系、正文、公式小例、演示出口、练习产出、参考来源与完成度 |
+| 实验室 | `#/lab` 受控回测：9 条数据、12 个白名单方法、有限参数、holdout/rolling、MSE/MAE/sMAPE；**实时调节滑杆——拖动参数即重算图表与指标（同步配置面板、不写记录），点「运行实验」按当前滑杆值正式保存**；结果区图表前置 + 分段控件 + 指标表「优/劣」标记；最近 20 组本地记录、导出/导入、确定性复现；切走路由即取消在途实验 |
 | 判题 | 留出 / 滚动回测；与 4 条统计基线比误差；逐测试点 verdict + 指标对比；判题会话隔离（切题不会串成绩） |
-| 学习 | 题面含数学公式与数据说明、折叠提示、通过后解锁参考题解、学习路径时间线、课程地图 |
+| 学习 | 题面含数学公式与数据说明、折叠提示（**P5-P15 带数学补给提示**，线性代数概念可点直达术语表）、**P1「手把手带做」四步面板**、**参考解逐行语法+算法双注**（P4/P5/P6/P11）、通过后解锁参考题解、学习路径时间线、课程地图 |
+| 术语表 | `#/glossary` 83 个术语大白话速查（**9 个分类，含「数学补给」**：向量/矩阵/线性方程组/最小二乘/傅里叶等；搜索与分类取交集、相关术语互跳、课程/方法/题目直达） |
 | 进度 | 每题最高分 / 通过状态 / 草稿自动保存；**进度导出为 JSON、导入合并、一键清空**（换机器不丢记录） |
 | 复盘 | **提交详情页**：当时提交的代码快照（语法高亮）+ 逐测试点结果，刷新后仍可访问 |
-| 图表 | 数据预览（历史 / 测试区间 / 你的预测三色）；**hover 十字线 + tooltip**；v3 统一图表内核支持预测对比、区间扇形、残差、ACF/PACF、季节分解、指标对比 |
+| 图表 | 数据预览（历史 / 测试区间 / 你的预测三色）；**hover 十字线 + tooltip**（高亮点带描边环）；**色板走 CSS 变量、深浅主题实时适配**（切主题即重绘）；**整洁刻度**网格、历史线渐变面积、预测线空心端点；v3 统一图表内核支持预测对比、区间扇形、残差、ACF/PACF、季节分解、指标对比 |
 | 编辑器 | 语法高亮、行号、Tab 缩进、括号自动配对、**括号匹配高亮**、**字号 12/13/14**、`Ctrl/Cmd+S` 存草稿、`Ctrl/Cmd+Enter` 运行；**>800 行自动降级**关闭实时高亮保证输入流畅 |
-| 主题 | system / light / dark，写入 `tsoj:theme`，跨刷新保留；图表语义色全站固定，不只靠颜色区分 |
+| 主题 | system / light / dark，写入 `tsoj:theme`，跨刷新保留；**切换主题时全部画布即时重绘换色**（MutationObserver 联动 v1/v3 两套图表内核）；语义色不只靠颜色区分 |
+| 快捷键 | **Ctrl/Cmd + K** 全局命令面板（搜索/跳转/动作，↑↓ 选择 ↵ 跳转）；编辑器内 Ctrl/Cmd+Enter 运行、Ctrl/Cmd+S 存草稿 |
+| 模型工坊 | `#/studio` **自己搓一个模型跑完整实验流程**：写带训练逻辑的 predict → ① 验证集评估（train 拟合 / val 打分，可反复迭代）→ ② 最终评测（train+val 拟合 / test 打分，同代码评测次数如实记录防窥探）→ 报告（MSE vs 最优基线 + 预测对比图带 train/val/test 分界线）→ 实验记录留档/载入/导出；沙箱与判题完全同源 |
 | 窄屏 | ≤640px 自动切换**卡片式列表**（标题正常换行，不再挤成一字一行）、题目页上下堆叠、触控目标 ≥40px、筛选默认折叠 |
 | 可访问性 | 弹层焦点陷阱 + ESC 关闭 + 焦点恢复、结果面板 `aria-live`、编辑器错误 `aria-describedby`、路由切换更新标题并聚焦主区、跳转到主内容链接 |
 | 存储 | 跨标签页 `storage` 事件同步（后写不再覆盖先写）、配额超限提示并降级为内存态、脏数据静默归一化 |
@@ -83,14 +86,14 @@ ts-dojo/
 ├── index.html                 # 模块化入口（含 CSP + 启动自检 + script 加载顺序）
 ├── ts-dojo-standalone.html    # 单文件版（由 tools/build-standalone.js 生成，勿手改）
 ├── tools/
-│   └── build-standalone.js    # 把 CSS / 19 个 js 内联成单文件
+│   └── build-standalone.js    # 把 CSS / 38 个 js 内联成单文件
 ├── assets/
 │   ├── css/
 │   │   └── style.css          # 暗色主题（深色底 + 青绿强调色）
 │   └── js/
 │       ├── datasets.js        # 9 条合成数据集（固定种子确定性生成）
 │       ├── problems.js        # 9 道题（题面 / 参考解 / 模板 / 评分参数）
-│       ├── methods.js         # 29 条方法卡片（内容层，只读：文案 / 出处 / 年份已核对）
+│       ├── methods.js         # 46 条方法卡片（内容层，只读：文案 / 出处 / 年份已核对）
 │       ├── judge.js           # 判题引擎：指标 + 基线 + 评分 + Worker 沙箱
 │       ├── editor.js          # 自研代码编辑器（高亮 / 行号 / 缩进 / 括号匹配 / 字号）
 │       ├── chart.js           # Canvas 折线图（历史 / 测试区间 / 预测 / hover tooltip）
@@ -114,11 +117,11 @@ ts-dojo/
 │           ├── lab.js         #   #/lab 实验室运行 / 诊断 / 记录
 │           ├── library.js     #   方法库页（层筛选 / 搜索 / 只看能练的 / 卡片展开）
 │           └── boards.js      #   排行榜与学习路径的共享渲染片段
-│   ├── content/               # v3 内容层：references / courses / method-details / content
+│   ├── content/               # v3 内容层：references / courses / method-details / content / glossary（术语表）
 │   ├── charts/                # v3 图表内核：core / series / diagnostics
 │   └── lab/                   # v3 实验室引擎：config / adapters / stats / runner
 ├── tests/
-│   ├── qa/                    # node --test tests/qa/*.test.js（183 条）
+│   ├── qa/                    # node --test tests/qa/*.test.js（193 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
 │   ├── starter-check.js       # 15 题模板原样提交必须全 WA
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
@@ -133,10 +136,15 @@ ts-dojo/
 加载顺序（`index.html` 末尾，顺序不可调换）：
 
 ```
-datasets → problems → methods → judge → editor → chart
-  → app/util → app/core → app/schema → app/store → app/storage
-  → app/ui → app/a11y → app/views → app/problem → app/pages
-  → app/library → app/boards → app.js
+datasets → problems → methods
+  → content/references → content/courses → content/method-details → content/content → content/glossary
+  → judge → editor → chart
+  → charts/core → charts/series → charts/diagnostics
+  → lab/config → lab/adapters → lab/stats → lab/runner
+  → app/util → app/core → app/schema → app/store → app/storage → app/lifecycle
+  → app/ui → app/a11y → app/theme → app/views → app/problem → app/pages
+  → app/lab-storage → app/lab-panels → app/dashboard → app/learn → app/method-detail
+  → app/lab → app/library → app/glossary → app/boards → app.js
 ```
 
 依赖方向严格单向（`tests/qa/static.test.js` 会检查）：任何模块都不得引用排在它**后面**的命名空间。
@@ -228,14 +236,27 @@ v3.0 起每张卡片可进入 `#/methods/:id` **方法详情页**：卡片字段
 详情层（直觉 / 假设 / 复杂度 / 局限 / 反例 / 数值小例 / 运行级别）在 `assets/js/content/method-details.js`，
 一手来源在 `assets/js/content/references.js`。基础模型与真实深度训练一律标「概念级不可沙箱运行」。
 
-### 四层划分（`tier`）
+### 五层划分（`tier`）
 
 | tier | 名称 | 数量 | 含义 |
 |---|---|---|---|
 | `classic` | 经典统计 | 13 | 教科书与 IJF/JASA/EJOR 一脉：结构简单、可解释，在小数据上极难被打败（朴素法 / 季节朴素 / SES / Holt / Holt-Winters / Theta / ARIMA / ETS / Croston / TSB / PELT / 周期图 / MAPA） |
 | `competition` | 竞赛级方法 | 3 | M3/M4/M5 的实证结论：组合、多尺度聚合、间歇需求的专门处理，往往比换模型更有效 |
-| `deep` | 顶会深度学习 | 9 | ICLR/NeurIPS/AAAI/ICML 一脉（N-BEATS / N-HiTS / DLinear / PatchTST / TimesNet / iTransformer / TFT / DeepAR / Informer），需要训练；卡片标题旁标 `DL` |
-| `eval` | 评估方法论 | 4 | 怎么证明「真的更好」（DM 检验 / MASE / 滚动回测 / Conformal），标 `EVAL` —— 这层最容易出错，也最容易让前三层的努力白费 |
+| `deep` | 顶会深度学习 | 14 | ICLR/NeurIPS/AAAI/ICML 一脉（N-BEATS / N-HiTS / DLinear / PatchTST / TimesNet / iTransformer / TFT / DeepAR / Informer + 2024 线性复兴：FITS / SparseTSF / CycleNet 与 TimeMixer / ModernTCN），需要训练；卡片标题旁标 `DL` |
+| `foundation` | 时序基础模型 | 10 | 2023-2026 的新范式：在海量序列上预训练或复用 LLM，零样本/少样本预测（TimeGPT / Chronos / TimesFM / Moirai / Lag-Llama / Timer / MOMENT / Time-MoE / Sundial / Time-LLM），全部概念级 |
+| `eval` | 评估方法论 | 6 | 怎么证明「真的更好」（DM 检验 / MASE / 滚动回测 / Conformal / CRPS / pinball 分位数回归），标 `EVAL` —— 这层最容易出错，也最容易让前面几层的努力白费 |
+
+> v3.2 内容扩充的文献口径：新增方法卡的会议 / 年份 / 标题均逐条核对过一手来源
+> （FITS=ICLR 2024、SparseTSF=ICML 2024、CycleNet=NeurIPS 2024 Spotlight、TimeMixer / ModernTCN=ICLR 2024、
+> Time-LLM=ICLR 2024、Time-MoE=ICLR 2025、Sundial=ICML 2025、Chronos=TMLR 2025、Timer / MOMENT / TimesFM / Moirai=ICML 2024），
+> 并收录了对 LLM 路线的系统质疑（Tan et al., NeurIPS 2024 Spotlight）—— 方法卡与其「反例」对照阅读。
+
+### 新手术语表（`#/glossary`）
+
+面向初学者的行话速查：约 70 个术语（基础概念 / 数据形态 / 切分评估 / 误差指标 / 方法模型 / 概率区间 /
+深度学习与基础模型 / 平台术语），每个术语 1-3 句大白话 + 相关术语跳转 + 课程 / 方法卡 / 题目直达链接。
+数据在 `assets/js/content/glossary.js`（内容层，只读），页面在 `assets/js/app/glossary.js`，
+搜索与分类取交集，链接目标由 `tests/qa/content-v3.test.js` 校验必须真实存在。
 
 ### `runnable` 与 `practice` 的含义
 
@@ -249,7 +270,7 @@ v3.0 起每张卡片可进入 `#/methods/:id` **方法详情页**：卡片字段
 ### 交互
 
 - 搜索匹配 `name` / `title` / `venue` / `tags` / `idea`（大小写不敏感），与层筛选、「只看能练的」**取交集**。
-- 层 chips 上的数量、副标题里的「29 个方法 · 4 个层次 · 13 个可练」都从 `TSJ.methods` **现算**，不写死数字。
+- 层 chips 上的数量、副标题里的「46 个方法 · 5 个层次 · 13 个可练」都从 `TSJ.methods` **现算**，不写死数字。
 - 卡片默认收起（`aria-expanded="false"`），标题可 Tab 聚焦 + Enter/Space 展开；展开内容按需生成。
 - 「关键式子」按**纯文本**渲染（内含 `*` `+` `Σ`，不走 Markdown），等宽字体 + 保留换行。
 - 「检索原文」不硬编码论文 URL（会失效），统一用 Bing 搜标题，`target="_blank" rel="noopener noreferrer"`。
@@ -509,7 +530,7 @@ node tests/standalone-check.js  # 单文件版是否与源码同步、是否残�
 node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
 ```
 
-**测试规模：183 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
+**测试规模：193 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
 找不到浏览器时自动 skip，并在输出里注明「未验证」，不假装通过）。
 
 | 测试文件 | 关注点 |
@@ -521,10 +542,10 @@ node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，�
 | `browser` | 真实浏览器：路由渲染、Worker 判题、XSS 注入、脏数据 |
 | `regressions` | 判题竞态（切题串成绩）、沙箱逃逸、375px 溢出、rolling 窗口不足 |
 | `features` | 导出/导入/清空、提交详情、窄屏卡片、图表 tooltip、搜索筛选、字号与括号、焦点陷阱 |
-| `library` | 方法库：29 条数据完整性、`practice` 引用校验、默认 29 张卡片、搜索/层筛选/只看能练的取交集、跳题、375px 不溢出 |
-| `content-v3` | 8 课程 / 29 方法详情完整性、引用与运行级别、Markdown 转义、公式字段 |
+| `library` | 方法库：46 条数据完整性、`practice` 引用校验、默认 46 张卡片、搜索/层筛选/只看能练的取交集、跳题、375px 不溢出 |
+| `content-v3` | 8 课程 / 46 方法详情 / 术语表完整性（字段 / 分类 / see / 站内链接）、引用与运行级别、Markdown 转义、公式字段 |
 | `charts-v3` | ACF/PACF、加性分解、经验分位等图表统计算法 |
-| `lab-v3` | 实验室白名单、确定性、候选与基线同源、区间只来自训练残差 |
+| `lab-v3` | 实验室白名单、确定性、候选与基线同源、区间只来自训练残差；连字符基线方法可跑、fail-closed、校准携带真实 season、参数默认值跟随目标方法 |
 | `v3-browser` | 新路由、课程/方法详情渲染、实验室端到端、主题持久化、375px 不溢出、20 次路由切换无残留 |
 
 `selftest.js` 覆盖内容：

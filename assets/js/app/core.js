@@ -52,7 +52,9 @@
     theme: 'tsoj:theme',
     courseProgress: 'tsoj:courseProgress:v1',
     lab: 'tsoj:lab:v1',
-    labDraft: 'tsoj:labDraft:v1'
+    labDraft: 'tsoj:labDraft:v1',
+    studioDraft: 'tsoj:studioDraft:v1',
+    studioExp: 'tsoj:studioExperiments:v1'
   };
 
   /* ---------- 1. 类型守卫 ---------- */
