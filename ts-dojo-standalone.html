@@ -4377,7 +4377,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     'function predict(history, horizon, ctx) {',
     '  // history : number[] 历史观测（长度 >= 2 个季节周期）',
     '  // horizon : number   需要预测的未来步数',
-    '  // ctx     : { freq, season, datasetId, index }',
+    '  // ctx     : { freq, season, datasetId, index, ...题目额外字段 }',
     '  // 返回    : number[] 长度必须 === horizon，且不含 NaN / Infinity',
     '',
     '  return [];   // ← 占位：请返回长度为 horizon 的预测数组',
@@ -9905,7 +9905,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 
   /**
    * 各基线签名统一为 fn(history, horizon, ctx) => number[horizon]。
-   * ctx = { freq, season, datasetId, index }
+   * ctx 基础四字段 = { freq, season, datasetId, index }；
+   * 题目可用 ctxExtra 追加字段（如 P17 的 promoDays），基线一律只用基础四字段。
    */
   var baselines = {
     /** 朴素法：把最后一个观测值重复 horizon 次 */

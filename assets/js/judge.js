@@ -161,7 +161,8 @@
 
   /**
    * 各基线签名统一为 fn(history, horizon, ctx) => number[horizon]。
-   * ctx = { freq, season, datasetId, index }
+   * ctx 基础四字段 = { freq, season, datasetId, index }；
+   * 题目可用 ctxExtra 追加字段（如 P17 的 promoDays），基线一律只用基础四字段。
    */
   var baselines = {
     /** 朴素法：把最后一个观测值重复 horizon 次 */

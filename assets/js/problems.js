@@ -929,7 +929,7 @@
     'function predict(history, horizon, ctx) {',
     '  // history : number[] 历史观测（长度 >= 2 个季节周期）',
     '  // horizon : number   需要预测的未来步数',
-    '  // ctx     : { freq, season, datasetId, index }',
+    '  // ctx     : { freq, season, datasetId, index, ...题目额外字段 }',
     '  // 返回    : number[] 长度必须 === horizon，且不含 NaN / Infinity',
     '',
     '  return [];   // ← 占位：请返回长度为 horizon 的预测数组',
