@@ -19,7 +19,7 @@
 双击 ts-dojo-standalone.html
 ```
 
-它把 CSS 与 48 个脚本全部内联成一个约 832KB 的 HTML，**不依赖任何相对路径**。
+它把 CSS 与 48 个脚本全部内联成一个约 833KB 的 HTML，**不依赖任何相对路径**。
 所以无论是双击打开、丢进 http 服务器、还是被塞进 iframe / `srcdoc` / 预览面板里，都能正常渲染。
 
 **方式 B：模块化版**
@@ -45,11 +45,14 @@ python -m http.server 8080
 ### 改了源码后如何更新单文件版
 
 ```bash
+node tools/stamp-assets.js          # 重新给 index.html 的 52 处 ?v= 打内容哈希
 node tools/build-standalone.js      # 重新生成 ts-dojo-standalone.html
 node tests/standalone-check.js      # 校验产物与源码一致、无外部引用、脚本未截断
 ```
 
 `tests/standalone-check.js` 会在产物过期时直接报「内容不一致」，避免发布一个旧版本。
+
+**为什么 `?v=` 是内容哈希而不是版本号**：这 52 处引用一度全都停在 `?v=3.5.0`，而项目已经走到 v3.10。老访客的浏览器会命中旧缓存——拿到没有 `drawParts` 的 `chart.js`，P18 的分量预览就静默消失，而单文件版查不出来（它是内联的）。手写版本号忘改一次就复发；内容哈希由文件本身算出来，忘不掉。`tests/qa/assets-version.test.js` 把「token 必须等于内容哈希」变成断言，所以改完任何 `assets/` 下的文件都要重跑一次打标工具。
 
 ---
 
@@ -88,6 +91,7 @@ ts-dojo/
 ├── ts-dojo-standalone.html    # 单文件版（由 tools/build-standalone.js 生成，勿手改）
 ├── tools/
 │   ├── build-standalone.js    # 把 CSS / 48 个 js 内联成单文件
+│   ├── stamp-assets.js        # 给 index.html 的 ?v= 打内容哈希（防旧缓存）
 │   └── numbers.js             # 口径计算：题数 / 方法数 / 脚本数 / 用例数（README 数字的唯一来源）
 ├── assets/
 │   ├── css/
@@ -134,7 +138,7 @@ ts-dojo/
 │   ├── charts/                # v3 图表内核：core / series / diagnostics
 │   └── lab/                   # v3 实验室引擎：config / adapters / stats / runner
 ├── tests/
-│   ├── qa/                    # node --test tests/qa/*.test.js（232 条）
+│   ├── qa/                    # node --test tests/qa/*.test.js（235 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
 │   ├── starter-check.js       # 18 题模板原样提交必须全 WA
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
@@ -506,6 +510,9 @@ worker-src blob:; font-src 'self'
 **还要同步 README 的数字**：`node tools/numbers.js` 会打印当前口径并列出 README 里对不上的行号；
 `tests/qa/docs-numbers.test.js` 把这件事变成断言，忘了改就会红。
 
+**最后重新打标**：`node tools/stamp-assets.js`。改了任何 `assets/` 下的文件都要跑一次，
+否则 `tests/qa/assets-version.test.js` 会红——它挡的是「新代码配旧缓存」这种只在老访客机器上出现的故障。
+
 ### 新增一条数据集
 
 在 `assets/js/datasets.js` 里写一个 `buildXxx(rng)` 生成函数，然后在 `DEFINITIONS` 里登记：
@@ -559,7 +566,7 @@ node tests/standalone-check.js  # 单文件版是否与源码同步、是否残�
 node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
 ```
 
-**测试规模：232 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
+**测试规模：235 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
 找不到浏览器时自动 skip，并在输出里注明「未验证」，不假装通过）。
 浏览器用例自带**全局文件锁**：多个测试文件并发时只会排队、不会同时 spawn 多个 Chromium，
 因此 `node --test tests/qa/*.test.js` 直接并发跑也是稳的。
@@ -581,6 +588,7 @@ node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，�
 | `studio-csv` | 工坊 CSV 解析：单列 / 时间+数值 / 数值+时间 / 分号+逗号小数 / 点数下限 / 截断 / 脏行 / 季节估计 |
 | `achievements` | 成就判定：首 AC / 整题满分（单窗口满分不算）/ 三连胜 / 入门毕业 / 词典编纂者 / 幂等 |
 | `docs-numbers` | README 数字与源码一致：题数 / 方法数 / 分层 / 可练 / 数据集 / 课程 / 术语 / 脚本 / 用例数 / 单文件体积 |
+| `assets-version` | 发布级：`index.html` 每处 `?v=` 都等于资源内容哈希（防旧缓存）、引用不 404、`assets/` 下无孤儿文件 |
 
 `selftest.js` 覆盖内容：
 

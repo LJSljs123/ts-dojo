@@ -385,3 +385,33 @@ P18 要考「总量里藏了两个周期」，前提是分量**能被拿出来**
 `tests/qa/v3-browser.test.js` 用两条用例守住：P18 必须给出 `#/methods/bottom-up` 且点击后真的渲染出方法详情（不是只改地址栏）；另挑一道挂了课程的题（`p1-naive` → `m0`/`m1`）验证课程那一支。
 
 **踩到的坑**：`loadEngine({fresh: true})` 只清 `datasets / problems / judge` 的 require 缓存，`methods.js` / `courses.js` 仍是缓存命中。第二次调用 fresh 会把 `global.TSJ` 删掉，而缓存的模块不会重新挂载，`TSJ.methods` 就变成 `undefined`。所以内容层常量必须**一次加载算完**（`CONTENT`），不能在两个 IIFE 里各调一次 `loadEngine`。
+
+### 12.12 资源版本：为什么 `?v=` 必须是内容哈希
+
+`index.html` 里 52 处资源引用一度全部停在 `?v=3.5.0`，而项目已经走到 v3.10。这不是「忘了改一个数字」那么简单——它有一个只在老访客机器上出现的故障形态：
+
+> 访客在 v3.5 时访问过 → 浏览器缓存 `chart.js?v=3.5.0` → v3.9 加了 `drawParts` → 访客再来，HTML 是新的、`chart.js?v=3.5.0` 命中旧缓存 → `TSJ.drawParts is not a function` → **P18 的分量预览静默消失**，控制台只有一行 TypeError。
+
+单文件版查不出这个问题（它是内联的），`standalone-check` 也查不出（产物与源码一致）。所以它属于「发布级一致性」这一类，和产物过期同源但不同路径。
+
+**为什么不用手写版本号**：这个项目零构建，版本号会立刻出现三份副本（`index.html`、`docs/v3.2-changelog.md`、README），而没有任何机制保证它们同步。三份副本 + 无单一来源 = 必然漂移，这正是上一轮 README 数字漂移的同一个病根。内容哈希把它变成**单一来源**：token 由文件本身算出来，忘不掉。
+
+**实现**（`tools/stamp-assets.js`，三种用法）：
+
+| 用法 | 行为 |
+|---|---|
+| `node tools/stamp-assets.js` | 重写 `index.html` 的 `?v=`，只改值，不动引用顺序、不增删标签 |
+| `node tools/stamp-assets.js --check` | 只检查；过期时打印「文件 旧 → 新」并以退出码 1 结束 |
+| `require('./tools/stamp-assets').stamp(html)` | 测试里复用，不落盘 |
+
+**一个必须踩过才知道的坑**：哈希不能对原始字节算。`core.autocrlf=true` 的机器上，一次 `git checkout` 就会把工作区改成 CRLF——字节变了、内容没变。第一版直接对 `fs.readFileSync(abs)` 算 sha1，结果在「注入漂移 → `git checkout` 还原」这个验证动作里暴露了：还原后 52 处 token 全部「过期」，而源码与打标时完全一致。修法是先按 LF 归一化再算哈希（`text.replace(/\r\n/g, '\n')`）。**否则每个新克隆的仓库一落地就是红的**，跑一遍打标工具又会生成一个纯换行符的空改动提交。
+
+**三道护栏**（`tests/qa/assets-version.test.js`）：
+
+1. **token 等于内容哈希**，且没有裸引用（漏写 `?v=`）；
+2. **引用的资源都存在**——`index.html` 里写错一个路径，浏览器只在运行时 404；
+3. **`assets/` 下没有孤儿文件**——这条是防「正则被改坏后扫不到引用，于是前两条全绿」的假象。同时断言 `js ≥ 40`、`css ≥ 3`，给正则加下界。
+
+第 3 条比看上去重要：一个只做「一致性」检查的用例，在扫描器失效时会**全部通过**。所以每条一致性断言都要配一个「至少扫到了这么多」的下界。
+
+**流程约束**：改任何 `assets/` 下的文件 → 跑 `node tools/stamp-assets.js`。这是刻意的摩擦：它保证「源码变了」和「引用变了」不会分家。**哈希只保护子资源，`index.html` 自身必须由服务器设 `Cache-Control: no-cache`**（或用 `file://` 打开）——否则 HTML 被缓存，里面还是旧的 token，整套机制失效。
