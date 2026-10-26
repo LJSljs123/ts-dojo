@@ -31,18 +31,104 @@ function findBrowser() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/* ---------- 全局浏览器锁 ----------
+ * 每个测试文件都会 spawn 一个 headless 浏览器。8 个文件并发时，机器被 8 个
+ * Chromium 拖到 Runtime.evaluate 超过 20s，表现为成片「CDP 请求超时」假失败，
+ * 还会因为一条失败污染页面状态而级联出更多假失败。
+ *
+ * 这里用文件锁把浏览器测试串行化：同一时刻只允许一个实例，其余进程排队等待
+ * （不是 skip、不是降低超时），拿到锁后照常跑。锁带陈旧检测：持有进程已退出
+ * 或锁超过 10 分钟，自动清理，避免崩溃后永久卡住。
+ */
+const LOCK_FILE = path.join(os.tmpdir(), 'tsoj-cdp.lock');
+const LOCK_STALE_MS = 10 * 60 * 1000;
+let heldCount = 0;
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === 'EPERM';   // 存在但无权限，视为活着
+  }
+}
+
+/** 获取浏览器锁；同进程重入只加计数。超时返回 false。 */
+async function acquireBrowserLock(timeout) {
+  if (heldCount > 0) { heldCount++; return true; }
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    try {
+      const fd = fs.openSync(LOCK_FILE, 'wx');
+      fs.writeSync(fd, String(process.pid));
+      fs.closeSync(fd);
+      heldCount = 1;
+      return true;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      try {
+        const st = fs.statSync(LOCK_FILE);
+        const pid = parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10);
+        if (Date.now() - st.mtimeMs > LOCK_STALE_MS || (pid && !pidAlive(pid))) {
+          fs.unlinkSync(LOCK_FILE);
+          continue;
+        }
+      } catch (e2) {
+        /* 锁刚被释放：直接重试 */
+      }
+      await sleep(250);
+    }
+  }
+  return false;
+}
+
+function releaseBrowserLock() {
+  if (heldCount > 1) { heldCount--; return; }
+  heldCount = 0;
+  try {
+    const pid = parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10);
+    if (!pid || pid === process.pid) fs.unlinkSync(LOCK_FILE);
+  } catch (e) {
+    /* 已被清理 */
+  }
+}
+
 /**
  * 启动无头浏览器并连上第一个 page target。
  *
  * 返回前会内置调用 waitReady()，因此调用方拿到 page 时 `window.TSJ.findProblem` 已可调用、
  * `#view` 已渲染出内容 —— 不需要再 `sleep(400)` 之类的固定等待。
  *
+ * 并发保护：内部会先获取全局浏览器锁（同进程重入安全），close() 时释放。
+ *
  * @param {string} url 要打开的 file:// URL
- * @param {{timeout?: number, readyTimeout?: number}} [opts]
+ * @param {{timeout?: number, readyTimeout?: number, lockTimeout?: number}} [opts]
  * @returns {Promise<{send: Function, evaluate: Function, waitReady: Function,
  *   reload: Function, on: Function, close: Function, exceptions: Array, logs: Array}|null>}
  */
 async function launch(url, opts) {
+  if (!findBrowser()) return null;
+  const lockTimeout = opts && opts.lockTimeout ? opts.lockTimeout : 180000;
+  if (!(await acquireBrowserLock(lockTimeout))) {
+    throw new Error('等待浏览器锁超时（>' + Math.round(lockTimeout / 1000) +
+      's）：另一个测试进程长时间占用 headless 浏览器');
+  }
+  let page;
+  try {
+    page = await launchInner(url, opts);
+  } catch (e) {
+    releaseBrowserLock();
+    throw e;
+  }
+  if (!page) { releaseBrowserLock(); return null; }
+  const close = page.close;
+  page.close = function () {
+    try { close(); } finally { releaseBrowserLock(); }
+  };
+  return page;
+}
+
+async function launchInner(url, opts) {
   const exe = findBrowser();
   if (!exe) return null;
   const port = 9400 + Math.floor(Math.random() * 200);

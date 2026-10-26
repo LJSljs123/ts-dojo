@@ -13,7 +13,7 @@
 | 项目性质 | 纯前端、零依赖、零构建的时间序列判题学习平台（类洛谷） |
 | 代码规模 | 47 个脚本（含 30 个 app 层模块）+ 4 个样式表，无打包器、无 ESM、无外部资源 |
 | 内容规模 | 16 题 / 9 套合成数据 / 46 个方法（5 层）/ 9 门课程 / 83 条术语 / 12 个实验室白名单方法 |
-| 测试基线 | **216 条 QA 用例**（198 原有 + 10 新增 CSV 解析 + 8 新增成就判定），另有 selftest / starter-check / storage-audit / standalone-check 四件套 |
+| 测试基线 | **217 条 QA 用例**（198 原有 + 10 CSV 解析 + 8 成就判定 + 1 分享卡），另有 selftest / starter-check / storage-audit / standalone-check 四件套 |
 | 判题语义 | 指标 / 基线 / 评分 / 切分 16 题锚点全部稳定，selftest 参考解 16/16 passed |
 | 产品约束 | file:// 双击可用、单文件版可嵌 iframe/srcdoc、无网络请求（CSP `connect-src 'none'`） |
 | 接手风险 | 低。剩余风险集中在「浏览器用例并发 flake」与「新功能行为测试缺口」，不影响正确性 |
@@ -57,16 +57,19 @@
 | 12 | **P2 文档** | `docs/v3.2-changelog.md` | v3.7 的工作没有任何记录 | 追加「十、v3.7」段（P16 / 成就 / CSV / 分享卡 / 测试契约 / 修复 / 验证） |
 | 13 | **P2 测试** | `tests/qa/studio-csv.test.js` | CSV 解析零覆盖（新功能里最容易出错的一块） | 新增 10 条纯函数用例：单列 / 时间+数值 / 数值+时间 / 分号+逗号小数 / 点数下限 / 截断 / 脏行 / 季节估计 ×2 / 空文件 |
 | 14 | **P2 测试** | `tests/qa/achievements.test.js` | 8 个成就的判定零覆盖，且「半分神话」的语义刚改过 | 新增 8 条纯逻辑用例：首 AC / 整题满分 / 单窗口满分不算 / 三连胜 ×2 / 入门毕业 / 词典编纂者 / 幂等 |
+| 15 | **P1 稳定性** | `tests/qa/helpers/cdp.js` | 8 个测试文件并发各 spawn 一个 Chromium，把 `Runtime.evaluate` 拖过 20s → 成片「CDP 请求超时」，且一条失败污染页面状态后级联出 3–6 条假失败 | `launch()` 内置全局文件锁（PID + 10 分钟陈旧检测），浏览器测试串行化：排队而不是 skip；`close()` 释放 |
+| 16 | P2 测试 | `tests/qa/v3-browser.test.js` | 分享卡 `buildShareCard` 零覆盖 | 新增 1 条浏览器用例：完整 HTML / 字段齐全 / 数据集名转义（`<img onerror>` 载荷） |
+| 17 | P2 文档 | `docs/v3-architecture.md` | 仍是 v3.0，缺 v3.7 三个新模块 | 追加第 12 节：模块依赖 / 新增存储键 / pinball 边界 / 分享卡安全 / 浏览器测试并发契约 |
+| 18 | P3 内容 | `assets/js/problems.js` | P16 题面写「约 50 分」，模板实测 55 分 | 改为「55 分，通过线 60」（提示与 guide 两处） |
 
 ### 3.2 未修复（已确认，建议排期）
 
 | # | 级别 | 问题 | 建议 |
 |---|---|---|---|
-| 1 | **P1 稳定性** | 浏览器用例并发跑时 CDP `Runtime.evaluate` 20s 超时；一条失败会污染页面状态，级联出 3–6 条假失败（本轮实测：并发跑 6 条超时，串行跑 198 条全绿） | 固定 `--test-concurrency=1`；或把 `cdp.launch()` 的求值超时提到 40s 并给 `page` 加失败重置 |
-| 2 | P2 覆盖 | 分享卡 `buildShareCard` 无测试（依赖 canvas/document） | 在浏览器用例里断言下载 HTML 含表头与 base64 图 |
-| 3 | P2 架构 | `docs/v3-architecture.md` 仍是 v3.0，未包含 studio-csv / achievements / 分享卡；类图与时序图未更新 | 补一节「v3.7 增量」即可，不必重画全图 |
-| 4 | P3 内容 | P16 题面写「约 50 分」，模板实测 55 分 | 改成「约 55 分」或「50 多分」 |
-| 5 | P3 内容 | P16 的 `passRate: 18` 无实测依据 | 与其他题同口径，属既有约定；若要严谨，用全站通过率回填 |
+| 1 | P3 内容 | P16 的 `passRate: 18` 无实测依据 | 与其他题同口径，属既有约定；若要严谨，用全站通过率回填 |
+| 2 | P3 权衡 | 浏览器锁会让「并发跑全量」的总时长接近串行（浏览器部分排队） | 这是用时间换确定性，可接受；若要提速，应按文件分组共享一个浏览器实例，而不是去掉锁 |
+
+> 本轮已无未决的 P0 / P1 项。判题语义、产品约束、既有 16 题锚点均未改动。
 
 ---
 
@@ -79,7 +82,7 @@ node tests/selftest.js              # 16 题参考解全 passed；打印每题�
 node tests/starter-check.js         # 16 题模板原样提交全 WA（55/57/58/42/29/0/0/0/79/57/0/36/0/5/57/55）
 node tests/storage-audit.js         # localStorage 输出安全审计
 node tests/standalone-check.js      # 单文件版与源码一致 / 无外部引用 / 未截断
-node --test --test-concurrency=1 tests/qa/*.test.js   # 216 条，0 skip
+node --test tests/qa/*.test.js   # 217 条，0 skip（并发跑也安全：浏览器锁会把实例串行化）
 ```
 
 **注意**：`node --test tests/qa`（目录参数）在 Node 22 下会报 `MODULE_NOT_FOUND`，必须用 glob；并发跑浏览器用例有 flake 风险，建议 `--test-concurrency=1`。
@@ -110,18 +113,18 @@ node --test --test-concurrency=1 tests/qa/*.test.js   # 216 条，0 skip
 **需要盯的地方**
 
 1. **模块数已到 47**，经典 script 顺序加载的认知负担接近上限；再加 3–5 个模块前，建议先做一次「app 层目录分组 + 加载清单生成」（不要引入打包器，保持零构建）。
-2. **浏览器用例与 Node 用例混在一个 `--test` 里**，负载敏感；建议拆 `tests/qa/node/` 与 `tests/qa/browser/` 两套命令。
+2. **浏览器用例与 Node 用例混在一个 `--test` 里**：已用文件锁消除并发假失败（217 条默认并发全绿），但两者仍共享一条命令；若要更快的反馈循环，建议拆 `tests/qa/node/` 与 `tests/qa/browser/` 两套命令。
 3. **文档是手写数字**，每次加题/加模块都会漂移（本次就是）。建议把「16 题 / 47 脚本 / 208 条」做成 `docs/numbers.json` 或由测试生成，README 引用占位符。
 
 ---
 
 ## 六、下一步建议（按价值排序）
 
-1. **先提交 v3.7**：把本轮修复与原有未提交工作合成一个 commit（`feat(v3.7)`），让接手基线可回滚。当前 18 个改动 + 2 个新测试文件仍在工作区。
-2. **修浏览器测试 flake**：这是唯一会让「全绿」变得不可信的问题。先固定串行，再考虑 page 复用与失败重置。
-3. **补成就判定测试**：成就系统是纯逻辑，抽成纯函数后测试成本很低，收益是防止「定义了但永远不解锁」再次发生（本轮已抓到一次）。
-4. **P17 方向**：现有 16 题已覆盖 naive → 平滑 → 季节 → 回归 → 深度学习 → 基础模型 → 分位数。下一个空白是**层级/聚合一致性**（bottom-up vs top-down）或**协变量/促销**；两者都能复用现有判题引擎，不需要改语义。
-5. **发布**：单文件版已同步，可直接静态托管；若要分享，用 `ts-dojo-standalone.html` 单文件即可，不需要服务器。
+1. **观察两轮并发全量**：锁的逻辑已用「默认并发」实测（217 条），但冷启动/低配机器上的表现仍值得再看一轮；如果稳定，`--test-concurrency=1` 就可以从推荐命令里去掉。
+2. **提交本轮修复**：浏览器锁、分享卡用例、架构文档、P16 文案与第一轮修复分开提交，保持可回滚。
+3. **P17 方向**：现有 16 题已覆盖 naive → 平滑 → 季节 → 回归 → 深度学习 → 基础模型 → 分位数。下一个空白是**层级/聚合一致性**（bottom-up vs top-down）或**协变量/促销**；两者都能复用现有判题引擎，不需要改语义。
+4. **发布**：单文件版已同步，可直接静态托管；若要分享，用 `ts-dojo-standalone.html` 单文件即可，不需要服务器。
+5. **长期**：把「16 题 / 47 脚本 / 217 条」这类数字做成由测试生成的文件，README 引用占位符——本次文档漂移的根因是手写数字。
 
 ---
 
@@ -134,10 +137,14 @@ node --test --test-concurrency=1 tests/qa/*.test.js   # 216 条，0 skip
   assets/js/app.js                 # 成就调用加空值保护
   assets/js/app/studio-csv.js      # 列序嗅探 / 分隔符 / 季节估计 / esc / 死代码
   assets/js/app/studio.js          # 删死变量
+  assets/js/problems.js            # P16 题面 50 → 55 分
   tests/qa/metrics.test.js         # pinball 期望值 0.25 → 0.5
+  tests/qa/helpers/cdp.js          # 浏览器测试全局文件锁
+  tests/qa/v3-browser.test.js      # 分享卡用例（含转义）
   README.md                        # 数量口径 / 目录树 / 加载顺序 / 自测表
   docs/v3.2-changelog.md           # 追加 v3.7
-  ts-dojo-standalone.html          # 重建（795.2KB）
+  docs/v3-architecture.md          # 追加第 12 节 v3.7 增量
+  ts-dojo-standalone.html          # 重建（795KB）
 新增：
   tests/qa/studio-csv.test.js      # 10 条 CSV 解析用例
   tests/qa/achievements.test.js    # 8 条成就判定用例

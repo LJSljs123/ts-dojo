@@ -374,3 +374,32 @@ test('模型工坊：两阶段实验流程端到端（验证集 → 最终评测
   assert.ok(hasFinal, '最终记录缺少 test MSE');
   assert.deepEqual(page.exceptions, [], '模型工坊出现异常：' + JSON.stringify(page.exceptions));
 });
+
+test('模型工坊：分享卡自包含、字段齐全、数据集名被转义', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await goto('#/studio');
+  const raw = await page.evaluate(`(function(){
+    var rec = {
+      kind: 'final', datasetId: 'airline', codeHash: 'abc123def',
+      split: [100, 20, 20], testMetrics: { mse: 1.23 }, valMetrics: { mse: 1.5 },
+      testRuns: 1, at: 1761400000000
+    };
+    var d = TSJ.findDataset('airline');
+    var html = TSJ.appStudioReport.buildShareCard({ rec: rec, d: d });
+    var evil = { id: 'x', name: '<img src=x onerror=alert(1)>', unit: '', freq: 'D', season: 7, values: [1, 2, 3] };
+    var html2 = TSJ.appStudioReport.buildShareCard({ rec: rec, d: evil });
+    return JSON.stringify({
+      doctype: html.indexOf('<!DOCTYPE html>') === 0,
+      title: html.indexOf('TSOJ 模型工坊实验卡') >= 0,
+      hash: html.indexOf('abc123def') >= 0,
+      mse: html.indexOf('MSE') >= 0,
+      runs: html.indexOf('test 评测次数') >= 0,
+      split: html.indexOf('train 100') >= 0,
+      escaped: html2.indexOf('<img src=x') < 0 && html2.indexOf('&lt;img') >= 0
+    });
+  })()`);
+  const m = JSON.parse(raw);
+  assert.ok(m.doctype, '分享卡必须是完整 HTML 文档');
+  assert.ok(m.title && m.hash && m.mse && m.runs && m.split, '分享卡字段缺失：' + raw);
+  assert.ok(m.escaped, '分享卡未转义数据集名：' + raw);
+});

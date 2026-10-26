@@ -219,3 +219,44 @@ scope.destroy();                               // 幂等、逆序执行、清空
 4. **算法漂移**：参数化参考解的锚点替换是最高风险，必须逐方法快照测试、失败关闭；不得复制算法或把 p12 的 TSB 冒充 Croston。
 5. **泄漏与误导**：测试段不得用于拟合、校准、降采样统计或调参宣称；合成结果不外推，深度/基础模型只标概念级或预计算，残差区间不冒充原生概率。
 6. **生命周期**：旧全局 chart resize 只能保留单例兼容；新页面禁止自挂匿名 window 监听。路由、存储同步与实验回调都必须验证 token 和已销毁状态。
+
+## 12. v3.7 增量（相对 v3.0 蓝图）
+
+> v3.0 文中「15 题 / 158 断言」是当时口径；当前为 **16 题 / 216 条 QA**。判题语义未变，以下只记新增面。
+
+### 12.1 新增模块与依赖方向
+
+| 模块 | 职责 | 依赖 | 被谁调用 |
+|---|---|---|---|
+| `app/studio-csv.js` | CSV 解析 / 列序嗅探 / 季节估计 / 本地恢复 | `app/core`（STORE、readJSON/writeJSON、esc） | `app/studio`（`setupPanel`） |
+| `app/achievements.js` | 8 个成就定义、事件判定、解锁落盘 | `app/core`、`TSJ.problems`、`TSJ.methodsById` | `app.js`（判题）、`app/studio`（工坊）、`app/method-detail`（方法浏览）、`app/glossary`（术语查阅） |
+| `app/studio-report.js#buildShareCard` | 自包含分享卡 HTML | 同文件 `paint`、`core.esc` | `app/studio`（分享按钮） |
+
+依赖仍严格单向：`studio-csv` 不引用 `studio`，`achievements` 不引用任何页面模块。调用点全部有 `if (TSJ.appXxx)` 保护——成就/CSV 失败不得阻断判题主流程。
+
+### 12.2 新增存储键
+
+| 键 | 内容 | 上限 / 清理 |
+|---|---|---|
+| `tsoj:studioCsv:v1` | 最近一次上传的 `{values, name, season}` | 5000 点；重新上传覆盖；`remove()` 删除 |
+| `tsoj:achievements:v1` | `{ [id]: 解锁时间戳 }` | 只增不减；幂等 |
+| `tsoj:achMeta:v1` | `{ methods: string[], looks: number }` | methods 最多 60 条，looks 上限 9999 |
+
+CSV 数据**不写入** `tsoj:datasets`（内置数据集是代码生成的只读内容）；运行时以 `id='my-csv'` 追加到 `TSJ.datasets`，刷新时由 `restore()` 重建。实验记录导出只含指标与代码指纹，不含数据本体。
+
+### 12.3 pinball 指标的边界
+
+- `judge.metrics.pinball(actual, predicted)` 的 **τ=0.95 固化在函数内**（指标签名没有第三参），P16 题面同步声明「95 分位备货」。
+- 语义：`actual > predicted`（缺货）罚 `0.95×缺口`；`actual < predicted`（冗余）罚 `0.05×冗余`。它不是对称误差，不能与 MSE/MAE 横向比较。
+- 基线（naive / seasonal_naive / mean / moving_average / linear_trend）仍是点预测，被直接当备货水平打分——这是 P16 的教学设计，不是实现缺陷。
+- 其他题不得引用 `metric: 'pinball'`，否则 `solutions.test.js` 的「朴素解不可过」口径会失真。
+
+### 12.4 分享卡的安全边界
+
+- 所有动态字段（数据集名、代码指纹、阶段、拆分）一律过 `core.esc`；数据集名来自文件名，视为不可信输入。
+- 图片用 `canvas.toDataURL` 内联为 `data:`，整张卡无外部资源，可离线打开、可邮件附件。
+- 不含用户代码正文、不含 CSV 原始数值；只有指标、拆分、指纹与 `testRuns`。
+
+### 12.5 浏览器测试的并发契约
+
+`tests/qa/helpers/cdp.js` 的 `launch()` 内置全局文件锁（`os.tmpdir()/tsoj-cdp.lock`）：同一时刻只允许一个 headless 实例，其余测试进程排队等待。原因：8 个测试文件并发会 spawn 8 个 Chromium，把 `Runtime.evaluate` 拖过 20s 超时，产生成片假失败并污染页面状态。锁带 PID + 10 分钟陈旧检测，进程崩溃不会永久卡死。`--test-concurrency=1` 仍是推荐跑法，但不再是正确性的前提。
