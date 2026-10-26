@@ -61,6 +61,7 @@
 | 16 | P2 测试 | `tests/qa/v3-browser.test.js` | 分享卡 `buildShareCard` 零覆盖 | 新增 1 条浏览器用例：完整 HTML / 字段齐全 / 数据集名转义（`<img onerror>` 载荷） |
 | 17 | P2 文档 | `docs/v3-architecture.md` | 仍是 v3.0，缺 v3.7 三个新模块 | 追加第 12 节：模块依赖 / 新增存储键 / pinball 边界 / 分享卡安全 / 浏览器测试并发契约 |
 | 18 | P3 内容 | `assets/js/problems.js` | P16 题面写「约 50 分」，模板实测 55 分 | 改为「55 分，通过线 60」（提示与 guide 两处） |
+| 19 | **P2 视觉** | `assets/css/style.css`、`assets/js/app/studio.js` | 工坊编辑器工具栏在约 500px 的左栏里放不下：`tb-hint` 不换行也不截断，文字直接压到「载入示例模型」按钮上（截图确认） | `.editor-toolbar` 允许换行；`.tb-left` 可收缩；`.tb-hint` 省略号截断；工坊 hint 缩为「Ctrl/⌘+Enter 运行」 |
 
 ### 3.2 未修复（已确认，建议排期）
 
@@ -97,6 +98,10 @@ node --test tests/qa/*.test.js   # 217 条，0 skip（并发跑也安全：浏�
 | p16 quantile-band | 100 | 55 | 60 |
 
 `judge.js` 的 `metrics` / `baselines` / `scoreForRatio` / `buildTestPoints` / `scoreCase` / `buildReport`、9 套数据集的 seed、16 题的 threshold 组合，**不要动**。
+
+### 视觉验收
+
+`node tools/visual-tour.js <输出目录>` 覆盖 13 条路由（深色）+ 实验室 / 题目 / 工坊运行态 + 浅色代表页 + 375 窄屏 5 页。本轮逐张检查，发现并修复 1 处工具栏重叠（#19）；成就墙、CSV 上传行、分享卡按钮在深色 / 浅色 / 窄屏下均正常，无横向溢出。
 
 ---
 
@@ -136,7 +141,9 @@ node --test tests/qa/*.test.js   # 217 条，0 skip（并发跑也安全：浏�
   assets/js/app/achievements.js    # 半分神话判定 + 三连胜文案
   assets/js/app.js                 # 成就调用加空值保护
   assets/js/app/studio-csv.js      # 列序嗅探 / 分隔符 / 季节估计 / esc / 死代码
-  assets/js/app/studio.js          # 删死变量
+  assets/js/app/studio.js          # 删死变量 + 工坊 hint 文案
+  assets/css/style.css             # 工具栏允许换行 / hint 省略号截断
+  tools/visual-tour.js             # 巡检补 studio 路由与窄屏 studio
   assets/js/problems.js            # P16 题面 50 → 55 分
   tests/qa/metrics.test.js         # pinball 期望值 0.25 → 0.5
   tests/qa/helpers/cdp.js          # 浏览器测试全局文件锁

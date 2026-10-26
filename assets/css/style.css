@@ -410,6 +410,7 @@ body.dragging { user-select: none; cursor: col-resize; }
 .editor-toolbar {
   flex: 0 0 auto;
   display: flex;
+  flex-wrap: wrap;          /* 放不下就换行，绝不让 hint 文字压到按钮上 */
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -417,7 +418,7 @@ body.dragging { user-select: none; cursor: col-resize; }
   border-bottom: 1px solid var(--line);
   background: var(--panel-2);
 }
-.tb-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tb-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; overflow: hidden; }
 .file-chip {
   font-family: var(--mono);
   font-size: 12px;
@@ -427,8 +428,8 @@ body.dragging { user-select: none; cursor: col-resize; }
   padding: 2px 8px;
   white-space: nowrap;
 }
-.tb-hint { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
-.tb-right { display: flex; align-items: center; gap: 8px; }
+.tb-hint { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tb-right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 
 .btn {
   border: 1px solid var(--line-2);

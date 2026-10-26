@@ -115,7 +115,7 @@
       '    <div class="studio-splits" id="studioSplits"></div>',
       '  </div>',
       '  <div class="editor-toolbar"><div class="tb-left"><span class="file-chip">my-model.js</span>' +
-      '    <span class="tb-hint">Ctrl/⌘+Enter 运行验证 · Ctrl/⌘+S 存草稿</span></div>',
+      '    <span class="tb-hint">Ctrl/⌘+Enter 运行</span></div>',
       '    <div class="tb-right"><button type="button" class="btn btn-ghost" id="studioTemplate">载入示例模型</button>' +
       '    <button type="button" class="btn" id="studioRunVal">① 验证集评估</button>' +
       '    <button type="button" class="btn btn-primary" id="studioRunFinal">② 最终评测</button></div></div>',

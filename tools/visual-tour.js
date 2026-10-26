@@ -26,6 +26,7 @@ const ROUTES = [
   ['learn', '#/learn'],
   ['module-m0', '#/learn/m0'],
   ['lab', '#/lab'],
+  ['studio', '#/studio'],
   ['glossary', '#/glossary'],
   ['submissions', '#/submissions'],
   ['ranking', '#/ranking'],
@@ -108,7 +109,7 @@ async function setViewport(page, w, h, mobile) {
     await setViewport(page, 375, 812, true);
     await page.reload();
     await sleep(600);
-    for (const [name, hash] of [['dashboard', '#/'], ['problems', '#/problems'], ['methods', '#/methods'], ['glossary', '#/glossary']]) {
+    for (const [name, hash] of [['dashboard', '#/'], ['problems', '#/problems'], ['methods', '#/methods'], ['studio', '#/studio'], ['glossary', '#/glossary']]) {
       await page.evaluate('location.hash = ' + JSON.stringify(hash));
       await sleep(600);
       await shot(page, 'narrow-' + name);
