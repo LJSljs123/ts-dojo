@@ -105,5 +105,50 @@
     if (typeof opts.setChart === 'function') opts.setChart(chart);
   }
 
-  TSJ.appStudioReport = { paint: paint };
+  /**
+   * 生成自包含分享卡 HTML（图表 canvas 转内嵌 PNG，打开即看、无任何外链）。
+   * @param {Object} view 与 paint 同构的 view 对象
+   * @returns {string} 完整 HTML 文档文本（调用方负责触发下载）
+   */
+  function buildShareCard(view) {
+    var rec = view.rec;
+    var d = view.d;
+    var isFinal = rec.kind === 'final';
+    var canvas = global.document.getElementById('studioCanvas');
+    var imgData = '';
+    try { imgData = canvas ? canvas.toDataURL('image/png') : ''; } catch (e) { imgData = ''; }
+    var fmtCard = function (v) { return (typeof v === 'number' && isFinite(v)) ? v.toFixed(2) : '—'; };
+    var mVal = isFinal ? fmtCard(rec.testMetrics.mse) : fmtCard(rec.valMetrics.mse);
+    var rows = [
+      ['数据集', esc(d.name)],
+      ['阶段', isFinal ? '🏁 最终评测（test）' : '🔁 验证集评估（val）'],
+      ['拆分', 'train ' + rec.split[0] + ' / val ' + rec.split[1] + ' / test ' + rec.split[2]],
+      ['MSE', mVal],
+      ['代码指纹', esc(rec.codeHash)],
+      ['test 评测次数', isFinal ? String(rec.testRuns) : '—']
+    ].map(function (r) {
+      return '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>';
+    }).join('');
+    return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>TSOJ 模型工坊实验卡 ' + esc(rec.codeHash) + '</title><style>' +
+      'body{font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;' +
+      'background:#0d1117;color:#e6edf3;margin:0;padding:28px;display:flex;justify-content:center}' +
+      '.tsc-card{max-width:680px;width:100%;background:#131a22;border:1px solid #1f2833;border-radius:14px;padding:26px}' +
+      'h1{font-size:18px;margin:0 0 4px}.tsc-sub{color:#8b98a9;font-size:12.5px;margin:0 0 18px}' +
+      'img{width:100%;border:1px solid #1f2833;border-radius:10px;background:#0d1117}' +
+      'table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px}' +
+      'th{color:#8b98a9;text-align:left;padding:7px 10px;border-bottom:1px solid #1f2833;white-space:nowrap}' +
+      'td{padding:7px 10px;border-bottom:1px solid #1f2833;font-family:ui-monospace,Consolas,monospace}' +
+      '.tsc-foot{color:#5c6874;font-size:11.5px;margin-top:16px;text-align:center}' +
+      '</style></head><body><div class="tsc-card">' +
+      '<h1>时序竞技场 TSOJ · 模型工坊实验卡</h1>' +
+      '<p class="tsc-sub">纯前端沙箱内完成 · 数据与代码只存在本地浏览器</p>' +
+      (imgData ? '<img src="' + imgData + '" alt="预测对比图">' : '') +
+      '<table>' + rows + '</table>' +
+      '<div class="tsc-foot">由 时序竞技场 TSOJ 生成 · ' + new Date(rec.at).toISOString().slice(0, 10) + '</div>' +
+      '</div></body></html>';
+  }
+
+  TSJ.appStudioReport = { paint: paint, buildShareCard: buildShareCard };
 })(typeof window !== 'undefined' ? window : this);

@@ -175,6 +175,7 @@
     var root = $('#view');
     if (!root) return;
     view = { query: '', cat: 'all' };
+    if (TSJ.appAchievements) TSJ.appAchievements.onGlossaryLook();   // 词典编纂者：每次进入算一次
     root.innerHTML = ['<div class="page">', '<div class="page-head">', '<h1>术语表</h1>',
       '<p class="sub">' + allTerms().length + ' 个术语 · ' + allCats().length +
         ' 个分类 · 题面与课程里的行话都在这查</p>', '</div>',

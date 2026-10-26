@@ -108,6 +108,10 @@
         return '<option value="' + esc(d.id) + '"' + (d.id === 'airline' ? ' selected' : '') + '>' +
           esc(d.name) + '（' + d.values.length + ' 点 · ' + esc(d.freq) + '）</option>';
       }).join('') + '</select></label>',
+      '    <div class="studio-csv-row">',
+      '      <label class="ds-btn ds-btn-sm studio-csv-btn"><input type="file" id="studioCsvFile" accept=".csv,.txt,.tsv" style="display:none">📂 上传自己的 CSV</label>',
+      '      <span class="ds-card-sub" id="studioCsvHint">单列数值或「时间,数值」两列；≥72 点</span>',
+      '    </div>',
       '    <div class="studio-splits" id="studioSplits"></div>',
       '  </div>',
       '  <div class="editor-toolbar"><div class="tb-left"><span class="file-chip">my-model.js</span>' +
@@ -123,7 +127,8 @@
       '    <div class="ds-empty"><strong>还没有运行</strong><span>先「① 验证集评估」迭代模型，满意后「② 最终评测」。</span></div></div></div>',
       '  <div class="ds-card"><h2 class="ds-card-title">实验记录</h2>' +
       '    <div class="lab-status"><span id="studioExpCount"></span>' +
-      '    <button class="ds-btn ds-btn-sm" id="studioExport">导出当前</button>' +
+      '    <button class="ds-btn ds-btn-sm" id="studioShare">分享卡</button>' +
+    '    <button class="ds-btn ds-btn-sm" id="studioExport">导出记录</button>' +
       '    <button class="ds-btn ds-btn-sm btn-danger" id="studioClear">清空记录</button></div>',
       '    <div id="studioRecords"></div></div>',
       '</section>',
@@ -139,6 +144,7 @@
       onSave: function () { core.writeJSON(core.STORE.studioDraft, ctx.code); a11y.toast('草稿已保存', 'ok'); }
     });
 
+    TSJ.appStudioCsv.setupPanel({ onDatasetChanged: paintSplits });
     paintSplits();
     paintRecords();
 
@@ -151,6 +157,16 @@
     });
     $('studioRunVal').addEventListener('click', function () { runPhase('val'); });
     $('studioRunFinal').addEventListener('click', function () { runPhase('final'); });
+    $('studioShare').addEventListener('click', function () {
+      if (!ctx.result) { TSJ.appA11y.toast('还没有可分享的实验', 'err'); return; }
+      var html = TSJ.appStudioReport.buildShareCard(ctx.lastView || { rec: ctx.result, d: findDataset(ctx.result.datasetId) });
+      var blob = new global.Blob([html], { type: 'text/html' });
+      var a2 = doc.createElement('a');
+      a2.href = global.URL.createObjectURL(blob);
+      a2.download = 'tsoj-studio-card-' + ctx.result.codeHash + '-' + ctx.result.kind + '.html';
+      a2.click();
+      global.URL.revokeObjectURL(a2.href);
+    });
     $('studioExport').addEventListener('click', function () {
       if (!ctx.result) { a11y.toast('还没有可导出的实验', 'err'); return; }
       var text = storage.exportJSON(ctx.result);
@@ -264,8 +280,10 @@
         };
         if (kind === 'final') rec.testRuns = storage.testRunCount(rec.codeHash, d.id) + 1;
         storage.save(rec);
+        if (TSJ.appAchievements) TSJ.appAchievements.onStudioRun(rec);
         ctx.result = rec;
-        paintReport({ rec: rec, actual: actual, pred: pred, baseline: baseline, res: res, sp: sp, historyLen: historyLen, d: d });
+        ctx.lastView = { rec: rec, actual: actual, pred: pred, baseline: baseline, res: res, sp: sp, historyLen: historyLen, d: d };
+        paintReport(ctx.lastView);
         paintRecords();
         if (kind === 'final') {
           a11y.toast('最终评测完成 · 该代码 testRuns=' + rec.testRuns, rec.testRuns > 1 ? 'warn' : 'ok');

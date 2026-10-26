@@ -785,8 +785,8 @@
       formula: 'L_τ(y, ŷ) = max(τ·(y − ŷ), (τ − 1)·(y − ŷ))',
       when: '需要中位数、上下界等多分位输出的训练与评估。',
       limit: '每个分位要一个模型或输出头；可能出现分位交叉（上界低于下界）需后处理；零值多的序列分位容易塌缩。',
-      runnable: false,
-      practice: null
+      runnable: true,
+      practice: 'p16-quantile-band'
     }
   ];
 

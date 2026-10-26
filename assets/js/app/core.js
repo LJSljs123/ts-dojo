@@ -54,6 +54,9 @@
     lab: 'tsoj:lab:v1',
     labDraft: 'tsoj:labDraft:v1',
     studioDraft: 'tsoj:studioDraft:v1',
+    studioCsv: 'tsoj:studioCsv:v1',
+    achievements: 'tsoj:achievements:v1',
+    achMeta: 'tsoj:achMeta:v1',
     studioExp: 'tsoj:studioExperiments:v1'
   };
 

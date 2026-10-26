@@ -461,7 +461,7 @@
       referenceIds: ['crps-2007']
     },
     pinball: {
-      runLevel: 'concept',
+      runLevel: 'sandbox',
       intuition: '对 τ=0.9 的上界预测，低估罚 0.9 倍、高估只罚 0.1 倍——模型自然学会把上界报高一点。',
       assumptions: ['目标分位数条件可估', '样本量足以支撑各分位'],
       complexity: '低（与 MAE 同阶）',

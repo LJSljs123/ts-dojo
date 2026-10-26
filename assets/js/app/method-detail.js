@@ -86,6 +86,7 @@
       '</aside></div>'
     ].join('\n');
     host.innerHTML = html;
+    if (TSJ.appAchievements) TSJ.appAchievements.onMethodView(id);
     TSJ.appA11y.setTitle(m.name + ' · 方法详情');
   }
 

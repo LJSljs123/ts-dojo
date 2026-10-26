@@ -98,6 +98,20 @@
       '</div></div></div>';
   }
 
+  /** 成就徽章卡：已解锁高亮，未解锁灰置（悬停看解锁条件）。 */
+  function achievementsCard() {
+    if (!TSJ.appAchievements) return '';
+    var st = TSJ.appAchievements.status();
+    var n = TSJ.appAchievements.count();
+    var chips = st.map(function (a) {
+      return '<span class="wk-ach' + (a.at ? ' wk-ach-on' : '') + '" title="' +
+        esc(a.name + '：' + a.desc + (a.at ? '（已解锁）' : '（未解锁）')) + '">' +
+        a.icon + ' ' + esc(a.name) + '</span>';
+    }).join('');
+    return '<div class="ds-card"><h2 class="ds-card-title">成就 <span class="ds-badge">' + n + ' / ' + st.length + '</span></h2>' +
+      '<div class="wk-ach-row">' + chips + '</div></div>';
+  }
+
   function render(scope) {
     var state = store.state;
     var lesson = nextLesson();
@@ -119,6 +133,7 @@
       '  </div>',
       '  <div class="wk-side-stack">',
       overviewCard(state),
+      achievementsCard(),
       '    <div class="ds-card"><h2 class="ds-card-title">快速入口</h2><div class="wk-list">',
       '      <a class="wk-list-item" href="#/problems"><span class="wk-list-main"><b>题库</b><span>' + TSJ.problems.length + ' 道可判题练习</span></span><span class="ds-badge">去练习</span></a>',
       '      <a class="wk-list-item" href="#/learn/m0"><span class="wk-list-main"><b>零基础第一课</b><span>25 分钟：从看懂一条曲线到写出第一个 predict</span></span><span class="ds-badge">去入门</span></a>',

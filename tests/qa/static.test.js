@@ -28,13 +28,16 @@ const LAB_FILES = LAB_NAMES.map((n) => path.join(JS_DIR, n + '.js'));
 /**
  * app 层文件（顺序即加载顺序）：
  *   util → core → schema → store → storage → lifecycle → ui → a11y → theme
- *   → views → problem → pages → dashboard → learn → method-detail
- *   → lab-storage → lab-panels → lab → library → glossary → boards → app.js
+ *   → views → problem → pages → lab-storage → lab-panels → lab-live
+ *   → studio-storage → studio-report → studio-csv → studio → achievements
+ *   → dashboard → learn → method-detail → lab → library → glossary → boards
+ *   → cmdk → app.js
  */
 const APP_NAMES = [
   'util', 'core', 'schema', 'store', 'storage', 'lifecycle', 'ui', 'a11y', 'theme',
-  'views', 'problem', 'pages', 'lab-storage', 'lab-panels', 'lab-live', 'dashboard',
-  'learn', 'method-detail', 'lab', 'library', 'glossary', 'boards', 'studio-storage', 'studio-report', 'studio', 'cmdk'
+  'views', 'problem', 'pages', 'lab-storage', 'lab-panels', 'lab-live',
+  'studio-storage', 'studio-report', 'studio-csv', 'studio', 'achievements',
+  'dashboard', 'learn', 'method-detail', 'lab', 'library', 'glossary', 'boards', 'cmdk'
 ];
 const APP_FILES = APP_NAMES.map((n) => path.join(JS_DIR, 'app', n + '.js'))
   .concat([path.join(JS_DIR, 'app.js')]);
@@ -133,6 +136,11 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/app/lab-storage.js',
     'assets/js/app/lab-panels.js',
     'assets/js/app/lab-live.js',
+    'assets/js/app/studio-storage.js',
+    'assets/js/app/studio-report.js',
+    'assets/js/app/studio-csv.js',
+    'assets/js/app/studio.js',
+    'assets/js/app/achievements.js',
     'assets/js/app/dashboard.js',
     'assets/js/app/learn.js',
     'assets/js/app/method-detail.js',
@@ -140,9 +148,6 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/app/library.js',
     'assets/js/app/glossary.js',
     'assets/js/app/boards.js',
-    'assets/js/app/studio-storage.js',
-    'assets/js/app/studio-report.js',
-    'assets/js/app/studio.js',
     'assets/js/app/cmdk.js',
     'assets/js/app.js',
   ]);
@@ -163,13 +168,14 @@ test('依赖方向：引擎层不得引用 app 层；app 层只能引用**更早
     assert.ok(!/TSJ\.renderProblem|TSJ\.route\b/.test(src), path.basename(f) + ' 反向依赖了应用层');
   }
   // 2) app 层按固定顺序加载，每个文件只能引用排在自己前面的命名空间
+  //    顺序与 APP_NAMES 一致：… studio 系 → achievements → dashboard → learn … → cmdk → app
   const namespaces = [
     'TSJ.appUtil', 'TSJ.appCore', 'TSJ.appSchema', 'TSJ.appStore', 'TSJ.appStorage',
     'TSJ.appLifecycle', 'TSJ.appUi', 'TSJ.appA11y', 'TSJ.appTheme', 'TSJ.appViews',
     'TSJ.appProblem', 'TSJ.appPages', 'TSJ.appLabStorage', 'TSJ.appLabPanels',
-    'TSJ.appDashboard', 'TSJ.appLearn',
-    'TSJ.appMethodDetail', 'TSJ.appLab',
-    'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appStudioStorage', 'TSJ.appStudioReport', 'TSJ.appStudio', 'TSJ.appCmdk', 'TSJ.app',
+    'TSJ.appStudioStorage', 'TSJ.appStudioReport', 'TSJ.appStudioCsv', 'TSJ.appStudio',
+    'TSJ.appAchievements', 'TSJ.appDashboard', 'TSJ.appLearn', 'TSJ.appMethodDetail',
+    'TSJ.appLab', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appCmdk', 'TSJ.app',
   ];
   APP_FILES.forEach((file, idx) => {
     const src = read(file);
@@ -195,8 +201,9 @@ test('app.js 在脚本末尾同步 init()（依赖 body 末尾加载，而非 DO
 
 test('CSS 覆盖率：JS/HTML 里出现的 class 都能在样式表中找到定义（30+ 个动态 class）', () => {
   const defined = new Set([...css.matchAll(/\.([A-Za-z_][\w-]*)/g)].map((m) => m[1]));
-  // 仅语义标记、样式由父选择器或 svg 属性负责，允许无独立定义
-  const ALLOW = new Set(['tsj-editor-host', 'brand-logo']);
+  // 仅语义标记、样式由父选择器或 svg 属性负责，允许无独立定义；
+  // tsc-* 是「分享卡」导出的自包含 HTML 文档内部样式（样式内嵌在导出文件里，不在本站样式表）
+  const ALLOW = new Set(['tsj-editor-host', 'brand-logo', 'tsc-card', 'tsc-sub', 'tsc-foot']);
 
   const used = new Map();
   for (const f of ALL_JS.concat([path.join(ROOT, 'index.html')])) {

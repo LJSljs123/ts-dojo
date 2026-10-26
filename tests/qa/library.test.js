@@ -5,7 +5,7 @@
  *   1. 数据层完整性：46 条、tier 只有五个合法值、必填字段齐全、id 唯一；
  *   2. practice 引用的题目必须存在（第二批的 6 道新题尚未落地，用精确白名单兜住）；
  *   3. runnable 与 practice 的一致性（可跑且有题 / 有题必须可跑）；
- *   4. 无头浏览器：#/methods 默认 46 张、搜索 patch、层筛选 14 张、只看能练的 13 张、清空回 46；
+ *   4. 无头浏览器：#/methods 默认 46 张、搜索 patch、层筛选 14 张、只看能练的 14 张、清空回 46；
  *   5. 点「去练这道题」→ hash 变成对应 #/problem/<id>；
  *   6. 375px 下 scrollWidth === 375，展开区两栏改堆叠、卡片不溢出。
  *
@@ -137,7 +137,7 @@ test('L01 数据层：46 条方法，tier 只有五个合法值，必填字段�
     { classic: 13, competition: 3, deep: 14, foundation: 10, eval: 6 },
     '五层数量与内容契约不一致'
   );
-  assert.equal(methods.filter((m) => !!m.practice).length, 13, '「可练」应为 13 条');
+  assert.equal(methods.filter((m) => !!m.practice).length, 14, '「可练」应为 14 条');
 });
 
 test('L02 practice 引用的题目必须存在（第二批 6 题未落地时走精确白名单）', () => {
@@ -243,12 +243,12 @@ test('L04 #/methods 默认 46 张卡片；搜索 patch；层筛选 14 张；只�
     '(function(){var b=document.getElementById("onlyPractice");b.checked=true;' +
       'b.dispatchEvent(new Event("change",{bubbles:true}));})()'
   );
-  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === 13'), '只看能练的应为 13 张');
+  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === 14'), '只看能练的应为 14 张');
   const withPractice = await page.evaluate(
     '[].every.call(document.querySelectorAll(".mcard"), function(c){' +
       'return !!TSJ.methodsById(c.getAttribute("data-mid")).practice;})'
   );
-  console.log('    只看能练的 → 13 张 · 全部带 practice=' + withPractice);
+  console.log('    只看能练的 → 14 张 · 全部带 practice=' + withPractice);
   assert.equal(withPractice, true, '开关打开后仍有方法没有 practice');
 
   // 空态：开关 + 一个搜不到的词

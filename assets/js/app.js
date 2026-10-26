@@ -13,7 +13,7 @@
  *   #/learn[/:id]         课程地图与模块页（9 模块）
  *   #/lab                 可视化实验室（受控回测）
  *   #/studio              模型工坊（自己搓模型跑完整实验）
- *   #/problem/<id>        题目页（题面 + 编辑器）
+ *   #/problem/:id         题目页（题面 + 编辑器）
  *   #/submission/<id>     提交详情（代码快照 + 逐测试点）
  *   #/submissions         提交记录（含导出 / 导入 / 清空）
  *   #/ranking             排行榜
@@ -23,21 +23,11 @@
   'use strict';
 
   var TSJ = global.TSJ || (global.TSJ = {});
-  var core = TSJ.appCore;
-  var store = TSJ.appStore;
-  var storage = TSJ.appStorage;
-  var ui = TSJ.appUi;
-  var a11y = TSJ.appA11y;
-  var views = TSJ.appViews;
-  var problem = TSJ.appProblem;
-  var pages = TSJ.appPages;
-  var library = TSJ.appLibrary;
-  var boards = TSJ.appBoards;
-  var glossary = TSJ.appGlossary;
-  var judge = TSJ.judge;
-  var lifecycle = TSJ.appLifecycle;
-  var theme = TSJ.appTheme;
-  var dashboard = TSJ.appDashboard;
+  var core = TSJ.appCore, store = TSJ.appStore, storage = TSJ.appStorage;
+  var ui = TSJ.appUi, a11y = TSJ.appA11y, views = TSJ.appViews, judge = TSJ.judge;
+  var problem = TSJ.appProblem, pages = TSJ.appPages, library = TSJ.appLibrary;
+  var boards = TSJ.appBoards, glossary = TSJ.appGlossary, theme = TSJ.appTheme;
+  var lifecycle = TSJ.appLifecycle, dashboard = TSJ.appDashboard;
   var learn = TSJ.appLearn;
   var methodDetail = TSJ.appMethodDetail;
   var lab = TSJ.appLab;
@@ -244,6 +234,7 @@
     });
     store.saveSubmissions();
     store.updateScoreChip();
+    if (TSJ.appAchievements) TSJ.appAchievements.onJudgeResult(p, res, state.progress);  // 成就检查（首AC/连胜/满分）
     // 题头的「历史最高 / 尚未提交」必须跟着落盘结果一起刷新，否则要手动刷新页面才更新
     if (TSJ.appProblem && typeof TSJ.appProblem.refreshBestBadge === 'function') {
       TSJ.appProblem.refreshBestBadge(p);
@@ -265,7 +256,7 @@
     state.appScope = rootScope;
 
     theme.init();
-    TSJ.appCmdk.install();   // Ctrl/Cmd + K 命令面板（模块内部自持监听，随页面生存）
+    TSJ.appCmdk.install();   // Ctrl/Cmd+K 命令面板（自持监听，随页面生存）
     var btn = $('#btnTheme');
     function paintTheme() {
       if (!btn) return;

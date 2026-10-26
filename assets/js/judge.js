@@ -2,7 +2,7 @@
  * judge.js —— 判题引擎
  *
  * 结构：
- *   metrics   评估指标（mse / rmse / mae / mape / smape）
+ *   metrics   评估指标（mse / rmse / mae / mape / smape / pinball）
  *   baselines 统计基线（naive / seasonal_naive / mean / linear_trend / moving_average）
  *   scoring   由「误差比」映射到 0~100 分（分段线性、单调、平滑）
  *   sandbox   Web Worker（Blob URL）沙箱执行用户代码，单次 1500ms / 整题 8000ms
@@ -124,6 +124,24 @@
         s += (2 * Math.abs(a - p)) / denom;
       }
       return (s / n) * 100;
+    },
+
+    /**
+     * Pinball 损失（τ=0.95 分位数备货，P16 专用）。
+     * predicted 数组在这里的语义是「每一步的 95 分位备货水平」而非点预测：
+     * 实际 ≥ 预测（缺货）罚 τ=0.95 倍缺口；实际 < 预测（过量）只罚 0.05 倍冗余。
+     * τ 固化在指标里（指标签名 fn(actual, predicted) 无第三参），题面同步声明 95 分位。
+     */
+    pinball: function (actual, predicted) {
+      var TAU = 0.95;
+      var n = Math.min(actual.length, predicted.length);
+      if (n === 0) return NaN;
+      var s = 0;
+      for (var i = 0; i < n; i++) {
+        var d = actual[i] - predicted[i];
+        s += d >= 0 ? TAU * d : (TAU - 1) * d;
+      }
+      return s / n;
     }
   };
 
@@ -133,7 +151,8 @@
     rmse: 'RMSE',
     mae: 'MAE',
     mape: 'MAPE(%)',
-    smape: 'sMAPE(%)'
+    smape: 'sMAPE(%)',
+    pinball: 'Pinball(τ=0.95)'
   };
 
   /* ================================================================== *

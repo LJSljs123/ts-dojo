@@ -2779,6 +2779,38 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 #studioReport .notice { margin: 8px 0; }
 #studioReport .err-box { margin: 8px 0; }
 
+/* 模型工坊：CSV 上传行 */
+.studio-csv-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: var(--v3-space-3);
+}
+.studio-csv-row .ds-card-sub { margin: 0; }
+.studio-csv-btn { cursor: pointer; }
+
+/* 成就徽章行（工作台） */
+.wk-ach-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wk-ach {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--v3-fs-xs);
+  color: var(--v3-muted);
+  background: color-mix(in srgb, var(--v3-muted) 10%, transparent);
+  border: 1px solid transparent;
+  cursor: default;
+}
+.wk-ach-on {
+  color: var(--v3-warn);
+  background: color-mix(in srgb, var(--v3-warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--v3-warn) 38%, transparent);
+  font-weight: 600;
+}
+
 </style>
 
 <!-- 启动自检：脚本被拦 / 加载失败 / 1.5s 内没渲染出内容 → 直接把原因显示出来，绝不留白屏 -->
@@ -4116,6 +4148,28 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       var mid = col.length >> 1;
       out.push(col.length % 2 ? col[mid] : (col[mid - 1] + col[mid]) / 2);
     }
+    return out;
+  }
+
+  /**
+   * P16 分位数备货带：季节朴素（典型日曲线）+ 残差经验 95 分位上沿。
+   * 点预测冠军（季节朴素）只是残差的中位数；容量规划需要分布的上沿。
+   */
+  function solQuantileBand(history, horizon, ctx) {
+    var m = ctx.season > 1 ? ctx.season : 24;
+    var TAU = 0.95;
+    var WIN = 360;
+    var n = history.length;
+    var res = [];
+    for (var i = m; i < n; i++) res.push(history[i] - history[i - m]);   // 一步季节朴素残差
+    var src = res.length > WIN ? res.slice(res.length - WIN) : res;
+    var a = src.slice().sort(function (x, y) { return x - y; });
+    var pos = TAU * (a.length - 1);
+    var lo = Math.floor(pos);
+    var hi = Math.ceil(pos);
+    var q = lo === hi ? a[lo] : a[lo] + (a[hi] - a[lo]) * (pos - lo);   // 线性插值经验分位数
+    var out = [];
+    for (var h = 0; h < horizon; h++) out.push(history[n - m + h] + q);  // 典型日曲线 + 安全余量
     return out;
   }
 
@@ -5865,7 +5919,127 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
         '  return out;',
         '}'
       ].join('\n')
+    },
+    /* ---------------- P16 ---------------- */
+    {
+      id: 'p16-quantile-band',
+      index: 16,
+      title: '分位数备货：点冠军不是分位数冠军',
+      difficulty: '挑战',
+      tags: ['分位数', '区间预测', '容量规划', 'pinball', '电力负荷'],
+      points: 100,
+      passScore: 60,
+      dataset: 'electricity',
+      mode: 'holdout',
+      horizon: 24,
+      metric: 'pinball',
+      baselines: ['naive', 'seasonal_naive', 'mean', 'moving_average', 'linear_trend'],
+      threshold: 0.9,
+      passRate: 18,
+
+      statement: [
+        '### 背景',
+        '',
+        '电力调度中心要决定**明天每小时备用容量**：备少了缺电（事故 + 罚款），备多了烧钱。',
+        '这类「不对称代价」的决策不能用点预测打分——**缺货与过量代价不等价**，评估要用',
+        '**Pinball 损失（τ=0.95）**：实际超出你预报的量，每单位罚 0.95；实际低于你的预报，',
+        '每单位只罚 0.05。直觉：你预报的是「95 分位安全容量」，把缺货概率压到约 5%。',
+        '',
+        '上一题（P15）的教训是「点预测冠军可以很强」；本题是它的反面——',
+        '**点冠军不是分位数冠军**。季节朴素（P3）在逐点 MSE 上很强，但它本质只预测了',
+        '残差的「中位水平」；95 分位备货需要把**不确定性的上沿**也叠上去。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`electricity`（用电负荷，小时级，单位：MW）',
+        '- 长度：720 点（30 天），日周期 24，早晚双峰 + 周末低谷 + 偶发尖峰',
+        '- 评估方式：留出法。前 696 点作为 `history`，最后 24 点（明天全天）作为测试，只评测 1 次',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**Pinball(τ=0.95)**（越小越好）',
+        '- 对照基线：`naive` / `seasonal_naive` / `mean` / `moving_average` / `linear_trend`——',
+        '  它们都是**点预测**被直接当备货水平使用，这正是要你打败的「错误做法」',
+        '- 误差比 `ratio = 你的 Pinball / 最优基线 Pinball`；`ratio <= 0.5` 得 100 分，',
+        '  `ratio = 0.9` 恰好 60 分（通过线），`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '昨天同一小时的负荷（季节朴素）描述了「典型明天」，但它一半概率偏低——',
+        '尖峰与上行噪声全在你预报线的上方，每一点都在按 0.95 倍罚款。',
+        '想一想：把历史残差（实际 − 季节朴素）排序，第 95 百分位在哪？把这段「安全余量」',
+        '加到典型日曲线上会发生什么？'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 696 个历史观测（MW）。',
+      outputSpec: '`number[]` —— 长度必须为 24，每个元素是当小时的 95 分位备货水平（MW）。',
+
+      hints: [
+        '先交一次「季节朴素」本身（`history[n-24+h]`），看分数——它就是点冠军的下场（约 50 分）。',
+        '计算一步季节朴素残差 `r_t = history[t] - history[t-24]`（从 t=24 起）。这串数就是「如果明天用典型日曲线，会错多少」的历史样本。',
+        '把残差排序取 95 分位（经验分位数 + 线性插值），只取最近 360 个残差（近期误差更有代表性）。',
+        '预报 = 典型日曲线 + 安全余量：`history[n-24+h] + q95`。它不再是点预测，而是「明天每小时的 95 分位容量」。'
+      ],
+
+      guide: [
+        {
+          title: '先看点冠军的下场',
+          text: '示例模板就是季节朴素本身。点「运行」：约 50 分 WA。' +
+            '它逐点 MSE 打遍天下（P3 靠它满分），但在 τ=0.95 的备货评分里，它有一半天数在「缺货」。'
+        },
+        {
+          title: '把误差分布晒出来',
+          text: '对历史算 r_t = y_t − y_{t−24}（昨日同小时误差）。这串数就是「如果明天用典型日曲线，会错多少」的历史样本——' +
+            '大部分在 0 附近，少数大正值是尖峰日，少数负值是低谷日。'
+        },
+        {
+          title: '加上 95 分位安全余量（复制这段）',
+          text: '把编辑器整个替换为下面这段：',
+          code: [
+            'function predict(history, horizon, ctx) {',
+            '  var m = ctx.season > 1 ? ctx.season : 24;   // 日周期 24',
+            '  var TAU = 0.95;                             // 95 分位（与评分口径一致）',
+            '  var WIN = 360;                              // 只用最近 360 个残差',
+            '  var n = history.length;',
+            '  var res = [];',
+            '  for (var i = m; i < n; i++) res.push(history[i] - history[i - m]);',
+            '  var src = res.length > WIN ? res.slice(res.length - WIN) : res;',
+            '  var a = src.slice().sort(function (x, y) { return x - y; });',
+            '  var pos = TAU * (a.length - 1);',
+            '  var lo = Math.floor(pos), hi = Math.ceil(pos);',
+            '  var q = lo === hi ? a[lo] : a[lo] + (a[hi] - a[lo]) * (pos - lo);',
+            '  var out = [];',
+            '  for (var h = 0; h < horizon; h++) out.push(history[n - m + h] + q);',
+            '  return out;',
+            '}'
+          ].join('\n')
+        },
+        {
+          title: '运行 → 提交 → 体会「上移预报线」的代价结构',
+          text: '运行应得约 100 分（比值 ≤ 0.5 满分）。然后做两个实验：把 TAU 改成 0.5（等于点预测），分数崩回 50；' +
+            '把 TAU 改成 0.99，分数也不涨——过度保险开始被 0.05 倍的冗余成本反噬。**最优 τ 由代价结构决定**，这就是分位数预测的全部秘密。'
+        }
+      ],
+
+      solution: toPredictSource(solQuantileBand),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  // 洞：把「点预测冠军」（季节朴素）直接当 95 分位备货水平。',
+        '  // 它只是残差的中位数——一半的天数会在你的预报线之上缺货。',
+        '  var m = ctx.season > 1 ? ctx.season : 24;',
+        '  var n = history.length;',
+        '  var out = [];',
+        '  for (var h = 0; h < horizon; h++) {',
+        '    out.push(history[n - m + h]);',
+        '  }',
+        '  return out;',
+        '}'
+      ].join('\n')
     }
+
   ];
 
   /* ================================================================== *
@@ -6681,8 +6855,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       formula: 'L_τ(y, ŷ) = max(τ·(y − ŷ), (τ − 1)·(y − ŷ))',
       when: '需要中位数、上下界等多分位输出的训练与评估。',
       limit: '每个分位要一个模型或输出头；可能出现分位交叉（上界低于下界）需后处理；零值多的序列分位容易塌缩。',
-      runnable: false,
-      practice: null
+      runnable: true,
+      practice: 'p16-quantile-band'
     }
   ];
 
@@ -8214,7 +8388,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       referenceIds: ['crps-2007']
     },
     pinball: {
-      runLevel: 'concept',
+      runLevel: 'sandbox',
       intuition: '对 τ=0.9 的上界预测，低估罚 0.9 倍、高估只罚 0.1 倍——模型自然学会把上界报高一点。',
       assumptions: ['目标分位数条件可估', '样本量足以支撑各分位'],
       complexity: '低（与 MAE 同阶）',
@@ -9332,7 +9506,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
  * judge.js —— 判题引擎
  *
  * 结构：
- *   metrics   评估指标（mse / rmse / mae / mape / smape）
+ *   metrics   评估指标（mse / rmse / mae / mape / smape / pinball）
  *   baselines 统计基线（naive / seasonal_naive / mean / linear_trend / moving_average）
  *   scoring   由「误差比」映射到 0~100 分（分段线性、单调、平滑）
  *   sandbox   Web Worker（Blob URL）沙箱执行用户代码，单次 1500ms / 整题 8000ms
@@ -9454,6 +9628,24 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
         s += (2 * Math.abs(a - p)) / denom;
       }
       return (s / n) * 100;
+    },
+
+    /**
+     * Pinball 损失（τ=0.95 分位数备货，P16 专用）。
+     * predicted 数组在这里的语义是「每一步的 95 分位备货水平」而非点预测：
+     * 实际 ≥ 预测（缺货）罚 τ=0.95 倍缺口；实际 < 预测（过量）只罚 0.05 倍冗余。
+     * τ 固化在指标里（指标签名 fn(actual, predicted) 无第三参），题面同步声明 95 分位。
+     */
+    pinball: function (actual, predicted) {
+      var TAU = 0.95;
+      var n = Math.min(actual.length, predicted.length);
+      if (n === 0) return NaN;
+      var s = 0;
+      for (var i = 0; i < n; i++) {
+        var d = actual[i] - predicted[i];
+        s += d >= 0 ? TAU * d : (TAU - 1) * d;
+      }
+      return s / n;
     }
   };
 
@@ -9463,7 +9655,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     rmse: 'RMSE',
     mae: 'MAE',
     mape: 'MAPE(%)',
-    smape: 'sMAPE(%)'
+    smape: 'sMAPE(%)',
+    pinball: 'Pinball(τ=0.95)'
   };
 
   /* ================================================================== *
@@ -13764,6 +13957,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     lab: 'tsoj:lab:v1',
     labDraft: 'tsoj:labDraft:v1',
     studioDraft: 'tsoj:studioDraft:v1',
+    studioCsv: 'tsoj:studioCsv:v1',
+    achievements: 'tsoj:achievements:v1',
+    achMeta: 'tsoj:achMeta:v1',
     studioExp: 'tsoj:studioExperiments:v1'
   };
 
@@ -16776,6 +16972,1076 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 </script>
 <script>
 /**
+ * assets/js/app/studio-storage.js —— 模型工坊实验记录（v3.6）
+ * 加载顺序：… app/lab-storage → app/studio-storage → app/studio.js
+ * 挂载点：window.TSJ.appStudioStorage
+ *
+ * 与 lab-storage 同构：先完整校验再入列；写入失败不动旧数据；上限 30 条按时间淘汰。
+ * 记录保存「代码快照 + 拆分协议 + val/test 指标与基线对比」，保证可复现与可复盘。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var KEY = core.STORE.studioExp;
+  var MAX = 30;
+
+  function isFiniteNumber(v) { return typeof v === 'number' && isFinite(v); }
+
+  /** 指标对象白名单归一化：只接受 mse/mae/smape 三个键的有限数。 */
+  function normMetrics(m) {
+    var out = {};
+    var ok = false;
+    ['mse', 'mae', 'smape'].forEach(function (k) {
+      if (m && isFiniteNumber(m[k])) { out[k] = m[k]; ok = true; }
+    });
+    return ok ? out : null;
+  }
+
+  /** 基线对比表归一化：{ name: {mse,mae,smape} }，只保留合法项。 */
+  function normBaselines(b) {
+    var out = {};
+    if (!b || typeof b !== 'object') return out;
+    Object.keys(b).forEach(function (name) {
+      var m = normMetrics(b[name]);
+      if (m) out[String(name).slice(0, 40)] = m;
+    });
+    return out;
+  }
+
+  function normalizeRecord(r) {
+    if (!r || typeof r !== 'object') return null;
+    if (r.schema !== 1) return null;
+    if (r.kind !== 'val' && r.kind !== 'final') return null;
+    if (!r.datasetId || typeof r.datasetId !== 'string') return null;
+    if (typeof r.codeHash !== 'string' || !r.codeHash) return null;
+    if (!Array.isArray(r.split)) return null;
+    if (r.split.length !== 3) return null;
+    if (!r.split.every(function (n) { return typeof n === 'number' && n > 0; })) return null;
+    var valM = normMetrics(r.valMetrics);
+    var testM = normMetrics(r.testMetrics);
+    if (r.kind === 'val' && !valM) return null;
+    if (r.kind === 'final' && !testM) return null;   // final 只强制 test；val 对比列由展示层按代码哈希回查
+    return {
+      schema: 1,
+      id: typeof r.id === 'string' && r.id ? r.id : 'exp-' + (r.at || 0),
+      at: isFiniteNumber(r.at) ? r.at : 0,
+      kind: r.kind,
+      datasetId: r.datasetId,
+      season: isFiniteNumber(r.season) ? r.season : 1,
+      split: r.split.slice(),
+      codeHash: r.codeHash,
+      code: typeof r.code === 'string' ? r.code.slice(0, 20 * 1024) : '',
+      valMetrics: valM || {},
+      testMetrics: testM || {},
+      baselinesVal: normBaselines(r.baselinesVal),
+      baselinesTest: normBaselines(r.baselinesTest),
+      testRuns: typeof r.testRuns === 'number' && r.testRuns > 0 ? Math.min(99, Math.floor(r.testRuns)) : 1
+    };
+  }
+
+  function list() {
+    var raw = core.readJSON(KEY, [], function (v) { return Array.isArray(v); });
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var rec = normalizeRecord(raw[i]);
+      if (rec) out.push(rec);
+    }
+    out.sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+    return out;
+  }
+
+  function save(record) {
+    var rec = normalizeRecord(record);
+    if (!rec) return { ok: false, error: '记录不合法，未保存' };
+    var arr = list();
+    arr.unshift(rec);
+    while (arr.length > MAX) arr.pop();
+    core.writeJSON(KEY, arr);
+    return { ok: true, count: arr.length };
+  }
+
+  /** 同一代码哈希的最终评测次数（诚实性提示用）。 */
+  function testRunCount(codeHash, datasetId) {
+    var n = 0;
+    var arr = list();
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i].kind === 'final' && arr[i].codeHash === codeHash && arr[i].datasetId === datasetId) n++;
+    }
+    return n;
+  }
+
+  function clear() { core.writeJSON(KEY, []); }
+
+  function exportJSON(record) {
+    var rec = normalizeRecord(record);
+    if (!rec) return null;
+    return JSON.stringify({ app: 'tsoj-studio', schema: 1, exportedAt: Date.now(), record: rec }, null, 2);
+  }
+
+  function importJSON(text) {
+    var data;
+    try { data = JSON.parse(text); } catch (e) { return { ok: false, error: '不是合法 JSON' }; }
+    if (!data || data.app !== 'tsoj-studio') return { ok: false, error: '不是 TSOJ 模型工坊实验文件' };
+    if (data.schema !== 1) return { ok: false, error: 'schema 不支持：' + data.schema };
+    var rec = normalizeRecord(data.record);
+    if (!rec) return { ok: false, error: '记录字段不完整' };
+    var res = save(rec);
+    if (!res.ok) return { ok: false, error: res.error };
+    return { ok: true, record: rec, count: res.count };
+  }
+
+  TSJ.appStudioStorage = {
+    MAX: MAX,
+    list: list,
+    save: save,
+    clear: clear,
+    testRunCount: testRunCount,
+    exportJSON: exportJSON,
+    importJSON: importJSON,
+    normalizeRecord: normalizeRecord
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app/studio-report.js —— 模型工坊实验报告绘制（v3.6）
+ * 加载顺序：… app/studio-storage → app/studio-report → app/studio.js
+ * 挂载点：window.TSJ.appStudioReport
+ *
+ * 纯绘制层：指标对比表（val 列自动回查同代码哈希的验证记录）+ 预测对比图
+ * （复用 v3 图表内核 forecast 渲染器，train/val/test 分界线由 splits 标出）。
+ * 图表实例通过 opts.setChart 交还调用方管理（路由销毁 / 换图 destroy）。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var esc = core.esc;
+
+  function fmt(v) { return (typeof v === 'number' && isFinite(v)) ? v.toFixed(2) : '—'; }
+
+  function bestOf(baselines) {
+    var best = null;
+    var keys = Object.keys(baselines || {});
+    for (var i = 0; i < keys.length; i++) {
+      var v = baselines[keys[i]] && baselines[keys[i]].mse;
+      if (typeof v === 'number' && isFinite(v) && (best === null || v < best)) best = v;
+    }
+    return best;
+  }
+
+  /**
+   * 绘制实验报告。
+   * @param {Object} view { rec, actual, pred, baseline, sp, historyLen, d }
+   * @param {Object} opts { scope, setChart(chart) }
+   */
+  function paint(view, opts) {
+    var report = global.document.getElementById('studioReport');
+    if (!report) return;
+    var rec = view.rec;
+    var d = view.d;
+    var isFinal = rec.kind === 'final';
+
+    // 最终评测的 val 对比列：回查同一份代码的最近验证记录（没有就显示 —）
+    var valRec = null;
+    if (isFinal) {
+      var all = TSJ.appStudioStorage.list();
+      for (var k = 0; k < all.length; k++) {
+        if (all[k].kind === 'val' && all[k].codeHash === rec.codeHash) { valRec = all[k]; break; }
+      }
+    }
+    var mVal = isFinal ? (valRec ? valRec.valMetrics.mse : null) : rec.valMetrics.mse;
+    var baseVal = isFinal ? (valRec ? bestOf(valRec.baselinesVal) : null) : bestOf(rec.baselinesVal);
+    var mTest = isFinal ? rec.testMetrics.mse : null;
+    var baseTest = isFinal ? bestOf(rec.baselinesTest) : null;
+
+    var rows = '<tr><td>MSE</td>' +
+      '<td class="num">' + fmt(mVal) + '</td><td class="num">' + fmt(baseVal) + '</td>' +
+      (isFinal ? '<td class="num">' + fmt(mTest) + '</td><td class="num">' + fmt(baseTest) + '</td>' : '') + '</tr>';
+
+    report.innerHTML = [
+      '<div class="studio-report-head"><span class="ds-badge ' + (isFinal ? 'ds-badge-ok' : '') + '">' +
+      (isFinal ? '🏁 最终评测 · train+val 拟合 → test 打分' : '🔁 验证集评估 · train 拟合 → val 打分') + '</span>' +
+      '<span class="ds-badge">' + esc(d.name) + '</span>' +
+      '<span class="ds-badge">代码 ' + esc(rec.codeHash) + '</span></div>',
+      '<div class="ds-table-wrap"><table class="ds-table ds-table-hover"><thead><tr><th>MSE</th>' +
+      '<th class="num">你的（val）</th><th class="num">最优基线（val）</th>' +
+      (isFinal ? '<th class="num">你的（test）</th><th class="num">最优基线（test）</th>' : '') +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>',
+      isFinal && rec.testRuns > 1
+        ? '<p class="md-note"><span>⚠</span><span>这份代码已对 test 评测 ' + rec.testRuns + ' 次——继续按 test 调参会让它变成另一个验证集。</span></p>'
+        : '<p class="ds-card-sub">比值 = 你的 MSE ÷ 最优基线 MSE，&lt;1 表示跑赢了基线；模型选择只允许看 val。</p>',
+      '<div class="chart-v2"><div class="chart-v2-head"><h3>预测对比</h3>' +
+      '<div class="chart-v2-legend"><span><i style="border-color:var(--v3-chart-history)"></i>历史</span>' +
+      '<span><i style="border-color:var(--v3-chart-actual)"></i>' + (isFinal ? 'test 真值' : 'val 真值') + '</span>' +
+      '<span><i style="border-color:var(--v3-chart-pred);border-top-style:dashed"></i>你的模型</span>' +
+      '<span><i style="border-color:var(--v3-chart-baseline);border-top-style:dotted"></i>移动平均</span></div></div>',
+      '<div class="chart-v2-canvas-wrap"><canvas id="studioCanvas"></canvas></div>',
+      '<p class="chart-v2-summary" id="studioChartSummary"></p></div>'
+    ].join('\n');
+
+    var values = d.values;
+    var start = view.historyLen;
+    var n = values.length;
+    function pad(arr) {
+      var out = new Array(n).fill(null);
+      for (var i = 0; i < arr.length && start + i < n; i++) out[start + i] = arr[i];
+      return out;
+    }
+    var model = {
+      n: n,
+      history: values.slice(),
+      actual: pad(view.actual),
+      prediction: pad(view.pred),
+      baseline: pad(view.baseline),
+      splits: isFinal
+        ? [{ index: rec.split[0], role: 'val', label: '验证起点' }, { index: rec.split[0] + rec.split[1], role: 'test', label: '测试起点' }]
+        : [{ index: rec.split[0], role: 'test', label: '验证起点' }],
+      maxPoints: 1200
+    };
+    var chart = TSJ.charts.create(global.document.getElementById('studioCanvas'), {
+      kind: 'forecast', scope: opts.scope, height: 280, unit: d.unit,
+      ariaLabel: '模型工坊预测对比图', onInspect: function () {}
+    });
+    chart.update(model);
+    var sm = global.document.getElementById('studioChartSummary');
+    if (sm) sm.textContent = chart.summary() || '';
+    if (typeof opts.setChart === 'function') opts.setChart(chart);
+  }
+
+  /**
+   * 生成自包含分享卡 HTML（图表 canvas 转内嵌 PNG，打开即看、无任何外链）。
+   * @param {Object} view 与 paint 同构的 view 对象
+   * @returns {string} 完整 HTML 文档文本（调用方负责触发下载）
+   */
+  function buildShareCard(view) {
+    var rec = view.rec;
+    var d = view.d;
+    var isFinal = rec.kind === 'final';
+    var canvas = global.document.getElementById('studioCanvas');
+    var imgData = '';
+    try { imgData = canvas ? canvas.toDataURL('image/png') : ''; } catch (e) { imgData = ''; }
+    var fmtCard = function (v) { return (typeof v === 'number' && isFinite(v)) ? v.toFixed(2) : '—'; };
+    var mVal = isFinal ? fmtCard(rec.testMetrics.mse) : fmtCard(rec.valMetrics.mse);
+    var rows = [
+      ['数据集', esc(d.name)],
+      ['阶段', isFinal ? '🏁 最终评测（test）' : '🔁 验证集评估（val）'],
+      ['拆分', 'train ' + rec.split[0] + ' / val ' + rec.split[1] + ' / test ' + rec.split[2]],
+      ['MSE', mVal],
+      ['代码指纹', esc(rec.codeHash)],
+      ['test 评测次数', isFinal ? String(rec.testRuns) : '—']
+    ].map(function (r) {
+      return '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>';
+    }).join('');
+    return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>TSOJ 模型工坊实验卡 ' + esc(rec.codeHash) + '</title><style>' +
+      'body{font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;' +
+      'background:#0d1117;color:#e6edf3;margin:0;padding:28px;display:flex;justify-content:center}' +
+      '.tsc-card{max-width:680px;width:100%;background:#131a22;border:1px solid #1f2833;border-radius:14px;padding:26px}' +
+      'h1{font-size:18px;margin:0 0 4px}.tsc-sub{color:#8b98a9;font-size:12.5px;margin:0 0 18px}' +
+      'img{width:100%;border:1px solid #1f2833;border-radius:10px;background:#0d1117}' +
+      'table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px}' +
+      'th{color:#8b98a9;text-align:left;padding:7px 10px;border-bottom:1px solid #1f2833;white-space:nowrap}' +
+      'td{padding:7px 10px;border-bottom:1px solid #1f2833;font-family:ui-monospace,Consolas,monospace}' +
+      '.tsc-foot{color:#5c6874;font-size:11.5px;margin-top:16px;text-align:center}' +
+      '</style></head><body><div class="tsc-card">' +
+      '<h1>时序竞技场 TSOJ · 模型工坊实验卡</h1>' +
+      '<p class="tsc-sub">纯前端沙箱内完成 · 数据与代码只存在本地浏览器</p>' +
+      (imgData ? '<img src="' + imgData + '" alt="预测对比图">' : '') +
+      '<table>' + rows + '</table>' +
+      '<div class="tsc-foot">由 时序竞技场 TSOJ 生成 · ' + new Date(rec.at).toISOString().slice(0, 10) + '</div>' +
+      '</div></body></html>';
+  }
+
+  TSJ.appStudioReport = { paint: paint, buildShareCard: buildShareCard };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app/studio-csv.js —— 模型工坊：上传自己的 CSV 数据（v3.7）
+ * 加载顺序：… app/studio-report → app/studio-csv → app/studio.js　挂载点：window.TSJ.appStudioCsv
+ *
+ * 支持形态（自动嗅探，全部只读本地文件，FileReader，零依赖）：
+ *   - 单列数值：每行一个数（可带表头，自动跳过非数值行）
+ *   - 两列「时间,数值」或「数值,时间」：时间列被忽略，取数值列
+ *   - 逗号/分号/制表符分隔；分号或制表符分隔时支持逗号小数（1,5 → 1.5）
+ *     —— 纯逗号分隔的文件里逗号一律当分隔符，避免「1,5」被误读成两列
+ * 校验：至少 72 个有效数值点（否则 train 装不下）；季节周期自动估（自相关最高滞后的约数），
+ *       也允许用户在工坊里手动改（返回值里的 season 只是初始建议）。
+ * 持久化：tsoj:studioCsv:v1 存最近一份（原始数值 + 名称），刷新不丢；导出/分享不含他人数据。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var KEY = core.STORE.studioCsv;
+  var MIN_POINTS = 72;
+  var MAX_POINTS = 5000;
+
+  function isFiniteNumber(v) { return typeof v === 'number' && isFinite(v); }
+
+  /** 把一个单元格文本解析成数值；解析不了返回 null。 */
+  function parseCell(tok) {
+    var s = String(tok == null ? '' : tok).trim().replace(/^"|"$/g, '');
+    if (!s) return null;
+    // 逗号小数：仅当整体形如 123,45 且不含分隔歧义时尝试
+    if (/^-?\d+,\d+$/.test(s)) s = s.replace(',', '.');
+    var n = Number(s);
+    return /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s) && isFinite(n) ? n : null;
+  }
+
+  /** 嗅探分隔符：分号 / 制表符优先（它们不可能是小数分隔符），都没有才用逗号。 */
+  function sniffSep(line) {
+    if (line.indexOf(';') >= 0) return ';';
+    if (line.indexOf('\t') >= 0) return '\t';
+    return ',';
+  }
+
+  /**
+   * 解析 CSV 文本 → { ok, values, name?, warnings[] }。
+   * @param {string} text 原始文本
+   * @param {string} [fileName] 文件名（用作数据集名）
+   */
+  function parse(text, fileName) {
+    var warnings = [];
+    var lines = String(text || '').split(/\r\n|\r|\n/);
+    // 去掉首尾空行
+    while (lines.length && !lines[0].trim()) lines.shift();
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    if (!lines.length) return { ok: false, error: '文件是空的。', warnings: warnings };
+
+    var sep = sniffSep(lines[0]);
+    var headerSkipped = false;
+    var colIndex = -1;      // -1 = 未定（单列或首行嗅探）
+    var values = [];
+    var skipped = 0;
+
+    for (var i = 0; i < lines.length; i++) {
+      var toks = lines[i].split(sep);
+      // 首个非空行若是纯表头（无任何可解析数值），跳过并尝试定位数值列
+      if (colIndex < 0) {
+        var numericAt = [];
+        for (var c = 0; c < toks.length; c++) {
+          if (parseCell(toks[c]) !== null) numericAt.push(c);
+        }
+        if (numericAt.length === 0) {
+          if (!headerSkipped) { headerSkipped = true; continue; }   // 表头行
+          continue;                                                // 空行/杂行
+        }
+        // 数值列选择：两列时把「单调递增」的那列当时间索引丢掉；都不单调则约定时间在前、取最后一列
+        if (numericAt.length >= 2) {
+          var first = numericAt[0], last = numericAt[numericAt.length - 1];
+          if (numericAt.length === 2) {
+            var monoFirst = isMonotonicColumn(lines, i, sep, first);
+            var monoLast = isMonotonicColumn(lines, i, sep, last);
+            if (monoFirst && !monoLast) colIndex = last;
+            else if (monoLast && !monoFirst) colIndex = first;
+            else colIndex = last;
+          } else {
+            colIndex = last;
+            warnings.push('检测到 ' + numericAt.length + ' 个数值列，已取最后一列（其余列被忽略）。');
+          }
+        } else {
+          colIndex = numericAt[0];
+        }
+      }
+      var v = parseCell(toks[colIndex]);
+      if (v === null) { skipped++; continue; }
+      values.push(v);
+      if (values.length >= MAX_POINTS) { warnings.push('已截取前 ' + MAX_POINTS + ' 个点（文件更长）。'); break; }
+    }
+
+    if (values.length < MIN_POINTS) {
+      return {
+        ok: false,
+        error: '有效数值只有 ' + values.length + ' 个（需要至少 ' + MIN_POINTS +
+          ' 点才能装下 train/val/test 三段）。',
+        warnings: warnings
+      };
+    }
+    if (skipped > 0) warnings.push('跳过了 ' + skipped + ' 行无法解析的内容。');
+    return {
+      ok: true,
+      values: values,
+      name: String(fileName || '我的数据').replace(/\.[^.]+$/, '').slice(0, 24) || '我的数据',
+      warnings: warnings,
+      season: guessSeason(values)
+    };
+  }
+
+  /**
+   * 某列是否「像时间索引」：从 start 行起采样最多 50 个有效数值，
+   * 要求非递减且至少 3 个点（避免把两行数据误判成时间列）。
+   */
+  function isMonotonicColumn(lines, start, sep, col) {
+    var prev = null, seen = 0;
+    for (var k = start; k < lines.length && seen < 50; k++) {
+      var v = parseCell(lines[k].split(sep)[col]);
+      if (v === null) continue;
+      if (prev !== null && v < prev) return false;
+      prev = v;
+      seen++;
+    }
+    return seen >= 3;
+  }
+
+  /**
+   * 粗估季节周期：一阶差分去掉趋势后，在 7/12/24/52/365 这些常见周期里
+   * 取正自相关最高者；最高相关 < 0.25 时返回 1（不假设季节）。
+   * 不用「全滞后绝对值最大」——半周期（如 24 的 12）反相相关也是 1，
+   * 会让 24 小时数据被误判成 12。
+   */
+  function guessSeason(values) {
+    var n = Math.min(values.length, 1500);
+    var d = [];
+    for (var i = 1; i < n; i++) d.push(values[i] - values[i - 1]);
+    n = d.length;
+    if (n < 30) return 1;
+    var mu = 0;
+    for (i = 0; i < n; i++) mu += d[i];
+    mu /= n;
+    var g0 = 0;
+    for (i = 0; i < n; i++) g0 += Math.pow(d[i] - mu, 2);
+    if (!(g0 > 1e-12)) return 1;   // 差分近常数 → 纯趋势，没有可识别周期
+    var common = [7, 12, 24, 52, 365];
+    var best = 1, bestR = 0;
+    for (var c = 0; c < common.length; c++) {
+      var lag = common[c];
+      if (lag > Math.floor(n / 2)) continue;   // 至少两个完整周期才可信
+      var acc = 0, cnt = 0;
+      for (i = 0; i + lag < n; i++) { acc += (d[i] - mu) * (d[i + lag] - mu); cnt++; }
+      var r = (acc / cnt) / (g0 / n);   // 按对数归一，跨 lag 可比
+      if (r > bestR) { bestR = r; best = common[c]; }
+    }
+    return bestR >= 0.25 ? best : 1;
+  }
+
+  /** 注册为 TSJ.datasets 里的临时数据集（id 固定 'my-csv'，重复上传覆盖）。 */
+  function register(parsed, seasonOverride) {
+    if (!parsed || !parsed.ok) return null;
+    var season = isFiniteNumber(seasonOverride) && seasonOverride > 1 ? Math.round(seasonOverride) : (parsed.season || 1);
+    var freq = season === 365 ? 'D' : season === 52 ? 'W' : season === 12 ? 'M' : season === 24 ? 'H' : season === 7 ? 'D' : 'D';
+    var ds = {
+      id: 'my-csv',
+      name: parsed.name + '（上传）',
+      unit: '',
+      freq: freq,
+      season: season,
+      desc: '用户上传的 CSV 数据（本地保存，仅当前浏览器可见）',
+      values: parsed.values
+    };
+    var list = TSJ.datasets || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === 'my-csv') { list[i] = ds; persist(); return ds; }
+    }
+    list.push(ds);
+    TSJ.datasets = list;
+    persist();
+    return ds;
+  }
+
+  /** 读文件并解析+注册。done({ok, ds?, error?, warnings})。 */
+  function upload(file, seasonOverride, done) {
+    var cb = typeof done === 'function' ? done : function () {};
+    if (!file) { cb({ ok: false, error: '没有选择文件。' }); return; }
+    if (file.size > 2 * 1024 * 1024) { cb({ ok: false, error: '文件超过 2MB（限 5000 点以内）。' }); return; }
+    var reader = new global.FileReader();
+    reader.onerror = function () { cb({ ok: false, error: '读取文件失败。' }); };
+    reader.onload = function () {
+      var parsed = parse(String(reader.result || ''), file.name);
+      if (!parsed.ok) { cb({ ok: false, error: parsed.error, warnings: parsed.warnings }); return; }
+      var ds = register(parsed, seasonOverride);
+      cb({ ok: true, ds: ds, warnings: parsed.warnings });
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  /** 启动时恢复最近上传（存在则注册回 TSJ.datasets）。 */
+  function restore() {
+    var saved = core.readJSON(KEY, null, function (v) {
+      return v && typeof v === 'object' && Array.isArray(v.values);
+    });
+    if (!saved || !saved.values || saved.values.length < MIN_POINTS) return null;
+    return register({ ok: true, values: saved.values, name: saved.name || '我的数据', season: saved.season || 1 }, saved.season);
+  }
+
+  function persist() {
+    var ds = null;
+    for (var i = 0; i < (TSJ.datasets || []).length; i++) {
+      if (TSJ.datasets[i].id === 'my-csv') ds = TSJ.datasets[i];
+    }
+    if (!ds) return;
+    core.writeJSON(KEY, { values: ds.values, name: ds.name, season: ds.season });
+  }
+
+  function remove() {
+    TSJ.datasets = (TSJ.datasets || []).filter(function (d) { return d.id !== 'my-csv'; });
+    try { global.localStorage.removeItem(KEY); } catch (e) { /* 忽略 */ }
+  }
+
+  /**
+   * 工坊页装配：启动恢复上次 CSV + 重建数据集下拉 + 绑定上传按钮。
+   * 由 app/studio.js 的 render 调用一次（DOM 就绪后）。
+   * @param {Object} hooks { onDatasetChanged: Function } 上传成功后回调（重画拆分等）
+   */
+  function setupPanel(hooks) {
+    var doc = global.document;
+    function rebuildOptions(selectId) {
+      var sel = doc.getElementById('studioDataset');
+      if (!sel) return;
+      var keep = selectId || sel.value;
+      sel.innerHTML = (TSJ.datasets || []).map(function (d) {
+        return '<option value="' + d.id + '">' + core.esc(d.name) + '（' + d.values.length + ' 点 · ' + d.freq + '）</option>';
+      }).join('');
+      sel.value = keep;
+    }
+    // 恢复上次上传
+    var ds = restore();
+    if (ds) {
+      rebuildOptions(ds.id);
+      var hint = doc.getElementById('studioCsvHint');
+      if (hint) hint.textContent = '已恢复上次上传：' + ds.name + '（' + ds.values.length + ' 点）';
+    }
+    // 绑定上传
+    var input = doc.getElementById('studioCsvFile');
+    if (input) {
+      input.addEventListener('change', function () {
+        var f = input.files && input.files[0];
+        input.value = '';   // 允许重复选同一文件
+        if (!f) return;
+        upload(f, null, function (r) {
+          var toast = TSJ.appA11y ? TSJ.appA11y.toast : function () {};
+          if (!r.ok) { toast('CSV 导入失败：' + r.error, 'err'); return; }
+          rebuildOptions('my-csv');
+          var h = doc.getElementById('studioCsvHint');
+          if (h) h.textContent = r.ds.name + '（' + r.ds.values.length + ' 点 · 季节 ' + r.ds.season + '）';
+          (r.warnings || []).forEach(function (w) { toast(w, 'warn'); });
+          toast('已导入 ' + r.ds.values.length + ' 个点，季节周期估为 ' + r.ds.season, 'ok');
+          if (hooks && typeof hooks.onDatasetChanged === 'function') hooks.onDatasetChanged();
+        });
+      });
+    }
+    return { rebuildOptions: rebuildOptions };
+  }
+
+  TSJ.appStudioCsv = {
+    setupPanel: setupPanel,
+    MIN_POINTS: MIN_POINTS,
+    parse: parse,
+    guessSeason: guessSeason,
+    register: register,
+    upload: upload,
+    restore: restore,
+    remove: remove
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app/studio.js —— 模型工坊 #/studio（v3.6）
+ * 加载顺序：… app/studio-storage → app/studio.js → app/cmdk → app.js　挂载点：window.TSJ.appStudio
+ *
+ * 完整实验流程：自己写 predict（训练逻辑写在函数内，只允许用 history）
+ *   ① 验证集评估：fit 在 train、打分在 val，可反复迭代；
+ *   ② 最终评测：train+val 重新拟合、在 test 上打分——每代代码只评一次，次数如实记录。
+ * 沙箱与判题完全同源（judge.evaluate + Worker 超时 + 防泄漏拆分），零额外依赖。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var store = TSJ.appStore;
+  var esc = core.esc;
+  var doc = global.document;
+  var a11y = TSJ.appA11y;
+  var storage = TSJ.appStudioStorage;
+
+  function $(id) { return doc.getElementById(id); }
+
+  var BASELINES = ['naive', 'seasonal_naive', 'mean', 'moving_average', 'linear_trend'];
+  var METRIC = 'mse';
+
+  var STARTER = [
+    'function predict(history, horizon, ctx) {',
+    '  // 你的模型：在 history 上「训练」，再预测 horizon 步。',
+    '  // 示例：SES + 网格搜索 α（只用 history 内部做一步回测选参，绝不碰 val/test）',
+    '  var best = { a: 0.3, err: Infinity };',
+    '  for (var a = 0.05; a <= 0.95; a += 0.05) {',
+    '    var err = 0, level = history[0];',
+    '    for (var i = 1; i < history.length - 1; i++) {',
+    '      var oneStep = level;                    // 用 i 之前的状态预测 i',
+    '      level = a * history[i] + (1 - a) * level;',
+    '      err += Math.pow(history[i + 1] - oneStep, 2);',
+    '    }',
+    '    if (err < best.err) best = { a: a, err: err };',
+    '  }',
+    '  var level = history[0];                     // 用选好的 α 在全部 history 上重新平滑',
+    '  for (var j = 1; j < history.length; j++) level = best.a * history[j] + (1 - best.a) * level;',
+    '  var out = [];',
+    '  for (var h = 0; h < horizon; h++) out.push(level);',
+    '  return out;',
+    '}'
+  ].join('\n');
+
+  /** 拆分协议：test = val = clamp(15%, 12, 48)，train 为剩余；train 不足 24 点时报错。 */
+  function splitOf(n) {
+    var testLen = Math.max(12, Math.min(48, Math.round(n * 0.15)));
+    var trainLen = n - testLen * 2;
+    if (trainLen < 24) return null;
+    return { trainLen: trainLen, valLen: testLen, testLen: testLen };
+  }
+
+  function hashOf(code) { return core.fnv1a(code).slice(0, 8); }
+
+  /** 用合成 problem/dataset 走 judge.evaluate：沙箱、超时、基线全家桶免费获得。 */
+  function synthAndRun(values, horizon, code, session) {
+    var ds = {
+      id: 'studio', name: '模型工坊', unit: '', freq: ctx0().freq, season: ctx0().season, desc: '', values: values
+    };
+    var problem = {
+      id: 'studio', index: 0, title: '模型工坊', difficulty: '入门', tags: [],
+      points: 100, passScore: 60, dataset: 'studio', mode: 'holdout',
+      horizon: horizon, metric: METRIC, baselines: BASELINES, threshold: 0.95
+    };
+    return TSJ.judge.evaluate({ problem: problem, dataset: ds, code: code, session: session });
+    /** 数据集元信息（频率/季节来自所选数据集）。 */
+    function ctx0() {
+      var d = TSJ.findDataset(stateDsId());
+      return { freq: d ? d.freq : 'M', season: d ? d.season : 12 };
+    }
+  }
+
+  function stateDsId() { return doc.getElementById('studioDataset') ? doc.getElementById('studioDataset').value : 'airline'; }
+
+  function findDataset(id) {
+    var list = TSJ.datasets || [];
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
+
+  /* ---------- 渲染 ---------- */
+  function render(scope) {
+    var ctx = { code: loadDraft(), result: null, phase: null, busy: false, chart: null };
+    var ds = findDataset('airline');
+
+    function cleanup() {
+      ctx.busy = false;
+      if (ctx.chart && ctx.chart.destroy) ctx.chart.destroy();
+      ctx.chart = null;
+    }
+    if (scope && scope.own) scope.own({ destroy: cleanup });
+
+    var host = doc.getElementById('view');
+    host.innerHTML = [
+      '<div class="wk-hero wk-hero-slim"><div class="wk-hero-main">',
+      '  <div class="wk-kicker">模型工坊</div>',
+      '  <h1>自己搓一个模型，跑完完整实验流程</h1>',
+      '  <p>训练逻辑写在 predict 里（只能用 history）——验证集上随便迭代，最终评测一次定论。沙箱、超时、防泄漏与判题完全同源。</p>',
+      '</div></div>',
+      '<div class="problem-layout" id="studioLayout">',
+      '<section class="pane pane-left">',
+      '  <div class="ds-card"><h2 class="ds-card-title">实验配置</h2>',
+      '    <label class="ds-field"><span>数据集</span><select id="studioDataset">' +
+      (TSJ.datasets || []).map(function (d) {
+        return '<option value="' + esc(d.id) + '"' + (d.id === 'airline' ? ' selected' : '') + '>' +
+          esc(d.name) + '（' + d.values.length + ' 点 · ' + esc(d.freq) + '）</option>';
+      }).join('') + '</select></label>',
+      '    <div class="studio-csv-row">',
+      '      <label class="ds-btn ds-btn-sm studio-csv-btn"><input type="file" id="studioCsvFile" accept=".csv,.txt,.tsv" style="display:none">📂 上传自己的 CSV</label>',
+      '      <span class="ds-card-sub" id="studioCsvHint">单列数值或「时间,数值」两列；≥72 点</span>',
+      '    </div>',
+      '    <div class="studio-splits" id="studioSplits"></div>',
+      '  </div>',
+      '  <div class="editor-toolbar"><div class="tb-left"><span class="file-chip">my-model.js</span>' +
+      '    <span class="tb-hint">Ctrl/⌘+Enter 运行验证 · Ctrl/⌘+S 存草稿</span></div>',
+      '    <div class="tb-right"><button type="button" class="btn btn-ghost" id="studioTemplate">载入示例模型</button>' +
+      '    <button type="button" class="btn" id="studioRunVal">① 验证集评估</button>' +
+      '    <button type="button" class="btn btn-primary" id="studioRunFinal">② 最终评测</button></div></div>',
+      '  <div class="editor-host" id="studioEditorHost"></div>',
+      '  <p class="ed-help" id="studioEdHelp">代码出错时会在这里说明行号与原因。</p>',
+      '</section>',
+      '<section class="pane pane-right">',
+      '  <div class="ds-card"><h2 class="ds-card-title">实验报告</h2><div id="studioReport">' +
+      '    <div class="ds-empty"><strong>还没有运行</strong><span>先「① 验证集评估」迭代模型，满意后「② 最终评测」。</span></div></div></div>',
+      '  <div class="ds-card"><h2 class="ds-card-title">实验记录</h2>' +
+      '    <div class="lab-status"><span id="studioExpCount"></span>' +
+      '    <button class="ds-btn ds-btn-sm" id="studioShare">分享卡</button>' +
+    '    <button class="ds-btn ds-btn-sm" id="studioExport">导出记录</button>' +
+      '    <button class="ds-btn ds-btn-sm btn-danger" id="studioClear">清空记录</button></div>',
+      '    <div id="studioRecords"></div></div>',
+      '</section>',
+      '</div>'
+    ].join('\n');
+
+    store.state.editor = TSJ.createEditor($('studioEditorHost'), {
+      value: ctx.code,
+      fontSize: store.state.edFont,
+      errorHelpId: 'studioEdHelp',
+      onChange: function (val) { ctx.code = val; core.writeJSON(core.STORE.studioDraft, val); },
+      onRun: function () { runPhase('val'); },
+      onSave: function () { core.writeJSON(core.STORE.studioDraft, ctx.code); a11y.toast('草稿已保存', 'ok'); }
+    });
+
+    TSJ.appStudioCsv.setupPanel({ onDatasetChanged: paintSplits });
+    paintSplits();
+    paintRecords();
+
+    $('studioDataset').addEventListener('change', paintSplits);
+    $('studioTemplate').addEventListener('click', function () {
+      store.state.editor.setValue(STARTER);
+      ctx.code = STARTER;
+      core.writeJSON(core.STORE.studioDraft, STARTER);
+      a11y.toast('已载入示例模型（SES + 网格搜索 α）', 'ok');
+    });
+    $('studioRunVal').addEventListener('click', function () { runPhase('val'); });
+    $('studioRunFinal').addEventListener('click', function () { runPhase('final'); });
+    $('studioShare').addEventListener('click', function () {
+      if (!ctx.result) { TSJ.appA11y.toast('还没有可分享的实验', 'err'); return; }
+      var html = TSJ.appStudioReport.buildShareCard(ctx.lastView || { rec: ctx.result, d: findDataset(ctx.result.datasetId) });
+      var blob = new global.Blob([html], { type: 'text/html' });
+      var a2 = doc.createElement('a');
+      a2.href = global.URL.createObjectURL(blob);
+      a2.download = 'tsoj-studio-card-' + ctx.result.codeHash + '-' + ctx.result.kind + '.html';
+      a2.click();
+      global.URL.revokeObjectURL(a2.href);
+    });
+    $('studioExport').addEventListener('click', function () {
+      if (!ctx.result) { a11y.toast('还没有可导出的实验', 'err'); return; }
+      var text = storage.exportJSON(ctx.result);
+      var blob = new global.Blob([text], { type: 'application/json' });
+      var a = doc.createElement('a');
+      a.href = global.URL.createObjectURL(blob);
+      a.download = 'tsoj-studio-' + ctx.result.codeHash + '-' + ctx.result.kind + '.json';
+      a.click();
+      global.URL.revokeObjectURL(a.href);
+    });
+    $('studioClear').addEventListener('click', function () { storage.clear(); paintRecords(); a11y.toast('已清空实验记录', 'ok'); });
+
+    function paintSplits() {
+      var d = findDataset($('studioDataset').value);
+      var box = $('studioSplits');
+      var sp = d ? splitOf(d.values.length) : null;
+      if (!box) return;
+      if (!d || !sp) { box.innerHTML = '<p class="md-note"><span>⚠</span><span>该数据集太短，装不下 train/val/test 三段。</span></p>'; return; }
+      box.innerHTML = '<div class="studio-split-row"><span>train ' + sp.trainLen + '</span>' +
+        '<span class="studio-split-val">val ' + sp.valLen + '</span>' +
+        '<span class="studio-split-test">test ' + sp.testLen + '</span></div>' +
+        '<p class="ds-card-sub">训练只看 train；验证集用于迭代；test 只在最终评测时解密。</p>';
+    }
+
+    function paintRecords() {
+      var list = storage.list();
+      var el = $('studioExpCount');
+      if (el) el.textContent = '本地 ' + list.length + ' 条（上限 ' + storage.MAX + '）';
+      var box = $('studioRecords');
+      if (!box) return;
+      box.innerHTML = list.length ? '<div class="lab-history">' + list.map(function (r) {
+        return '<div class="lab-history-item"><span>' + (r.kind === 'final' ? '🏁' : '🔁') + ' ' +
+          esc(r.datasetId) + ' · ' + esc(r.kind === 'final' ? '最终' : '验证') + ' · MSE ' +
+          (r.kind === 'final' ? fmt(r.testMetrics.mse) : fmt(r.valMetrics.mse)) + ' · ' + esc(r.codeHash) + '</span>' +
+          '<span><button data-code="' + esc(r.codeHash) + '">载入代码</button></span></div>';
+      }).join('') + '</div>' : '<div class="ds-empty"><strong>还没有实验记录</strong><span>每代代码的 val/test 成绩都会留档。</span></div>';
+      var btns = core.$$('[data-code]', box);
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].addEventListener('click', function () {
+          var h = this.getAttribute('data-code');
+          for (var j = 0; j < list.length; j++) {
+            if (list[j].codeHash === h && list[j].code) {
+              store.state.editor.setValue(list[j].code);
+              ctx.code = list[j].code;
+              core.writeJSON(core.STORE.studioDraft, ctx.code);
+              a11y.toast('已载入代码快照 ' + h, 'ok');
+              return;
+            }
+          }
+        });
+      }
+    }
+
+    function fmt(v) { return (typeof v === 'number' && isFinite(v)) ? v.toFixed(2) : '—'; }
+
+    /** 两阶段评测：val 在 train 上拟合、val 上打分；final 在 train+val 上拟合、test 上打分。 */
+    function runPhase(kind) {
+      if (ctx.busy) return;
+      var d = findDataset($('studioDataset').value);
+      var sp = d ? splitOf(d.values.length) : null;
+      if (!sp) { a11y.toast('数据集太短，装不下三段拆分', 'err'); return; }
+      var code = store.state.editor.getValue();
+      ctx.code = code;
+      core.writeJSON(core.STORE.studioDraft, code);
+
+      var values, horizon;
+      if (kind === 'val') {
+        values = d.values.slice(0, sp.trainLen + sp.valLen);
+        horizon = sp.valLen;
+      } else {
+        values = d.values.slice();
+        horizon = sp.testLen;
+      }
+      var historyLen = values.length - horizon;
+      var history = values.slice(0, historyLen);
+      var actual = values.slice(historyLen);
+
+      var token = ++store.state.judgeToken;
+      var session = {};
+      store.state.session = session;
+      ctx.busy = true;
+      setButtons(true);
+      var report = $('studioReport');
+      if (report) report.innerHTML = '<div class="notice">正在运行（' + (kind === 'val' ? '验证集' : '最终评测') + '）…</div>';
+
+      synthAndRun(values, horizon, code, session).then(function (res) {
+        if (token !== store.state.judgeToken) return;   // 路由切换 / 新一轮：整段丢弃
+        ctx.busy = false;
+        setButtons(false);
+        if (res.refused || res.dataError || res.aborted) {
+          if (report) report.innerHTML = '<div class="notice">' + esc((res && res.reason) || (res && res.message) || '无法运行。') + '</div>';
+          return;
+        }
+        if (res.verdict === 'RE' || res.verdict === 'TLE') {
+          var errCase = (res.cases && res.cases[0]) || {};
+          if (report) report.innerHTML = '<div class="err-box">' + esc(errCase.error || res.message || '运行失败') +
+            '<div class="err-meta">位置：' + (errCase.line ? '第 ' + errCase.line + ' 行' : '行号未知') + '</div></div>';
+          if (errCase.line && store.state.editor) store.state.editor.markError(errCase.line);
+          return;
+        }
+        var pred = (res.cases[0] && res.cases[0].predictions) || [];
+        var baseline = TSJ.judge.baselines.moving_average(history.slice(), horizon, { season: d.season, freq: d.freq, datasetId: d.id, index: 0 });
+        var rec = {
+          schema: 1, id: String(Date.now()), at: Date.now(), kind: kind,
+          datasetId: d.id, season: d.season, split: [sp.trainLen, sp.valLen, sp.testLen],
+          codeHash: hashOf(code), code: code,
+          valMetrics: kind === 'val' ? { mse: TSJ.judge.metrics.mse(actual, pred) } : {},
+          testMetrics: kind === 'final' ? { mse: TSJ.judge.metrics.mse(actual, pred) } : {},
+          baselinesVal: kind === 'val' ? (res.cases[0] && res.cases[0].allBaselines) || {} : {},
+          baselinesTest: kind === 'final' ? (res.cases[0] && res.cases[0].allBaselines) || {} : {}
+        };
+        if (kind === 'final') rec.testRuns = storage.testRunCount(rec.codeHash, d.id) + 1;
+        storage.save(rec);
+        if (TSJ.appAchievements) TSJ.appAchievements.onStudioRun(rec);
+        ctx.result = rec;
+        ctx.lastView = { rec: rec, actual: actual, pred: pred, baseline: baseline, res: res, sp: sp, historyLen: historyLen, d: d };
+        paintReport(ctx.lastView);
+        paintRecords();
+        if (kind === 'final') {
+          a11y.toast('最终评测完成 · 该代码 testRuns=' + rec.testRuns, rec.testRuns > 1 ? 'warn' : 'ok');
+        } else {
+          a11y.toast('验证集评估完成，可继续迭代', 'ok');
+        }
+      }).catch(function (err) {
+        ctx.busy = false;
+        setButtons(false);
+        if (report) report.innerHTML = '<div class="notice">运行异常：' + esc((err && err.message) || String(err)) + '</div>';
+      });
+    }
+
+    /** 报告绘制委托给 app/studio-report.js（表格 + 预测图 + val/test 分界线）。 */
+    function paintReport(view) {
+      TSJ.appStudioReport.paint(view, {
+        scope: scope,
+        setChart: function (c) { ctx.chart = c; }
+      });
+    }
+
+    function setButtons(busy) {
+      var a = $('studioRunVal');
+      var b = $('studioRunFinal');
+      if (a) a.disabled = !!busy;
+      if (b) b.disabled = !!busy;
+    }
+
+    function loadDraft() {
+      return core.readJSON(core.STORE.studioDraft, STARTER, function (v) { return typeof v === 'string' && v; });
+    }
+
+    a11y.setTitle('模型工坊 · TSOJ');
+  }
+
+  TSJ.appStudio = { render: render };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app/achievements.js —— 成就徽章系统（v3.7）
+ * 加载顺序：… app/studio.js → app/achievements → app/cmdk → app.js
+ * 挂载点：window.TSJ.appAchievements
+ *
+ * 设计原则（轻量、诚实、零后端）：
+ *   - 只从「已发生的事件」推导（判题落盘、工坊运行落档），不做任何轮询；
+ *   - 解锁即 toast + 落盘（tsoj:achievements:v1），工作台与命令面板可见；
+ *   - 成就定义与判定函数集中在此文件，新增成就只改一处。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var KEY = core.STORE.achievements;
+
+  /* ---------- 成就注册表 ---------- */
+  var DEFS = [
+    { id: 'first-ac', icon: '🥇', name: '第一个 AC', desc: '通过任意一道题。每个预测旅程都从这里开始。' },
+    { id: 'streak-3', icon: '🔥', name: '三连胜', desc: '按题号连续通过 3 道题。' },
+    { id: 'all-easy', icon: '🌱', name: '入门毕业', desc: '通过全部「入门」难度的题。' },
+    { id: 'studio-beats-base', icon: '🛠️', name: '工坊开张', desc: '在模型工坊里让你的模型在验证集上跑赢最优基线。' },
+    { id: 'honest-researcher', icon: '🧭', name: '诚实研究者', desc: '工坊最终评测：同一份代码对 test 只评了一次就定稿。' },
+    { id: 'glossary-reader', icon: '📖', name: '词典编纂者', desc: '在术语表里累计搜索/查阅 20 次。' },
+    { id: 'method-explorer', icon: '🗺️', name: '方法旅行家', desc: '查看过 15 个不同的方法详情页。' },
+    { id: 'half-score', icon: '💎', name: '半分神话', desc: '任意一题拿到误差比 ≤ 0.5 的满分。' }
+  ];
+
+  var unlocked = null;   // { [id]: at }
+  var seenMethods = null; // 方法详情浏览记录
+  var glossaryLooks = 0;
+
+  /* ---------- 存储 ---------- */
+  function load() {
+    if (unlocked) return;
+    unlocked = core.readJSON(KEY, {}, function (v) {
+      return v && typeof v === 'object' && !Array.isArray(v);
+    });
+    var meta = core.readJSON(core.STORE.achMeta, { methods: [], looks: 0 }, function (v) {
+      return v && typeof v === 'object' && !Array.isArray(v);
+    });
+    seenMethods = Array.isArray(meta.methods) ? meta.methods.slice(0, 60) : [];
+    glossaryLooks = typeof meta.looks === 'number' && meta.looks > 0 ? Math.min(9999, Math.floor(meta.looks)) : 0;
+  }
+
+  function persistMeta() {
+    core.writeJSON(core.STORE.achMeta, { methods: seenMethods, looks: glossaryLooks });
+  }
+
+  /* ---------- 解锁 ---------- */
+  /** 解锁成就：toast + 落盘（重复解锁幂等）。 */
+  function unlock(id) {
+    load();
+    if (unlocked[id]) return;
+    var def = null;
+    for (var i = 0; i < DEFS.length; i++) if (DEFS[i].id === id) def = DEFS[i];
+    if (!def) return;
+    unlocked[id] = Date.now();
+    core.writeJSON(KEY, unlocked);
+    if (TSJ.appA11y) TSJ.appA11y.toast('🏆 成就解锁：' + def.name + ' — ' + def.desc, 'ok');
+  }
+
+  /* ---------- 事件入口（由 app 层在恰当时机调用） ---------- */
+
+  /** 判题落盘后：检查首 AC / 连胜 / 入门毕业 / 半分神话。 */
+  function onJudgeResult(problem, result, allProgress) {
+    load();
+    if (!result) return;
+    if (result.passed) {
+      unlock('first-ac');
+      // 半分神话：整题满分（误差比 ≤ 0.5 → 100 分），不是某个测试点满分
+      if (result.score === 100) unlock('half-score');
+      // 连胜：按题号检查连续通过（宽松定义：已通过的题里存在连续 3 个 index）
+      var passedIdx = [];
+      var probs = TSJ.problems || [];
+      for (var i = 0; i < probs.length; i++) {
+        var rec = allProgress[probs[i].id];
+        if (rec && rec.passed) passedIdx.push(probs[i].index);
+      }
+      passedIdx.sort(function (a, b) { return a - b; });
+      var run = 1;
+      for (i = 1; i < passedIdx.length; i++) {
+        run = passedIdx[i] === passedIdx[i - 1] + 1 ? run + 1 : 1;
+        if (run >= 3) { unlock('streak-3'); break; }
+      }
+      // 入门毕业
+      var easyAll = true;
+      for (i = 0; i < probs.length; i++) {
+        if (probs[i].difficulty === '入门') {
+          var r2 = allProgress[probs[i].id];
+          if (!r2 || !r2.passed) { easyAll = false; break; }
+        }
+      }
+      if (easyAll) unlock('all-easy');
+    }
+  }
+
+  /** 工坊运行落档后：kind='val' 检查跑赢基线；kind='final' 检查诚实研究者。 */
+  function onStudioRun(record) {
+    load();
+    if (!record) return;
+    function bestOf(b) {
+      var best = null;
+      Object.keys(b || {}).forEach(function (k) {
+        var v = b[k] && b[k].mse;
+        if (typeof v === 'number' && isFinite(v) && (best === null || v < best)) best = v;
+      });
+      return best;
+    }
+    if (record.kind === 'val') {
+      var mine = record.valMetrics && record.valMetrics.mse;
+      var base = bestOf(record.baselinesVal);
+      if (typeof mine === 'number' && typeof base === 'number' && mine < base) unlock('studio-beats-base');
+    }
+    if (record.kind === 'final' && record.testRuns === 1) unlock('honest-researcher');
+  }
+
+  /** 方法详情页浏览（method-detail 渲染时调用）。 */
+  function onMethodView(id) {
+    load();
+    if (seenMethods.indexOf(id) < 0) {
+      seenMethods.push(id);
+      if (seenMethods.length > 60) seenMethods.shift();
+      persistMeta();
+    }
+    var count = 0;
+    for (var i = 0; i < seenMethods.length; i++) {
+      if (TSJ.methodsById && TSJ.methodsById(seenMethods[i])) count++;
+    }
+    if (count >= 15) unlock('method-explorer');
+  }
+
+  /** 术语表查阅（glossary 渲染/搜索时调用，一次路由进入算一次）。 */
+  function onGlossaryLook() {
+    load();
+    glossaryLooks++;
+    persistMeta();
+    if (glossaryLooks >= 20) unlock('glossary-reader');
+  }
+
+  /* ---------- 查询 ---------- */
+  /** 全部成就状态（供工作台/命令面板渲染）。 */
+  function status() {
+    load();
+    return DEFS.map(function (d) {
+      return { id: d.id, icon: d.icon, name: d.name, desc: d.desc, at: unlocked[d.id] || null };
+    });
+  }
+
+  function count() {
+    load();
+    var n = 0;
+    Object.keys(unlocked).forEach(function (k) { if (unlocked[k]) n++; });
+    return n;
+  }
+
+  TSJ.appAchievements = {
+    DEFS: DEFS,
+    onJudgeResult: onJudgeResult,
+    onStudioRun: onStudioRun,
+    onMethodView: onMethodView,
+    onGlossaryLook: onGlossaryLook,
+    status: status,
+    count: count
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
  * assets/js/app/dashboard.js —— 工作台 #/
  *
  * 只汇总本机真实数据：学习进度、做题进度、最近提交、最近实验。
@@ -16875,6 +18141,20 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       '</div></div></div>';
   }
 
+  /** 成就徽章卡：已解锁高亮，未解锁灰置（悬停看解锁条件）。 */
+  function achievementsCard() {
+    if (!TSJ.appAchievements) return '';
+    var st = TSJ.appAchievements.status();
+    var n = TSJ.appAchievements.count();
+    var chips = st.map(function (a) {
+      return '<span class="wk-ach' + (a.at ? ' wk-ach-on' : '') + '" title="' +
+        esc(a.name + '：' + a.desc + (a.at ? '（已解锁）' : '（未解锁）')) + '">' +
+        a.icon + ' ' + esc(a.name) + '</span>';
+    }).join('');
+    return '<div class="ds-card"><h2 class="ds-card-title">成就 <span class="ds-badge">' + n + ' / ' + st.length + '</span></h2>' +
+      '<div class="wk-ach-row">' + chips + '</div></div>';
+  }
+
   function render(scope) {
     var state = store.state;
     var lesson = nextLesson();
@@ -16896,6 +18176,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       '  </div>',
       '  <div class="wk-side-stack">',
       overviewCard(state),
+      achievementsCard(),
       '    <div class="ds-card"><h2 class="ds-card-title">快速入口</h2><div class="wk-list">',
       '      <a class="wk-list-item" href="#/problems"><span class="wk-list-main"><b>题库</b><span>' + TSJ.problems.length + ' 道可判题练习</span></span><span class="ds-badge">去练习</span></a>',
       '      <a class="wk-list-item" href="#/learn/m0"><span class="wk-list-main"><b>零基础第一课</b><span>25 分钟：从看懂一条曲线到写出第一个 predict</span></span><span class="ds-badge">去入门</span></a>',
@@ -17190,6 +18471,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       '</aside></div>'
     ].join('\n');
     host.innerHTML = html;
+    if (TSJ.appAchievements) TSJ.appAchievements.onMethodView(id);
     TSJ.appA11y.setTitle(m.name + ' · 方法详情');
   }
 
@@ -17988,6 +19270,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     var root = $('#view');
     if (!root) return;
     view = { query: '', cat: 'all' };
+    if (TSJ.appAchievements) TSJ.appAchievements.onGlossaryLook();   // 词典编纂者：每次进入算一次
     root.innerHTML = ['<div class="page">', '<div class="page-head">', '<h1>术语表</h1>',
       '<p class="sub">' + allTerms().length + ' 个术语 · ' + allCats().length +
         ' 个分类 · 题面与课程里的行话都在这查</p>', '</div>',
@@ -18137,561 +19420,6 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     renderRanking: renderRanking,
     renderPath: renderPath
   };
-})(typeof window !== 'undefined' ? window : this);
-
-</script>
-<script>
-/**
- * assets/js/app/studio-storage.js —— 模型工坊实验记录（v3.6）
- * 加载顺序：… app/lab-storage → app/studio-storage → app/studio.js
- * 挂载点：window.TSJ.appStudioStorage
- *
- * 与 lab-storage 同构：先完整校验再入列；写入失败不动旧数据；上限 30 条按时间淘汰。
- * 记录保存「代码快照 + 拆分协议 + val/test 指标与基线对比」，保证可复现与可复盘。
- */
-(function (global) {
-  'use strict';
-
-  var TSJ = global.TSJ || (global.TSJ = {});
-  var core = TSJ.appCore;
-  var KEY = core.STORE.studioExp;
-  var MAX = 30;
-
-  function isFiniteNumber(v) { return typeof v === 'number' && isFinite(v); }
-
-  /** 指标对象白名单归一化：只接受 mse/mae/smape 三个键的有限数。 */
-  function normMetrics(m) {
-    var out = {};
-    var ok = false;
-    ['mse', 'mae', 'smape'].forEach(function (k) {
-      if (m && isFiniteNumber(m[k])) { out[k] = m[k]; ok = true; }
-    });
-    return ok ? out : null;
-  }
-
-  /** 基线对比表归一化：{ name: {mse,mae,smape} }，只保留合法项。 */
-  function normBaselines(b) {
-    var out = {};
-    if (!b || typeof b !== 'object') return out;
-    Object.keys(b).forEach(function (name) {
-      var m = normMetrics(b[name]);
-      if (m) out[String(name).slice(0, 40)] = m;
-    });
-    return out;
-  }
-
-  function normalizeRecord(r) {
-    if (!r || typeof r !== 'object') return null;
-    if (r.schema !== 1) return null;
-    if (r.kind !== 'val' && r.kind !== 'final') return null;
-    if (!r.datasetId || typeof r.datasetId !== 'string') return null;
-    if (typeof r.codeHash !== 'string' || !r.codeHash) return null;
-    if (!Array.isArray(r.split)) return null;
-    if (r.split.length !== 3) return null;
-    if (!r.split.every(function (n) { return typeof n === 'number' && n > 0; })) return null;
-    var valM = normMetrics(r.valMetrics);
-    var testM = normMetrics(r.testMetrics);
-    if (r.kind === 'val' && !valM) return null;
-    if (r.kind === 'final' && !testM) return null;   // final 只强制 test；val 对比列由展示层按代码哈希回查
-    return {
-      schema: 1,
-      id: typeof r.id === 'string' && r.id ? r.id : 'exp-' + (r.at || 0),
-      at: isFiniteNumber(r.at) ? r.at : 0,
-      kind: r.kind,
-      datasetId: r.datasetId,
-      season: isFiniteNumber(r.season) ? r.season : 1,
-      split: r.split.slice(),
-      codeHash: r.codeHash,
-      code: typeof r.code === 'string' ? r.code.slice(0, 20 * 1024) : '',
-      valMetrics: valM || {},
-      testMetrics: testM || {},
-      baselinesVal: normBaselines(r.baselinesVal),
-      baselinesTest: normBaselines(r.baselinesTest),
-      testRuns: typeof r.testRuns === 'number' && r.testRuns > 0 ? Math.min(99, Math.floor(r.testRuns)) : 1
-    };
-  }
-
-  function list() {
-    var raw = core.readJSON(KEY, [], function (v) { return Array.isArray(v); });
-    var out = [];
-    for (var i = 0; i < raw.length; i++) {
-      var rec = normalizeRecord(raw[i]);
-      if (rec) out.push(rec);
-    }
-    out.sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
-    return out;
-  }
-
-  function save(record) {
-    var rec = normalizeRecord(record);
-    if (!rec) return { ok: false, error: '记录不合法，未保存' };
-    var arr = list();
-    arr.unshift(rec);
-    while (arr.length > MAX) arr.pop();
-    core.writeJSON(KEY, arr);
-    return { ok: true, count: arr.length };
-  }
-
-  /** 同一代码哈希的最终评测次数（诚实性提示用）。 */
-  function testRunCount(codeHash, datasetId) {
-    var n = 0;
-    var arr = list();
-    for (var i = 0; i < arr.length; i++) {
-      if (arr[i].kind === 'final' && arr[i].codeHash === codeHash && arr[i].datasetId === datasetId) n++;
-    }
-    return n;
-  }
-
-  function clear() { core.writeJSON(KEY, []); }
-
-  function exportJSON(record) {
-    var rec = normalizeRecord(record);
-    if (!rec) return null;
-    return JSON.stringify({ app: 'tsoj-studio', schema: 1, exportedAt: Date.now(), record: rec }, null, 2);
-  }
-
-  function importJSON(text) {
-    var data;
-    try { data = JSON.parse(text); } catch (e) { return { ok: false, error: '不是合法 JSON' }; }
-    if (!data || data.app !== 'tsoj-studio') return { ok: false, error: '不是 TSOJ 模型工坊实验文件' };
-    if (data.schema !== 1) return { ok: false, error: 'schema 不支持：' + data.schema };
-    var rec = normalizeRecord(data.record);
-    if (!rec) return { ok: false, error: '记录字段不完整' };
-    var res = save(rec);
-    if (!res.ok) return { ok: false, error: res.error };
-    return { ok: true, record: rec, count: res.count };
-  }
-
-  TSJ.appStudioStorage = {
-    MAX: MAX,
-    list: list,
-    save: save,
-    clear: clear,
-    testRunCount: testRunCount,
-    exportJSON: exportJSON,
-    importJSON: importJSON,
-    normalizeRecord: normalizeRecord
-  };
-})(typeof window !== 'undefined' ? window : this);
-
-</script>
-<script>
-/**
- * assets/js/app/studio-report.js —— 模型工坊实验报告绘制（v3.6）
- * 加载顺序：… app/studio-storage → app/studio-report → app/studio.js
- * 挂载点：window.TSJ.appStudioReport
- *
- * 纯绘制层：指标对比表（val 列自动回查同代码哈希的验证记录）+ 预测对比图
- * （复用 v3 图表内核 forecast 渲染器，train/val/test 分界线由 splits 标出）。
- * 图表实例通过 opts.setChart 交还调用方管理（路由销毁 / 换图 destroy）。
- */
-(function (global) {
-  'use strict';
-
-  var TSJ = global.TSJ || (global.TSJ = {});
-  var core = TSJ.appCore;
-  var esc = core.esc;
-
-  function fmt(v) { return (typeof v === 'number' && isFinite(v)) ? v.toFixed(2) : '—'; }
-
-  function bestOf(baselines) {
-    var best = null;
-    var keys = Object.keys(baselines || {});
-    for (var i = 0; i < keys.length; i++) {
-      var v = baselines[keys[i]] && baselines[keys[i]].mse;
-      if (typeof v === 'number' && isFinite(v) && (best === null || v < best)) best = v;
-    }
-    return best;
-  }
-
-  /**
-   * 绘制实验报告。
-   * @param {Object} view { rec, actual, pred, baseline, sp, historyLen, d }
-   * @param {Object} opts { scope, setChart(chart) }
-   */
-  function paint(view, opts) {
-    var report = global.document.getElementById('studioReport');
-    if (!report) return;
-    var rec = view.rec;
-    var d = view.d;
-    var isFinal = rec.kind === 'final';
-
-    // 最终评测的 val 对比列：回查同一份代码的最近验证记录（没有就显示 —）
-    var valRec = null;
-    if (isFinal) {
-      var all = TSJ.appStudioStorage.list();
-      for (var k = 0; k < all.length; k++) {
-        if (all[k].kind === 'val' && all[k].codeHash === rec.codeHash) { valRec = all[k]; break; }
-      }
-    }
-    var mVal = isFinal ? (valRec ? valRec.valMetrics.mse : null) : rec.valMetrics.mse;
-    var baseVal = isFinal ? (valRec ? bestOf(valRec.baselinesVal) : null) : bestOf(rec.baselinesVal);
-    var mTest = isFinal ? rec.testMetrics.mse : null;
-    var baseTest = isFinal ? bestOf(rec.baselinesTest) : null;
-
-    var rows = '<tr><td>MSE</td>' +
-      '<td class="num">' + fmt(mVal) + '</td><td class="num">' + fmt(baseVal) + '</td>' +
-      (isFinal ? '<td class="num">' + fmt(mTest) + '</td><td class="num">' + fmt(baseTest) + '</td>' : '') + '</tr>';
-
-    report.innerHTML = [
-      '<div class="studio-report-head"><span class="ds-badge ' + (isFinal ? 'ds-badge-ok' : '') + '">' +
-      (isFinal ? '🏁 最终评测 · train+val 拟合 → test 打分' : '🔁 验证集评估 · train 拟合 → val 打分') + '</span>' +
-      '<span class="ds-badge">' + esc(d.name) + '</span>' +
-      '<span class="ds-badge">代码 ' + esc(rec.codeHash) + '</span></div>',
-      '<div class="ds-table-wrap"><table class="ds-table ds-table-hover"><thead><tr><th>MSE</th>' +
-      '<th class="num">你的（val）</th><th class="num">最优基线（val）</th>' +
-      (isFinal ? '<th class="num">你的（test）</th><th class="num">最优基线（test）</th>' : '') +
-      '</tr></thead><tbody>' + rows + '</tbody></table></div>',
-      isFinal && rec.testRuns > 1
-        ? '<p class="md-note"><span>⚠</span><span>这份代码已对 test 评测 ' + rec.testRuns + ' 次——继续按 test 调参会让它变成另一个验证集。</span></p>'
-        : '<p class="ds-card-sub">比值 = 你的 MSE ÷ 最优基线 MSE，&lt;1 表示跑赢了基线；模型选择只允许看 val。</p>',
-      '<div class="chart-v2"><div class="chart-v2-head"><h3>预测对比</h3>' +
-      '<div class="chart-v2-legend"><span><i style="border-color:var(--v3-chart-history)"></i>历史</span>' +
-      '<span><i style="border-color:var(--v3-chart-actual)"></i>' + (isFinal ? 'test 真值' : 'val 真值') + '</span>' +
-      '<span><i style="border-color:var(--v3-chart-pred);border-top-style:dashed"></i>你的模型</span>' +
-      '<span><i style="border-color:var(--v3-chart-baseline);border-top-style:dotted"></i>移动平均</span></div></div>',
-      '<div class="chart-v2-canvas-wrap"><canvas id="studioCanvas"></canvas></div>',
-      '<p class="chart-v2-summary" id="studioChartSummary"></p></div>'
-    ].join('\n');
-
-    var values = d.values;
-    var start = view.historyLen;
-    var n = values.length;
-    function pad(arr) {
-      var out = new Array(n).fill(null);
-      for (var i = 0; i < arr.length && start + i < n; i++) out[start + i] = arr[i];
-      return out;
-    }
-    var model = {
-      n: n,
-      history: values.slice(),
-      actual: pad(view.actual),
-      prediction: pad(view.pred),
-      baseline: pad(view.baseline),
-      splits: isFinal
-        ? [{ index: rec.split[0], role: 'val', label: '验证起点' }, { index: rec.split[0] + rec.split[1], role: 'test', label: '测试起点' }]
-        : [{ index: rec.split[0], role: 'test', label: '验证起点' }],
-      maxPoints: 1200
-    };
-    var chart = TSJ.charts.create(global.document.getElementById('studioCanvas'), {
-      kind: 'forecast', scope: opts.scope, height: 280, unit: d.unit,
-      ariaLabel: '模型工坊预测对比图', onInspect: function () {}
-    });
-    chart.update(model);
-    var sm = global.document.getElementById('studioChartSummary');
-    if (sm) sm.textContent = chart.summary() || '';
-    if (typeof opts.setChart === 'function') opts.setChart(chart);
-  }
-
-  TSJ.appStudioReport = { paint: paint };
-})(typeof window !== 'undefined' ? window : this);
-
-</script>
-<script>
-/**
- * assets/js/app/studio.js —— 模型工坊 #/studio（v3.6）
- * 加载顺序：… app/studio-storage → app/studio.js → app/cmdk → app.js　挂载点：window.TSJ.appStudio
- *
- * 完整实验流程：自己写 predict（训练逻辑写在函数内，只允许用 history）
- *   ① 验证集评估：fit 在 train、打分在 val，可反复迭代；
- *   ② 最终评测：train+val 重新拟合、在 test 上打分——每代代码只评一次，次数如实记录。
- * 沙箱与判题完全同源（judge.evaluate + Worker 超时 + 防泄漏拆分），零额外依赖。
- */
-(function (global) {
-  'use strict';
-
-  var TSJ = global.TSJ || (global.TSJ = {});
-  var core = TSJ.appCore;
-  var store = TSJ.appStore;
-  var esc = core.esc;
-  var doc = global.document;
-  var a11y = TSJ.appA11y;
-  var storage = TSJ.appStudioStorage;
-
-  function $(id) { return doc.getElementById(id); }
-
-  var BASELINES = ['naive', 'seasonal_naive', 'mean', 'moving_average', 'linear_trend'];
-  var METRIC = 'mse';
-
-  var STARTER = [
-    'function predict(history, horizon, ctx) {',
-    '  // 你的模型：在 history 上「训练」，再预测 horizon 步。',
-    '  // 示例：SES + 网格搜索 α（只用 history 内部做一步回测选参，绝不碰 val/test）',
-    '  var best = { a: 0.3, err: Infinity };',
-    '  for (var a = 0.05; a <= 0.95; a += 0.05) {',
-    '    var err = 0, level = history[0];',
-    '    for (var i = 1; i < history.length - 1; i++) {',
-    '      var oneStep = level;                    // 用 i 之前的状态预测 i',
-    '      level = a * history[i] + (1 - a) * level;',
-    '      err += Math.pow(history[i + 1] - oneStep, 2);',
-    '    }',
-    '    if (err < best.err) best = { a: a, err: err };',
-    '  }',
-    '  var level = history[0];                     // 用选好的 α 在全部 history 上重新平滑',
-    '  for (var j = 1; j < history.length; j++) level = best.a * history[j] + (1 - best.a) * level;',
-    '  var out = [];',
-    '  for (var h = 0; h < horizon; h++) out.push(level);',
-    '  return out;',
-    '}'
-  ].join('\n');
-
-  /** 拆分协议：test = val = clamp(15%, 12, 48)，train 为剩余；train 不足 24 点时报错。 */
-  function splitOf(n) {
-    var testLen = Math.max(12, Math.min(48, Math.round(n * 0.15)));
-    var trainLen = n - testLen * 2;
-    if (trainLen < 24) return null;
-    return { trainLen: trainLen, valLen: testLen, testLen: testLen };
-  }
-
-  function hashOf(code) { return core.fnv1a(code).slice(0, 8); }
-
-  /** 用合成 problem/dataset 走 judge.evaluate：沙箱、超时、基线全家桶免费获得。 */
-  function synthAndRun(values, horizon, code, session) {
-    var ds = {
-      id: 'studio', name: '模型工坊', unit: '', freq: ctx0().freq, season: ctx0().season, desc: '', values: values
-    };
-    var problem = {
-      id: 'studio', index: 0, title: '模型工坊', difficulty: '入门', tags: [],
-      points: 100, passScore: 60, dataset: 'studio', mode: 'holdout',
-      horizon: horizon, metric: METRIC, baselines: BASELINES, threshold: 0.95
-    };
-    return TSJ.judge.evaluate({ problem: problem, dataset: ds, code: code, session: session });
-    /** 数据集元信息（频率/季节来自所选数据集）。 */
-    function ctx0() {
-      var d = TSJ.findDataset(stateDsId());
-      return { freq: d ? d.freq : 'M', season: d ? d.season : 12 };
-    }
-  }
-
-  function stateDsId() { return doc.getElementById('studioDataset') ? doc.getElementById('studioDataset').value : 'airline'; }
-
-  function findDataset(id) {
-    var list = TSJ.datasets || [];
-    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
-    return null;
-  }
-
-  /* ---------- 渲染 ---------- */
-  function render(scope) {
-    var ctx = { code: loadDraft(), result: null, phase: null, busy: false, chart: null };
-    var ds = findDataset('airline');
-
-    function cleanup() {
-      ctx.busy = false;
-      if (ctx.chart && ctx.chart.destroy) ctx.chart.destroy();
-      ctx.chart = null;
-    }
-    if (scope && scope.own) scope.own({ destroy: cleanup });
-
-    var host = doc.getElementById('view');
-    host.innerHTML = [
-      '<div class="wk-hero wk-hero-slim"><div class="wk-hero-main">',
-      '  <div class="wk-kicker">模型工坊</div>',
-      '  <h1>自己搓一个模型，跑完完整实验流程</h1>',
-      '  <p>训练逻辑写在 predict 里（只能用 history）——验证集上随便迭代，最终评测一次定论。沙箱、超时、防泄漏与判题完全同源。</p>',
-      '</div></div>',
-      '<div class="problem-layout" id="studioLayout">',
-      '<section class="pane pane-left">',
-      '  <div class="ds-card"><h2 class="ds-card-title">实验配置</h2>',
-      '    <label class="ds-field"><span>数据集</span><select id="studioDataset">' +
-      (TSJ.datasets || []).map(function (d) {
-        return '<option value="' + esc(d.id) + '"' + (d.id === 'airline' ? ' selected' : '') + '>' +
-          esc(d.name) + '（' + d.values.length + ' 点 · ' + esc(d.freq) + '）</option>';
-      }).join('') + '</select></label>',
-      '    <div class="studio-splits" id="studioSplits"></div>',
-      '  </div>',
-      '  <div class="editor-toolbar"><div class="tb-left"><span class="file-chip">my-model.js</span>' +
-      '    <span class="tb-hint">Ctrl/⌘+Enter 运行验证 · Ctrl/⌘+S 存草稿</span></div>',
-      '    <div class="tb-right"><button type="button" class="btn btn-ghost" id="studioTemplate">载入示例模型</button>' +
-      '    <button type="button" class="btn" id="studioRunVal">① 验证集评估</button>' +
-      '    <button type="button" class="btn btn-primary" id="studioRunFinal">② 最终评测</button></div></div>',
-      '  <div class="editor-host" id="studioEditorHost"></div>',
-      '  <p class="ed-help" id="studioEdHelp">代码出错时会在这里说明行号与原因。</p>',
-      '</section>',
-      '<section class="pane pane-right">',
-      '  <div class="ds-card"><h2 class="ds-card-title">实验报告</h2><div id="studioReport">' +
-      '    <div class="ds-empty"><strong>还没有运行</strong><span>先「① 验证集评估」迭代模型，满意后「② 最终评测」。</span></div></div></div>',
-      '  <div class="ds-card"><h2 class="ds-card-title">实验记录</h2>' +
-      '    <div class="lab-status"><span id="studioExpCount"></span>' +
-      '    <button class="ds-btn ds-btn-sm" id="studioExport">导出当前</button>' +
-      '    <button class="ds-btn ds-btn-sm btn-danger" id="studioClear">清空记录</button></div>',
-      '    <div id="studioRecords"></div></div>',
-      '</section>',
-      '</div>'
-    ].join('\n');
-
-    store.state.editor = TSJ.createEditor($('studioEditorHost'), {
-      value: ctx.code,
-      fontSize: store.state.edFont,
-      errorHelpId: 'studioEdHelp',
-      onChange: function (val) { ctx.code = val; core.writeJSON(core.STORE.studioDraft, val); },
-      onRun: function () { runPhase('val'); },
-      onSave: function () { core.writeJSON(core.STORE.studioDraft, ctx.code); a11y.toast('草稿已保存', 'ok'); }
-    });
-
-    paintSplits();
-    paintRecords();
-
-    $('studioDataset').addEventListener('change', paintSplits);
-    $('studioTemplate').addEventListener('click', function () {
-      store.state.editor.setValue(STARTER);
-      ctx.code = STARTER;
-      core.writeJSON(core.STORE.studioDraft, STARTER);
-      a11y.toast('已载入示例模型（SES + 网格搜索 α）', 'ok');
-    });
-    $('studioRunVal').addEventListener('click', function () { runPhase('val'); });
-    $('studioRunFinal').addEventListener('click', function () { runPhase('final'); });
-    $('studioExport').addEventListener('click', function () {
-      if (!ctx.result) { a11y.toast('还没有可导出的实验', 'err'); return; }
-      var text = storage.exportJSON(ctx.result);
-      var blob = new global.Blob([text], { type: 'application/json' });
-      var a = doc.createElement('a');
-      a.href = global.URL.createObjectURL(blob);
-      a.download = 'tsoj-studio-' + ctx.result.codeHash + '-' + ctx.result.kind + '.json';
-      a.click();
-      global.URL.revokeObjectURL(a.href);
-    });
-    $('studioClear').addEventListener('click', function () { storage.clear(); paintRecords(); a11y.toast('已清空实验记录', 'ok'); });
-
-    function paintSplits() {
-      var d = findDataset($('studioDataset').value);
-      var box = $('studioSplits');
-      var sp = d ? splitOf(d.values.length) : null;
-      if (!box) return;
-      if (!d || !sp) { box.innerHTML = '<p class="md-note"><span>⚠</span><span>该数据集太短，装不下 train/val/test 三段。</span></p>'; return; }
-      box.innerHTML = '<div class="studio-split-row"><span>train ' + sp.trainLen + '</span>' +
-        '<span class="studio-split-val">val ' + sp.valLen + '</span>' +
-        '<span class="studio-split-test">test ' + sp.testLen + '</span></div>' +
-        '<p class="ds-card-sub">训练只看 train；验证集用于迭代；test 只在最终评测时解密。</p>';
-    }
-
-    function paintRecords() {
-      var list = storage.list();
-      var el = $('studioExpCount');
-      if (el) el.textContent = '本地 ' + list.length + ' 条（上限 ' + storage.MAX + '）';
-      var box = $('studioRecords');
-      if (!box) return;
-      box.innerHTML = list.length ? '<div class="lab-history">' + list.map(function (r) {
-        return '<div class="lab-history-item"><span>' + (r.kind === 'final' ? '🏁' : '🔁') + ' ' +
-          esc(r.datasetId) + ' · ' + esc(r.kind === 'final' ? '最终' : '验证') + ' · MSE ' +
-          (r.kind === 'final' ? fmt(r.testMetrics.mse) : fmt(r.valMetrics.mse)) + ' · ' + esc(r.codeHash) + '</span>' +
-          '<span><button data-code="' + esc(r.codeHash) + '">载入代码</button></span></div>';
-      }).join('') + '</div>' : '<div class="ds-empty"><strong>还没有实验记录</strong><span>每代代码的 val/test 成绩都会留档。</span></div>';
-      var btns = core.$$('[data-code]', box);
-      for (var i = 0; i < btns.length; i++) {
-        btns[i].addEventListener('click', function () {
-          var h = this.getAttribute('data-code');
-          for (var j = 0; j < list.length; j++) {
-            if (list[j].codeHash === h && list[j].code) {
-              store.state.editor.setValue(list[j].code);
-              ctx.code = list[j].code;
-              core.writeJSON(core.STORE.studioDraft, ctx.code);
-              a11y.toast('已载入代码快照 ' + h, 'ok');
-              return;
-            }
-          }
-        });
-      }
-    }
-
-    function fmt(v) { return (typeof v === 'number' && isFinite(v)) ? v.toFixed(2) : '—'; }
-
-    /** 两阶段评测：val 在 train 上拟合、val 上打分；final 在 train+val 上拟合、test 上打分。 */
-    function runPhase(kind) {
-      if (ctx.busy) return;
-      var d = findDataset($('studioDataset').value);
-      var sp = d ? splitOf(d.values.length) : null;
-      if (!sp) { a11y.toast('数据集太短，装不下三段拆分', 'err'); return; }
-      var code = store.state.editor.getValue();
-      ctx.code = code;
-      core.writeJSON(core.STORE.studioDraft, code);
-
-      var values, horizon;
-      if (kind === 'val') {
-        values = d.values.slice(0, sp.trainLen + sp.valLen);
-        horizon = sp.valLen;
-      } else {
-        values = d.values.slice();
-        horizon = sp.testLen;
-      }
-      var historyLen = values.length - horizon;
-      var history = values.slice(0, historyLen);
-      var actual = values.slice(historyLen);
-
-      var token = ++store.state.judgeToken;
-      var session = {};
-      store.state.session = session;
-      ctx.busy = true;
-      setButtons(true);
-      var report = $('studioReport');
-      if (report) report.innerHTML = '<div class="notice">正在运行（' + (kind === 'val' ? '验证集' : '最终评测') + '）…</div>';
-
-      synthAndRun(values, horizon, code, session).then(function (res) {
-        if (token !== store.state.judgeToken) return;   // 路由切换 / 新一轮：整段丢弃
-        ctx.busy = false;
-        setButtons(false);
-        if (res.refused || res.dataError || res.aborted) {
-          if (report) report.innerHTML = '<div class="notice">' + esc((res && res.reason) || (res && res.message) || '无法运行。') + '</div>';
-          return;
-        }
-        if (res.verdict === 'RE' || res.verdict === 'TLE') {
-          var errCase = (res.cases && res.cases[0]) || {};
-          if (report) report.innerHTML = '<div class="err-box">' + esc(errCase.error || res.message || '运行失败') +
-            '<div class="err-meta">位置：' + (errCase.line ? '第 ' + errCase.line + ' 行' : '行号未知') + '</div></div>';
-          if (errCase.line && store.state.editor) store.state.editor.markError(errCase.line);
-          return;
-        }
-        var pred = (res.cases[0] && res.cases[0].predictions) || [];
-        var baseline = TSJ.judge.baselines.moving_average(history.slice(), horizon, { season: d.season, freq: d.freq, datasetId: d.id, index: 0 });
-        var rec = {
-          schema: 1, id: String(Date.now()), at: Date.now(), kind: kind,
-          datasetId: d.id, season: d.season, split: [sp.trainLen, sp.valLen, sp.testLen],
-          codeHash: hashOf(code), code: code,
-          valMetrics: kind === 'val' ? { mse: TSJ.judge.metrics.mse(actual, pred) } : {},
-          testMetrics: kind === 'final' ? { mse: TSJ.judge.metrics.mse(actual, pred) } : {},
-          baselinesVal: kind === 'val' ? (res.cases[0] && res.cases[0].allBaselines) || {} : {},
-          baselinesTest: kind === 'final' ? (res.cases[0] && res.cases[0].allBaselines) || {} : {}
-        };
-        if (kind === 'final') rec.testRuns = storage.testRunCount(rec.codeHash, d.id) + 1;
-        storage.save(rec);
-        ctx.result = rec;
-        paintReport({ rec: rec, actual: actual, pred: pred, baseline: baseline, res: res, sp: sp, historyLen: historyLen, d: d });
-        paintRecords();
-        if (kind === 'final') {
-          a11y.toast('最终评测完成 · 该代码 testRuns=' + rec.testRuns, rec.testRuns > 1 ? 'warn' : 'ok');
-        } else {
-          a11y.toast('验证集评估完成，可继续迭代', 'ok');
-        }
-      }).catch(function (err) {
-        ctx.busy = false;
-        setButtons(false);
-        if (report) report.innerHTML = '<div class="notice">运行异常：' + esc((err && err.message) || String(err)) + '</div>';
-      });
-    }
-
-    /** 报告绘制委托给 app/studio-report.js（表格 + 预测图 + val/test 分界线）。 */
-    function paintReport(view) {
-      TSJ.appStudioReport.paint(view, {
-        scope: scope,
-        setChart: function (c) { ctx.chart = c; }
-      });
-    }
-
-    function setButtons(busy) {
-      var a = $('studioRunVal');
-      var b = $('studioRunFinal');
-      if (a) a.disabled = !!busy;
-      if (b) b.disabled = !!busy;
-    }
-
-    function loadDraft() {
-      return core.readJSON(core.STORE.studioDraft, STARTER, function (v) { return typeof v === 'string' && v; });
-    }
-
-    a11y.setTitle('模型工坊 · TSOJ');
-  }
-
-  TSJ.appStudio = { render: render };
 })(typeof window !== 'undefined' ? window : this);
 
 </script>
@@ -18890,7 +19618,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
  *   #/learn[/:id]         课程地图与模块页（9 模块）
  *   #/lab                 可视化实验室（受控回测）
  *   #/studio              模型工坊（自己搓模型跑完整实验）
- *   #/problem/<id>        题目页（题面 + 编辑器）
+ *   #/problem/:id         题目页（题面 + 编辑器）
  *   #/submission/<id>     提交详情（代码快照 + 逐测试点）
  *   #/submissions         提交记录（含导出 / 导入 / 清空）
  *   #/ranking             排行榜
@@ -18900,21 +19628,11 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   'use strict';
 
   var TSJ = global.TSJ || (global.TSJ = {});
-  var core = TSJ.appCore;
-  var store = TSJ.appStore;
-  var storage = TSJ.appStorage;
-  var ui = TSJ.appUi;
-  var a11y = TSJ.appA11y;
-  var views = TSJ.appViews;
-  var problem = TSJ.appProblem;
-  var pages = TSJ.appPages;
-  var library = TSJ.appLibrary;
-  var boards = TSJ.appBoards;
-  var glossary = TSJ.appGlossary;
-  var judge = TSJ.judge;
-  var lifecycle = TSJ.appLifecycle;
-  var theme = TSJ.appTheme;
-  var dashboard = TSJ.appDashboard;
+  var core = TSJ.appCore, store = TSJ.appStore, storage = TSJ.appStorage;
+  var ui = TSJ.appUi, a11y = TSJ.appA11y, views = TSJ.appViews, judge = TSJ.judge;
+  var problem = TSJ.appProblem, pages = TSJ.appPages, library = TSJ.appLibrary;
+  var boards = TSJ.appBoards, glossary = TSJ.appGlossary, theme = TSJ.appTheme;
+  var lifecycle = TSJ.appLifecycle, dashboard = TSJ.appDashboard;
   var learn = TSJ.appLearn;
   var methodDetail = TSJ.appMethodDetail;
   var lab = TSJ.appLab;
@@ -19121,6 +19839,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     });
     store.saveSubmissions();
     store.updateScoreChip();
+    if (TSJ.appAchievements) TSJ.appAchievements.onJudgeResult(p, res, state.progress);  // 成就检查（首AC/连胜/满分）
     // 题头的「历史最高 / 尚未提交」必须跟着落盘结果一起刷新，否则要手动刷新页面才更新
     if (TSJ.appProblem && typeof TSJ.appProblem.refreshBestBadge === 'function') {
       TSJ.appProblem.refreshBestBadge(p);
@@ -19142,7 +19861,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     state.appScope = rootScope;
 
     theme.init();
-    TSJ.appCmdk.install();   // Ctrl/Cmd + K 命令面板（模块内部自持监听，随页面生存）
+    TSJ.appCmdk.install();   // Ctrl/Cmd+K 命令面板（自持监听，随页面生存）
     var btn = $('#btnTheme');
     function paintTheme() {
       if (!btn) return;

@@ -751,6 +751,28 @@
   }
 
   /**
+   * P16 分位数备货带：季节朴素（典型日曲线）+ 残差经验 95 分位上沿。
+   * 点预测冠军（季节朴素）只是残差的中位数；容量规划需要分布的上沿。
+   */
+  function solQuantileBand(history, horizon, ctx) {
+    var m = ctx.season > 1 ? ctx.season : 24;
+    var TAU = 0.95;
+    var WIN = 360;
+    var n = history.length;
+    var res = [];
+    for (var i = m; i < n; i++) res.push(history[i] - history[i - m]);   // 一步季节朴素残差
+    var src = res.length > WIN ? res.slice(res.length - WIN) : res;
+    var a = src.slice().sort(function (x, y) { return x - y; });
+    var pos = TAU * (a.length - 1);
+    var lo = Math.floor(pos);
+    var hi = Math.ceil(pos);
+    var q = lo === hi ? a[lo] : a[lo] + (a[hi] - a[lo]) * (pos - lo);   // 线性插值经验分位数
+    var out = [];
+    for (var h = 0; h < horizon; h++) out.push(history[n - m + h] + q);  // 典型日曲线 + 安全余量
+    return out;
+  }
+
+  /**
    * P15 DLinear：趋势 / 季节分解，两条分支各做一次线性映射。
    * 论文里那两层是训练出来的，这里用最小二乘在历史窗口上拟合等价映射。
    */
@@ -2496,7 +2518,127 @@
         '  return out;',
         '}'
       ].join('\n')
+    },
+    /* ---------------- P16 ---------------- */
+    {
+      id: 'p16-quantile-band',
+      index: 16,
+      title: '分位数备货：点冠军不是分位数冠军',
+      difficulty: '挑战',
+      tags: ['分位数', '区间预测', '容量规划', 'pinball', '电力负荷'],
+      points: 100,
+      passScore: 60,
+      dataset: 'electricity',
+      mode: 'holdout',
+      horizon: 24,
+      metric: 'pinball',
+      baselines: ['naive', 'seasonal_naive', 'mean', 'moving_average', 'linear_trend'],
+      threshold: 0.9,
+      passRate: 18,
+
+      statement: [
+        '### 背景',
+        '',
+        '电力调度中心要决定**明天每小时备用容量**：备少了缺电（事故 + 罚款），备多了烧钱。',
+        '这类「不对称代价」的决策不能用点预测打分——**缺货与过量代价不等价**，评估要用',
+        '**Pinball 损失（τ=0.95）**：实际超出你预报的量，每单位罚 0.95；实际低于你的预报，',
+        '每单位只罚 0.05。直觉：你预报的是「95 分位安全容量」，把缺货概率压到约 5%。',
+        '',
+        '上一题（P15）的教训是「点预测冠军可以很强」；本题是它的反面——',
+        '**点冠军不是分位数冠军**。季节朴素（P3）在逐点 MSE 上很强，但它本质只预测了',
+        '残差的「中位水平」；95 分位备货需要把**不确定性的上沿**也叠上去。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`electricity`（用电负荷，小时级，单位：MW）',
+        '- 长度：720 点（30 天），日周期 24，早晚双峰 + 周末低谷 + 偶发尖峰',
+        '- 评估方式：留出法。前 696 点作为 `history`，最后 24 点（明天全天）作为测试，只评测 1 次',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**Pinball(τ=0.95)**（越小越好）',
+        '- 对照基线：`naive` / `seasonal_naive` / `mean` / `moving_average` / `linear_trend`——',
+        '  它们都是**点预测**被直接当备货水平使用，这正是要你打败的「错误做法」',
+        '- 误差比 `ratio = 你的 Pinball / 最优基线 Pinball`；`ratio <= 0.5` 得 100 分，',
+        '  `ratio = 0.9` 恰好 60 分（通过线），`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '昨天同一小时的负荷（季节朴素）描述了「典型明天」，但它一半概率偏低——',
+        '尖峰与上行噪声全在你预报线的上方，每一点都在按 0.95 倍罚款。',
+        '想一想：把历史残差（实际 − 季节朴素）排序，第 95 百分位在哪？把这段「安全余量」',
+        '加到典型日曲线上会发生什么？'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 696 个历史观测（MW）。',
+      outputSpec: '`number[]` —— 长度必须为 24，每个元素是当小时的 95 分位备货水平（MW）。',
+
+      hints: [
+        '先交一次「季节朴素」本身（`history[n-24+h]`），看分数——它就是点冠军的下场（约 50 分）。',
+        '计算一步季节朴素残差 `r_t = history[t] - history[t-24]`（从 t=24 起）。这串数就是「如果明天用典型日曲线，会错多少」的历史样本。',
+        '把残差排序取 95 分位（经验分位数 + 线性插值），只取最近 360 个残差（近期误差更有代表性）。',
+        '预报 = 典型日曲线 + 安全余量：`history[n-24+h] + q95`。它不再是点预测，而是「明天每小时的 95 分位容量」。'
+      ],
+
+      guide: [
+        {
+          title: '先看点冠军的下场',
+          text: '示例模板就是季节朴素本身。点「运行」：约 50 分 WA。' +
+            '它逐点 MSE 打遍天下（P3 靠它满分），但在 τ=0.95 的备货评分里，它有一半天数在「缺货」。'
+        },
+        {
+          title: '把误差分布晒出来',
+          text: '对历史算 r_t = y_t − y_{t−24}（昨日同小时误差）。这串数就是「如果明天用典型日曲线，会错多少」的历史样本——' +
+            '大部分在 0 附近，少数大正值是尖峰日，少数负值是低谷日。'
+        },
+        {
+          title: '加上 95 分位安全余量（复制这段）',
+          text: '把编辑器整个替换为下面这段：',
+          code: [
+            'function predict(history, horizon, ctx) {',
+            '  var m = ctx.season > 1 ? ctx.season : 24;   // 日周期 24',
+            '  var TAU = 0.95;                             // 95 分位（与评分口径一致）',
+            '  var WIN = 360;                              // 只用最近 360 个残差',
+            '  var n = history.length;',
+            '  var res = [];',
+            '  for (var i = m; i < n; i++) res.push(history[i] - history[i - m]);',
+            '  var src = res.length > WIN ? res.slice(res.length - WIN) : res;',
+            '  var a = src.slice().sort(function (x, y) { return x - y; });',
+            '  var pos = TAU * (a.length - 1);',
+            '  var lo = Math.floor(pos), hi = Math.ceil(pos);',
+            '  var q = lo === hi ? a[lo] : a[lo] + (a[hi] - a[lo]) * (pos - lo);',
+            '  var out = [];',
+            '  for (var h = 0; h < horizon; h++) out.push(history[n - m + h] + q);',
+            '  return out;',
+            '}'
+          ].join('\n')
+        },
+        {
+          title: '运行 → 提交 → 体会「上移预报线」的代价结构',
+          text: '运行应得约 100 分（比值 ≤ 0.5 满分）。然后做两个实验：把 TAU 改成 0.5（等于点预测），分数崩回 50；' +
+            '把 TAU 改成 0.99，分数也不涨——过度保险开始被 0.05 倍的冗余成本反噬。**最优 τ 由代价结构决定**，这就是分位数预测的全部秘密。'
+        }
+      ],
+
+      solution: toPredictSource(solQuantileBand),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  // 洞：把「点预测冠军」（季节朴素）直接当 95 分位备货水平。',
+        '  // 它只是残差的中位数——一半的天数会在你的预报线之上缺货。',
+        '  var m = ctx.season > 1 ? ctx.season : 24;',
+        '  var n = history.length;',
+        '  var out = [];',
+        '  for (var h = 0; h < horizon; h++) {',
+        '    out.push(history[n - m + h]);',
+        '  }',
+        '  return out;',
+        '}'
+      ].join('\n')
     }
+
   ];
 
   /* ================================================================== *

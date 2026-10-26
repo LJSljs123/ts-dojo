@@ -625,3 +625,35 @@
 /* 左栏编辑器高度匹配题目页（编辑器自身已有样式，这里只收紧结果卡间距） */
 #studioReport .notice { margin: 8px 0; }
 #studioReport .err-box { margin: 8px 0; }
+
+/* 模型工坊：CSV 上传行 */
+.studio-csv-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: var(--v3-space-3);
+}
+.studio-csv-row .ds-card-sub { margin: 0; }
+.studio-csv-btn { cursor: pointer; }
+
+/* 成就徽章行（工作台） */
+.wk-ach-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wk-ach {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--v3-fs-xs);
+  color: var(--v3-muted);
+  background: color-mix(in srgb, var(--v3-muted) 10%, transparent);
+  border: 1px solid transparent;
+  cursor: default;
+}
+.wk-ach-on {
+  color: var(--v3-warn);
+  background: color-mix(in srgb, var(--v3-warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--v3-warn) 38%, transparent);
+  font-weight: 600;
+}

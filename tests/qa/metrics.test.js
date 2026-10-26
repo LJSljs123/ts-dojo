@@ -22,8 +22,8 @@ function closeTo(actual, expected, msg, eps) {
   );
 }
 
-test('指标集合包含且仅包含文档声明的 5 个指标', () => {
-  assert.deepEqual(Object.keys(M).sort(), ['mae', 'mape', 'mse', 'rmse', 'smape']);
+test('指标集合包含且仅包含文档声明的 6 个指标（v3.7 增 pinball）', () => {
+  assert.deepEqual(Object.keys(M).sort(), ['mae', 'mape', 'mse', 'pinball', 'rmse', 'smape']);
   for (const k of Object.keys(M)) assert.equal(typeof M[k], 'function', k + ' 应为函数');
 });
 
@@ -135,4 +135,27 @@ test('指标对完美预测返回 0', () => {
   assert.equal(M.mae(a, a.slice()), 0);
   closeTo(M.mape(a, a.slice()), 0, 'mape 完美');
   closeTo(M.smape(a, a.slice()), 0, 'smape 完美');
+});
+
+test('pinball：对称点（τ=0.95 备货语义）与手算校验', () => {
+  const actual = [10, 10, 10, 10];
+  // 全部低估 2 单位 → 每点罚 0.95×2
+  assert.ok(Math.abs(M.pinball(actual, [8, 8, 8, 8]) - 1.9) < 1e-9);
+  // 全部高估 2 单位 → 每点罚 0.05×2
+  assert.ok(Math.abs(M.pinball(actual, [12, 12, 12, 12]) - 0.1) < 1e-9);
+  // 精确命中 → 0
+  assert.equal(M.pinball(actual, actual), 0);
+  // 混合：两点低估 1（各罚 0.95）、两点高估 1（各罚 0.05）→ (0.95 + 0.05) × 2 / 4 = 0.5
+  assert.ok(Math.abs(M.pinball(actual, [9, 11, 9, 11]) - 0.5) < 1e-9);
+  // 空数组 → NaN；长度按短者截断
+  assert.ok(Number.isNaN(M.pinball([], [])));
+  assert.ok(Math.abs(M.pinball([10, 10], [9]) - 0.95) < 1e-9);
+});
+
+test('pinball：不对称性（低估惩罚是高估的 19 倍，τ=0.95 vs 0.05）', () => {
+  const a = [100];
+  assert.ok(M.pinball(a, [90]) === M.pinball(a, [90]));
+  const under = M.pinball(a, [90]);   // 缺货 10
+  const over = M.pinball(a, [110]);   // 冗余 10
+  assert.ok(Math.abs(under / over - 19) < 1e-9, '低估/高估代价比应为 19：' + (under / over));
 });
