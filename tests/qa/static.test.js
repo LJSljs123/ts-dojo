@@ -131,6 +131,7 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/app/a11y.js',
     'assets/js/app/theme.js',
     'assets/js/app/views.js',
+    'assets/js/app/problem-extras.js',
     'assets/js/app/problem.js',
     'assets/js/app/pages.js',
     'assets/js/app/lab-storage.js',

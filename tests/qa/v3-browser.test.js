@@ -38,12 +38,40 @@ const P18 = (() => {
   };
 })();
 
-const COURSE_COUNT = (() => {
+/**
+ * 内容层契约：课程数 + P18 的相关链接来源。
+ *
+ * 必须一次加载算完：loadEngine({fresh:true}) 只清 datasets/problems/judge 的缓存，
+ * methods.js / courses.js 仍是缓存命中——再调一次 fresh 会把 global.TSJ 删掉，
+ * 而缓存的模块不会重新挂载，TSJ.methods 就变成 undefined。
+ */
+const CONTENT = (() => {
   global.window = global;
   loadEngine({ fresh: true });
   require('../../assets/js/methods.js');
   require('../../assets/js/content/courses.js');
-  return TSJ.courses.length;
+  const pid = 'p18-channel-mix';
+  const methods = (TSJ.methods || []).filter((m) => m.practice === pid);
+  const courses = (TSJ.courses || []).filter(
+    (c) => ((c.exercise && c.exercise.problemIds) || []).indexOf(pid) >= 0
+  );
+  return {
+    courseCount: (TSJ.courses || []).length,
+    // 反向样本：P18 没有课程，课程链接那一支得另找一道挂了课的题来验
+    courseProblem: (() => {
+      for (const c of TSJ.courses || []) {
+        const ids = (c.exercise && c.exercise.problemIds) || [];
+        if (ids.length) return { pid: ids[0], courseId: c.id };
+      }
+      return null;
+    })(),
+    rel: {
+      pid,
+      methods: methods.map((m) => m.id),
+      methodName: methods.length ? methods[0].name : '',
+      courses: courses.map((c) => c.id)
+    }
+  };
 })();
 
 let page = null;
@@ -234,7 +262,7 @@ test('课程模块数量与内容层一致', async (t) => {
   if (!page) return t.skip('无浏览器');
   await goto('#/learn');
   const cards = await page.evaluate('document.querySelectorAll(".course-module").length');
-  assert.equal(cards, COURSE_COUNT, '课程地图模块数与内容层不一致');
+  assert.equal(cards, CONTENT.courseCount, '课程地图模块数与内容层不一致');
 });
 
 test('实验室：切换方法不再把整个表单重置回默认（v3.2 P1 回归）', async (t) => {
@@ -586,4 +614,88 @@ test('P18 数据预览：两路分量各画一张小图，周期标注与数据�
   assert.equal(r.mainN, P18.len, '总量图的点数不应被分量图影响');
   assert.ok(r.scrollW <= r.clientW + 1,
     '分量图撑破了图表卡片（' + r.scrollW + ' > ' + r.clientW + '）');
+});
+
+test('题目页「继续深入」：回到方法卡与课程（方法库能跳题目，这里要有回程路）', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  assert.ok(CONTENT.rel.methods.length, 'p18 没有关联方法卡，这条用例就失去意义');
+
+  await goto('#/problem/' + CONTENT.rel.pid);
+  const raw = await page.evaluate(`(function(){
+    var box = document.querySelector('#view .rel-box');
+    var chips = box ? box.querySelectorAll('.rel-chip') : [];
+    var out = [];
+    for (var i = 0; i < chips.length; i++) {
+      out.push({ text: chips[i].textContent, href: chips[i].getAttribute('href') });
+    }
+    var label = box ? box.querySelector('.rel-label') : null;
+    return JSON.stringify({ has: !!box, label: label ? label.textContent : '', chips: out });
+  })()`);
+  const r = JSON.parse(raw);
+  console.log('    继续深入：' + r.chips.map((c) => c.text + ' → ' + c.href).join(' · '));
+
+  assert.ok(r.has, '题目页缺少「继续深入」区块');
+  assert.equal(r.label, '继续深入');
+  const hrefs = r.chips.map((c) => c.href);
+  for (const id of CONTENT.rel.methods) {
+    assert.ok(hrefs.indexOf('#/methods/' + id) >= 0, '缺少方法卡链接：' + id);
+  }
+  for (const id of CONTENT.rel.courses) {
+    assert.ok(hrefs.indexOf('#/learn/' + id) >= 0, '缺少课程链接：' + id);
+  }
+
+  // 点一下：必须真的走 hash 路由并渲染出方法详情，而不是只改地址栏
+  await page.evaluate('document.querySelector("#view .rel-box .rel-chip").click()');
+  await sleep(500);
+  const after = await page.evaluate('(function(){return {hash: location.hash, text: document.querySelector("#view").innerText || ""};})()');
+  assert.equal(after.hash, '#/methods/' + CONTENT.rel.methods[0], '点击后 hash 应指向方法卡');
+  assert.ok(after.text.indexOf(CONTENT.rel.methodName) >= 0, '跳转后没有渲染出方法详情：' + CONTENT.rel.methodName);
+});
+
+test('题目页「继续深入」：挂了课程的题要给出课程链接', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  const sample = CONTENT.courseProblem;
+  assert.ok(sample, '没有任何课程挂题目，课程链接这一支无从验证');
+
+  await goto('#/problem/' + sample.pid);
+  const hrefs = await page.evaluate(
+    '[].map.call(document.querySelectorAll("#view .rel-box .rel-chip"), function(a){return a.getAttribute("href");})'
+  );
+  console.log('    ' + sample.pid + ' 的相关链接：' + JSON.stringify(hrefs));
+  assert.ok(hrefs.indexOf('#/learn/' + sample.courseId) >= 0,
+    '缺少课程链接 #/learn/' + sample.courseId + '（实际 ' + JSON.stringify(hrefs) + '）');
+  assert.ok(
+    await page.evaluate('!!document.querySelector("#view .rel-box .rel-chip-course")'),
+    '课程 chip 应有独立的样式类（与纯文字方法 chip 区分）'
+  );
+
+  // m0 的标题很长（「零基础第一课：从看懂一条曲线到写出第一个 predict」），窄屏最容易被撑破
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    width: 375, height: 812, deviceScaleFactor: 1, mobile: true
+  });
+  try {
+    const narrow = await page.evaluate(
+      `(function(){
+        var box = document.querySelector('#view .rel-box');
+        var chips = box.querySelectorAll('.rel-chip');
+        var maxRight = 0;
+        for (var i = 0; i < chips.length; i++) {
+          var r = chips[i].getBoundingClientRect();
+          if (r.right > maxRight) maxRight = r.right;
+        }
+        return {
+          scroll: document.documentElement.scrollWidth,
+          client: document.documentElement.clientWidth,
+          maxRight: Math.round(maxRight),
+          boxRight: Math.round(box.getBoundingClientRect().right)
+        };
+      })()`
+    );
+    console.log('    375px 相关链接：scrollWidth=' + narrow.scroll + ' · chip 最右 ' + narrow.maxRight);
+    assert.equal(narrow.scroll, narrow.client, '375px 下页面出现横向滚动（相关链接撑破）');
+    assert.ok(narrow.maxRight <= narrow.boxRight + 1,
+      'chip 溢出了容器：' + narrow.maxRight + ' > ' + narrow.boxRight);
+  } finally {
+    await page.send('Emulation.clearDeviceMetricsOverride');
+  }
 });

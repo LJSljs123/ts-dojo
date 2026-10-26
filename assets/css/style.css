@@ -383,6 +383,31 @@ body.dragging { user-select: none; cursor: col-resize; }
 .part-cell .part-name { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
 .part-chart { display: block; width: 100%; }
 
+/* 继续深入：本题对应的方法卡与课程（方法库能跳题目，这里是回程路） */
+.rel-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.rel-label { font-size: 11.5px; color: var(--muted); }
+.rel-chip {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 11px;
+  transition: all 0.14s ease;
+}
+.rel-chip:hover { border-color: var(--line-2); color: var(--text); background: var(--panel-2); }
+.rel-chip-course { color: var(--accent); border-color: rgba(45, 212, 191, 0.35); }
+
 /* 提示折叠 */
 .hints {
   margin-top: 18px;

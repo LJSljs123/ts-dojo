@@ -114,6 +114,8 @@ const CLAIMS = [
   { re: /(\d+) 条数据(?=[、，])/g, of: (n) => n.datasets, label: '数据集数（实验室下拉）' },
   { re: /(\d+) 条合成数据集/g, of: (n) => n.datasets, label: '合成数据集数（目录树）' },
   { re: /(\d+) 个脚本/g, of: (n) => n.scripts, label: '脚本数' },
+  { re: /(\d+) 个 `<script src>`/g, of: (n) => n.scripts, label: '脚本数（script 标签）' },
+  { re: /(\d+) 个 js/g, of: (n) => n.scripts, label: '脚本数（目录树）' },
   { re: /(\d+) 条用例/g, of: (n) => n.tests, label: 'QA 用例数' },
   { re: /(\d+) 课程(?= \/)/g, of: (n) => n.courses, label: '课程模块数（自测表）' },
   { re: /(\d+) 方法详情/g, of: (n) => n.methods, label: '方法详情页数' },

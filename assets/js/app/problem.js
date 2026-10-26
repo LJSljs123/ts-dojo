@@ -24,9 +24,7 @@
   var MODE_LABEL = core.MODE_LABEL;
   var md = ui.md;
   var mdInline = ui.mdInline;
-
-  /** 分量预览只画最近这么多点：730 点挤进 300px，周节律会糊成一条实心带。140 = 20 个整周。 */
-  var PART_WINDOW = 140;
+  var extras = TSJ.appProblemExtras;
 
   /* ---------- 1. 题目页 ---------- */
   /** 渲染题目详情页（左题面 / 右编辑器）。 */
@@ -62,10 +60,7 @@
       }
     }
     // 分量小图：只画形状，不挂 hover（总量图才是交互主体）
-    var strip = $('.parts-strip', view);
-    if (strip && ds.parts && typeof TSJ.drawParts === 'function') {
-      TSJ.drawParts(strip, ds.parts, { testStart: ds.values.length - p.horizon, window: PART_WINDOW });
-    }
+    extras.paintParts(view, p, ds);
 
     /** 保存草稿（输入走防抖，Ctrl+S 直接调用）。 */
     function saveDraft() {
@@ -200,15 +195,7 @@
     }
     html.push('      <span class="legend-item"><i class="legend-dot" style="border-top-color:var(--v3-chart-actual)"></i>测试集真实值</span>');
     html.push('      <span class="legend-item"><i class="legend-dot dash" style="border-top-color:var(--v3-chart-pred)"></i>你的预测</span>\n    </div>');
-    // 分量预览（P18）：总量图上两个周期是叠在一起的，拆开才看得见各自的节律
-    if (ds.parts && ds.parts.length) {
-      var cells = ds.parts.map(function (x, i) {
-        return '<div class="part-cell"><div class="part-name">' + esc(x.name) + ' · 周期 ' + x.period +
-          '</div><canvas class="chart-canvas part-chart" data-part="' + i + '" height="120"></canvas></div>';
-      });
-      html.push('    <div class="parts-head">分量预览 · 最近 ' + PART_WINDOW + ' 天（右端高亮为测试区间）</div>' +
-        '<div class="parts-strip">' + cells.join('') + '</div>');
-    }
+    html.push(extras.markupParts(ds));
     html.push('  </div>');
 
     html.push('  <div class="md" style="margin-top:14px">\n    <h3 class="md-h">输入</h3><p class="md-p">' + mdInline(p.inputSpec) + '</p>');
@@ -237,6 +224,7 @@
       html.push('    <div class="guide-body">' + steps.join('\n') + '</div>\n  </details>');
     }
 
+    html.push(extras.markupRelated(p));
     html.push('  <div id="solutionHost"></div>\n</section>');
 
     /* ---------- 分隔条 ---------- */
