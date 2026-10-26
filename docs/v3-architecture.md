@@ -305,3 +305,26 @@ TSJ.drawSeries(canvas, {
 2. **几何信息要带上标记索引**。`canvas.__tsjGeom.markers` 是 `{ [index]: 1 }` 的查找表，供 hover 层在 tooltip 首行加「促销日」；`__tsjChart.markers` 保留原始数组供测试与调试读取。
 
 标记的绘制位置在折线之后、预测虚线之前：压在历史线上保证可见，又不会被预测虚线覆盖。颜色取 `--v3-warn`（深色 `#f5b942` / 浅色 `#b45309`），与三条线型图例（历史 / 真实值 / 预测）区分开。
+
+### 12.8 文档口径的唯一来源
+
+README 里的数字曾经是手写的，每加一道题就漂一次。现在口径只在一处计算：`tools/numbers.js#compute()`。
+
+```bash
+node tools/numbers.js     # 打印口径表 + 列出 README 里对不上的行号（不一致时 exit 1）
+```
+
+`tests/qa/docs-numbers.test.js` 复用同一个 `compute()` 与同一张 `CLAIMS` 表，把「数字一致」变成断言。三层结构：
+
+| 层 | 职责 | 为什么这样分 |
+|---|---|---|
+| `compute()` | 从源码现算（加载 datasets / problems / methods / courses / glossary / lab config，解析 index.html 的 script 标签，统计 `tests/qa/*.test.js` 的 `^test(`，读单文件版体积） | 只算不改，可被工具与测试同时复用，不存在两份实现 |
+| `CLAIMS` | 「哪句话里的数字应该等于哪个口径」的正则表 | 显式列出，不用宽泛匹配去猜，避免误报常量（如「最多 120 条提交记录」） |
+| `checkReadme()` | 逐条比对，返回 `{claim, line, text, expected}` | 失败信息直接给行号与应有值，改完能自检 |
+
+两条设计取舍：
+
+1. **不做自动改写**。工具只报告，不改 README。正文里的数字嵌在句子里（「17 道题（入门→挑战）」），正则替换很容易把句子改坏；让人看一眼再改更安全。
+2. **体积允许 ±3KB**。单文件版每次重建会浮动几百字节，精确相等会让每次构建都红。
+
+用例数这一项有个自指问题：`docs-numbers.test.js` 自己也被计入。这是有意的——加测试就必须同步 README 的「N 条用例」，否则红。规则简单，代价是每次加用例要多跑一次 `node tools/numbers.js`。
