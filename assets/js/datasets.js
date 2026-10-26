@@ -8,6 +8,9 @@
  *
  * 每条数据集结构：
  *   { id, name, unit, freq, season, desc, values: number[] }
+ * 可选字段（由 build() 的返回对象带上）：
+ *   promoDays: number[]   外生事件日历（绝对下标）
+ *   parts: Array<{name, period, values}>   分量序列（与 values 同长度，逐点相加等于 values）
  *
  * 挂载点：window.TSJ.datasets（数组），并提供 TSJ.findDataset(id)
  */
@@ -246,6 +249,42 @@
   }
 
   /**
+   * channels_daily：730 点日销量，由两个周期不同的渠道相加而成。
+   * 形态：门店（周周期 + 缓慢增长）+ 企业（30 天结算周期 + 更快增长）。
+   * 用途：聚合序列把两个周期叠成一个「看起来还算规律」的形状，单一周期的模型
+   *       只能拟合其中一部分；分量以 parts 字段给出，才能各自建模再相加。
+   * @param {Object} rng 随机源
+   * @returns {{values: number[], parts: Array<{name: string, period: number, values: number[]}>}}
+   */
+  function buildChannelsDaily(rng) {
+    var n = 730;
+    // 周末约为工作日的 1.6 倍：周节律必须足够强，否则「用 30 天周期」也能歪打正着
+    var weekly = [0.86, 0.818, 0.874, 0.944, 1.126, 1.294, 1.196];   // 周一..周日
+    // 企业渠道的 30 天结算周期：27 天平段 + 月末 3 天集中冲量（约 2.2 倍平段）。
+    // 峰要窄：宽峰会变成缓坡，Holt-Winters 的水平项能顺手吸收掉，题目就失去区分度。
+    var monthShape = [];
+    for (var k = 0; k < 30; k++) monthShape.push(k <= 26 ? 0.85 : 1.9);
+    var store = [];
+    var corp = [];
+    for (var t = 0; t < n; t++) {
+      var ls = 900 * (1 + 0.0006 * t);
+      store.push(round(ls * weekly[t % 7] * (1 + rng.normal() * 0.03), 1));
+      var lc = 420 * (1 + 0.001 * t);
+      corp.push(round(lc * monthShape[t % 30] * (1 + rng.normal() * 0.04), 1));
+    }
+    // 总量按「已取整的分量之和」再取整，保证 values[i] === parts[0][i] + parts[1][i]（误差 < 1e-9）
+    var values = [];
+    for (t = 0; t < n; t++) values.push(round(store[t] + corp[t], 1));
+    return {
+      values: values,
+      parts: [
+        { name: '门店渠道', period: 7, values: store },
+        { name: '企业渠道', period: 30, values: corp }
+      ]
+    };
+  }
+
+  /**
    * sunspot：300 点年级太阳黑子相对数。
    * 形态：约 11 年准周期（周期本身缓慢变化）+ 振幅调制（大小年）+ 非对称波形。
    * @param {Object} rng 随机源
@@ -449,6 +488,16 @@
       seed: 515151,
       build: buildRetailDaily,
       desc: '730 点日销量：缓慢增长 + 周季节（周末高）+ 不定期促销尖峰（间隔 9–13 天，+55%~65%）+ 2.5% 噪声；促销日以 promoDays 明确给出，是已知的外生日历。'
+    },
+    {
+      id: 'channels_daily',
+      name: '渠道日销量（门店 + 企业）',
+      unit: '件',
+      freq: 'D',
+      season: 7,
+      seed: 626262,
+      build: buildChannelsDaily,
+      desc: '730 点日销量：门店渠道（周周期 + 缓慢增长 + 3% 噪声）与企业渠道（30 天结算周期、月末三天冲量、增长更快 + 4% 噪声）之和；两个渠道以 parts 字段分别给出，period 分别为 7 / 30。'
     }
   ];
 
@@ -467,6 +516,13 @@
     };
     // 可选：外生事件日历（目前只有 retail_daily 提供）
     if (!Array.isArray(built) && built.promoDays) ds.promoDays = built.promoDays.slice();
+    // 可选：分量序列（目前只有 channels_daily 提供）。period 是各分量自己的周期，
+    // 与 dataset.season（聚合层的标注周期）不是一回事。
+    if (!Array.isArray(built) && built.parts) {
+      ds.parts = built.parts.map(function (p) {
+        return { name: p.name, period: p.period, values: p.values.slice() };
+      });
+    }
     return ds;
   });
 

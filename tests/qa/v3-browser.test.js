@@ -24,6 +24,20 @@ const P17 = (() => {
   return { id: p.id, horizon: p.horizon, promos: ds.promoDays.length, label: p.markerLabel };
 })();
 
+/** P18 的分量契约：parts 长度、各自周期、序列长度（分量图必须与数据一一对应）。 */
+const P18 = (() => {
+  const e = loadEngine({ fresh: true });
+  const p = e.problems.find((x) => x.id === 'p18-channel-mix');
+  const ds = e.datasets.find((d) => d.id === p.dataset);
+  return {
+    id: p.id,
+    len: ds.values.length,
+    horizon: p.horizon,
+    parts: ds.parts.length,
+    periods: ds.parts.map((x) => x.period)
+  };
+})();
+
 const COURSE_COUNT = (() => {
   global.window = global;
   loadEngine({ fresh: true });
@@ -520,4 +534,56 @@ test('P17 hover 到促销日：tooltip 首行标出「促销日」', async (t) =
   console.log('    普通日 tooltip：' + JSON.stringify(r.plain));
   assert.match(r.marked[0], /促销日/, '促销日的 tooltip 首行应标出「促销日」');
   assert.doesNotMatch(r.plain[0], /促销日/, '非促销日不应被标成促销日');
+});
+
+/* ================================================================== *
+ * 分量预览：P18 的「总量 = 两个渠道之和」必须能在页面上拆开看
+ * ================================================================== */
+
+test('P18 数据预览：两路分量各画一张小图，周期标注与数据一致', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await goto('#/problem/' + P18.id);
+
+  const raw = await page.evaluate(`(function(){
+    var strip = document.querySelector('#view .parts-strip');
+    var canvases = strip ? strip.querySelectorAll('.part-chart') : [];
+    var parts = [];
+    for (var i = 0; i < canvases.length; i++) {
+      var g = canvases[i].__tsjGeom || {};
+      var nameEl = canvases[i].parentNode.querySelector('.part-name');
+      parts.push({
+        name: nameEl ? nameEl.innerText : '',
+        n: g.n || 0,
+        testStart: g.testStart,
+        painted: canvases[i].getAttribute('data-tsj-chart') === '1'
+      });
+    }
+    var card = document.querySelector('#view .chart-card');
+    var main = (document.querySelector('#view #seriesChart') || {}).__tsjGeom || {};
+    return JSON.stringify({
+      count: canvases.length,
+      parts: parts,
+      mainN: main.n || 0,
+      scrollW: card ? card.scrollWidth : 0,
+      clientW: card ? card.clientWidth : 0
+    });
+  })()`);
+  const r = JSON.parse(raw);
+  console.log('    分量图 ' + r.count + ' 张：' +
+    r.parts.map((p) => p.name + '(n=' + p.n + ')').join(' · '));
+
+  assert.equal(r.count, P18.parts, '分量小图数量应等于数据集 parts 长度');
+  for (let i = 0; i < r.parts.length; i++) {
+    const p = r.parts[i];
+    assert.ok(p.painted, '第 ' + (i + 1) + ' 张分量图没有画（drawParts 未生效）');
+    // 窗口上限是设计约束：730 点挤进 300px 会把周节律糊成一条实心带，「拆开看」就没意义了
+    assert.ok(p.n > 0 && p.n <= 200, '第 ' + (i + 1) + ' 张分量图窗口过大（n=' + p.n + '），节律会被压平');
+    assert.ok(p.n >= 60, '第 ' + (i + 1) + ' 张分量图窗口过小（n=' + p.n + '），看不到完整周期');
+    assert.equal(p.testStart + P18.horizon, p.n, '测试区间高亮带应贴在分量图右端');
+    assert.match(p.name, new RegExp('周期 ' + P18.periods[i]),
+      '第 ' + (i + 1) + ' 张分量图的标题应标出它自己的周期');
+  }
+  assert.equal(r.mainN, P18.len, '总量图的点数不应被分量图影响');
+  assert.ok(r.scrollW <= r.clientW + 1,
+    '分量图撑破了图表卡片（' + r.scrollW + ' > ' + r.clientW + '）');
 });

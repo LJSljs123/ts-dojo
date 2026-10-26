@@ -454,6 +454,17 @@
       url: 'https://doi.org/10.1016/j.eswa.2009.04.052',
       checkedAt: '2026-10-26',
       note: '促销协变量与促销期预测的系统比较：无促销期简单时序难被击败，有促销期显式促销特征提升最大。'
+    },
+    {
+      id: 'hyndman-2011-hier',
+      title: 'Optimal combination forecasts for hierarchical time series',
+      authors: 'Rob J. Hyndman, Roman A. Ahmed, George Athanasopoulos, Han Lin Shang',
+      year: 2011,
+      venue: 'Computational Statistics & Data Analysis 55(9)',
+      status: 'journal',
+      url: 'https://doi.org/10.1016/j.csda.2011.03.006',
+      checkedAt: '2026-10-26',
+      note: '层级预测的系统框架：把自底向上 / 自顶向下与最优调和（MinT）放在同一个回归视角下比较，并给出各自成立的条件。'
     }
   ];
 

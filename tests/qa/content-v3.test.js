@@ -19,9 +19,9 @@ require('../../assets/js/content/method-details.js');
 require('../../assets/js/content/glossary.js');
 require('../../assets/js/content/content.js');
 
-/** 内容规模契约：v3.7 扩充后为 47 方法（14/3/14/10/6 五层）+ 9 课程 + 术语表。 */
-const METHOD_COUNT = 47;
-const TIER_COUNTS = { classic: 14, competition: 3, deep: 14, foundation: 10, eval: 6 };
+/** 内容规模契约：v3.7 扩充后为 48 方法（15/3/14/10/6 五层）+ 9 课程 + 术语表。 */
+const METHOD_COUNT = 48;
+const TIER_COUNTS = { classic: 15, competition: 3, deep: 14, foundation: 10, eval: 6 };
 
 test('内容完整性：9 课程（含 m0 零基础课）/ 47 方法详情 / 引用全部通过 validate()', () => {
   assert.equal(TSJ.courses.length, 9);

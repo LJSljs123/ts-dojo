@@ -268,6 +268,22 @@
       runnable: true,
       practice: 'p17-promo-covariate'
     },
+    {
+      id: 'bottom-up',
+      name: '自底向上聚合',
+      title: 'Optimal combination forecasts for hierarchical time series',
+      venue: 'Computational Statistics & Data Analysis（2011）',
+      year: 2011,
+      authors: 'Hyndman, Ahmed, Athanasopoulos & Shang',
+      tier: 'classic',
+      tags: ['聚合', '分解', '多周期', '层级预测'],
+      idea: '聚合序列会把不同分量的周期叠成一个不可分的形状：单一周期的模型只能拟合其中一部分。先在各分量上按各自周期建模，再相加回聚合层（自底向上），往往比在聚合层直接建模更准。',
+      formula: 'y_hat_总,t = Σ_i y_hat_i,t ，每个分量用各自的周期 m_i',
+      when: '有渠道 / 品类 / 地区拆分，且各层动态不同（周期不同、增长率不同）；聚合后形态复杂到单模型拟合不了。',
+      limit: '分量噪声大时求和会放大误差；要求各分量历史齐全；自底向上并不保证方差最优，更一般的做法是最优调和（MinT）。',
+      runnable: true,
+      practice: 'p18-channel-mix'
+    },
 
     /* ================= competition：竞赛级方法 ================= */
     {

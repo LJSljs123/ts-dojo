@@ -12,7 +12,10 @@
  * 供 attachChartHover 做「最近索引」反查 —— 这样 hover 逻辑不需要知道任何绘制细节。
  *
  * 特性：devicePixelRatio 适配、水平网格线 + y 轴刻度、虚线预测、窗口 resize 自动重绘、指针悬停十字线 + tooltip。
- * 挂载点：window.TSJ.drawSeries / TSJ.attachChartHover
+ * drawParts(container, parts, { testStart, height })
+ *   - 把聚合序列拆回各分量，各画一张小图（P18 的「总量里两个周期」只能拆开看）
+ *
+ * 挂载点：window.TSJ.drawSeries / TSJ.drawParts / TSJ.attachChartHover
  */
 (function (global) {
   'use strict';
@@ -120,6 +123,41 @@
     canvas.__tsjChart = options;
     canvas.setAttribute('data-tsj-chart', '1');
     paint(canvas, options);
+  }
+
+  /**
+   * 画一组「分量预览图」：把聚合序列拆回各分量，每路一张小图。
+   *
+   * 用于 P18 这类「总量里藏了两个周期」的题目：总量图上两个周期叠在一起，
+   * 只有拆开才看得见。canvas 由题目模板渲染（class="part-chart"，data-part 是分量下标），
+   * 这里只按顺序画——保持「谁生成 DOM、谁负责画」的分工不变。
+   *
+   * @param {Element} container 容器（内含若干 .part-chart canvas）
+   * @param {Array<{name:string, period:number, values:number[]}>} parts 分量
+   * @param {Object} [opts] { testStart, height, window }
+   *   window > 0 时只画最近 window 个点：730 点挤进 300px 会把周节律糊成一条实心带，
+   *   「拆开看」就失去意义了。testStart 会同步左移，高亮带仍落在正确位置。
+   */
+  function drawParts(container, parts, opts) {
+    if (!container || !parts || !container.querySelectorAll) return;
+    var o = opts || {};
+    var canvases = container.querySelectorAll('.part-chart');
+    for (var i = 0; i < canvases.length; i++) {
+      var canvas = canvases[i];
+      var part = parts[Number(canvas.getAttribute('data-part'))];
+      if (!part) continue;
+      var values = part.values;
+      var from = 0;
+      if (o.window > 0 && values.length > o.window) {
+        from = values.length - o.window;
+        values = values.slice(from);
+      }
+      drawSeries(canvas, {
+        values: values,
+        testStart: Math.max(0, (o.testStart || 0) - from),
+        height: o.height || 120
+      });
+    }
   }
 
   /**
@@ -609,12 +647,14 @@
   }
 
   TSJ.drawSeries = drawSeries;
+  TSJ.drawParts = drawParts;
   TSJ.attachChartHover = attachChartHover;
   TSJ.redrawCharts = redrawAll;
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       drawSeries: drawSeries,
+      drawParts: drawParts,
       attachChartHover: attachChartHover,
       redrawCharts: redrawAll
     };

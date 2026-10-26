@@ -547,6 +547,13 @@ body.dragging { user-select: none; cursor: col-resize; }
 /* 事件标记（促销日）：实心圆点，与三种线型图例区分开 */
 .legend-dot.dot-mark { width: 7px; height: 7px; border: 0; border-radius: 50%; background: var(--v3-warn); }
 
+/* 分量预览（P18）：总量图下方并排的小图，窄屏自动堆叠 */
+.parts-head { font-size: 11px; color: var(--muted); margin-top: 10px; }
+.parts-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 4px; }
+.part-cell { min-width: 0; }
+.part-cell .part-name { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.part-chart { display: block; width: 100%; }
+
 /* 提示折叠 */
 .hints {
   margin-top: 18px;
@@ -2962,6 +2969,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
  *
  * 每条数据集结构：
  *   { id, name, unit, freq, season, desc, values: number[] }
+ * 可选字段（由 build() 的返回对象带上）：
+ *   promoDays: number[]   外生事件日历（绝对下标）
+ *   parts: Array<{name, period, values}>   分量序列（与 values 同长度，逐点相加等于 values）
  *
  * 挂载点：window.TSJ.datasets（数组），并提供 TSJ.findDataset(id)
  */
@@ -3200,6 +3210,42 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   }
 
   /**
+   * channels_daily：730 点日销量，由两个周期不同的渠道相加而成。
+   * 形态：门店（周周期 + 缓慢增长）+ 企业（30 天结算周期 + 更快增长）。
+   * 用途：聚合序列把两个周期叠成一个「看起来还算规律」的形状，单一周期的模型
+   *       只能拟合其中一部分；分量以 parts 字段给出，才能各自建模再相加。
+   * @param {Object} rng 随机源
+   * @returns {{values: number[], parts: Array<{name: string, period: number, values: number[]}>}}
+   */
+  function buildChannelsDaily(rng) {
+    var n = 730;
+    // 周末约为工作日的 1.6 倍：周节律必须足够强，否则「用 30 天周期」也能歪打正着
+    var weekly = [0.86, 0.818, 0.874, 0.944, 1.126, 1.294, 1.196];   // 周一..周日
+    // 企业渠道的 30 天结算周期：27 天平段 + 月末 3 天集中冲量（约 2.2 倍平段）。
+    // 峰要窄：宽峰会变成缓坡，Holt-Winters 的水平项能顺手吸收掉，题目就失去区分度。
+    var monthShape = [];
+    for (var k = 0; k < 30; k++) monthShape.push(k <= 26 ? 0.85 : 1.9);
+    var store = [];
+    var corp = [];
+    for (var t = 0; t < n; t++) {
+      var ls = 900 * (1 + 0.0006 * t);
+      store.push(round(ls * weekly[t % 7] * (1 + rng.normal() * 0.03), 1));
+      var lc = 420 * (1 + 0.001 * t);
+      corp.push(round(lc * monthShape[t % 30] * (1 + rng.normal() * 0.04), 1));
+    }
+    // 总量按「已取整的分量之和」再取整，保证 values[i] === parts[0][i] + parts[1][i]（误差 < 1e-9）
+    var values = [];
+    for (t = 0; t < n; t++) values.push(round(store[t] + corp[t], 1));
+    return {
+      values: values,
+      parts: [
+        { name: '门店渠道', period: 7, values: store },
+        { name: '企业渠道', period: 30, values: corp }
+      ]
+    };
+  }
+
+  /**
    * sunspot：300 点年级太阳黑子相对数。
    * 形态：约 11 年准周期（周期本身缓慢变化）+ 振幅调制（大小年）+ 非对称波形。
    * @param {Object} rng 随机源
@@ -3403,6 +3449,16 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       seed: 515151,
       build: buildRetailDaily,
       desc: '730 点日销量：缓慢增长 + 周季节（周末高）+ 不定期促销尖峰（间隔 9–13 天，+55%~65%）+ 2.5% 噪声；促销日以 promoDays 明确给出，是已知的外生日历。'
+    },
+    {
+      id: 'channels_daily',
+      name: '渠道日销量（门店 + 企业）',
+      unit: '件',
+      freq: 'D',
+      season: 7,
+      seed: 626262,
+      build: buildChannelsDaily,
+      desc: '730 点日销量：门店渠道（周周期 + 缓慢增长 + 3% 噪声）与企业渠道（30 天结算周期、月末三天冲量、增长更快 + 4% 噪声）之和；两个渠道以 parts 字段分别给出，period 分别为 7 / 30。'
     }
   ];
 
@@ -3421,6 +3477,13 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     };
     // 可选：外生事件日历（目前只有 retail_daily 提供）
     if (!Array.isArray(built) && built.promoDays) ds.promoDays = built.promoDays.slice();
+    // 可选：分量序列（目前只有 channels_daily 提供）。period 是各分量自己的周期，
+    // 与 dataset.season（聚合层的标注周期）不是一回事。
+    if (!Array.isArray(built) && built.parts) {
+      ds.parts = built.parts.map(function (p) {
+        return { name: p.name, period: p.period, values: p.values.slice() };
+      });
+    }
     return ds;
   });
 
@@ -4255,6 +4318,27 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     for (i = 0; i < days.length; i++) {
       var f = days[i] - n;
       if (f >= 0 && f < horizon) out[f] *= mult;
+    }
+    return out;
+  }
+
+  /**
+   * P18 自底向上聚合：两个渠道各按自己的周期做季节朴素，再逐点相加。
+   *
+   * 聚合层只标注了一个周期（7），但两个渠道的周期不同（7 / 30）。
+   * 在总量上无论选 7 还是 30，都只能拟合其中一半——这不是模型复杂度问题，
+   * 是信息粒度问题。拆到渠道后，每个渠道都变成「单周期 + 噪声」，季节朴素就够。
+   */
+  function solChannelBottomUp(history, horizon, ctx) {
+    var parts = ctx.parts || [];
+    var out = [];
+    var h, p, v, m, n;
+    for (h = 0; h < horizon; h++) out.push(0);
+    for (p = 0; p < parts.length; p++) {
+      v = parts[p].values;
+      m = parts[p].period;
+      n = v.length;
+      for (h = 0; h < horizon; h++) out[h] += v[n - m + (h % m)];
     }
     return out;
   }
@@ -6236,8 +6320,146 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 
       starter: [
         'function predict(history, horizon, ctx) {',
-        '  // 洞：纯季节朴素。它完全无视 ctx.promoDays ——',
-        '  // 既没修正未来促销日，也没清洗历史里的促销尖峰。',
+        '  // 洞：在总量上做季节朴素。ctx.season = 7 只描述了门店渠道，',
+        '  // 企业渠道的 30 天结算周期被完全忽略——总量上你只能选一个周期。',
+        '  var m = ctx.season > 1 ? ctx.season : 7;',
+        '  var n = history.length;',
+        '  var out = [];',
+        '  for (var h = 0; h < horizon; h++) {',
+        '    out.push(history[n - m + (h % m)]);',
+        '  }',
+        '  return out;',
+        '}'
+      ].join('\n')
+    },
+
+    {
+      id: 'p18-channel-mix',
+      index: 18,
+      title: '渠道拆分：一个总量，两个周期',
+      difficulty: '提高',
+      tags: ['聚合', '分解', '多周期', '层级预测', '自底向上'],
+      points: 100,
+      passScore: 60,
+      dataset: 'channels_daily',
+      mode: 'holdout',
+      horizon: 14,
+      metric: 'mse',
+      baselines: ['naive', 'seasonal_naive', 'mean', 'moving_average', 'linear_trend'],
+      threshold: 0.9,
+      passRate: 20,
+
+      /** 只读上下文：两个渠道的历史，按 history 的长度截断（不含未来）。切分逻辑不参与。 */
+      ctxExtra: function (point, dataset) {
+        var end = point.history.length;
+        return {
+          parts: (dataset.parts || []).map(function (p) {
+            return { name: p.name, period: p.period, values: p.values.slice(0, end) };
+          })
+        };
+      },
+
+      statement: [
+        '### 背景',
+        '',
+        '你是某品牌的需求计划岗。系统里只有一条「总销量」，但业务其实由两个渠道构成：',
+        '**门店渠道**（零售，按周节律）和**企业渠道**（批量采购，按月结算节律）。',
+        '两个渠道的日销量都在 `ctx.parts` 里，总销量就是它们逐日相加。',
+        '',
+        '你要给出未来 14 天的**总销量**预测。',
+        '',
+        '这题考的不是模型，而是**信息粒度**：总量把两个周期叠在一起，',
+        '任何一个单一周期的模型都只能拟合其中一半。更麻烦的是——总量看起来很「有规律」，',
+        '你会以为季节朴素已经够了。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`channels_daily`（日销量，单位：件）',
+        '- 长度：730 天；聚合层标注周期 7（门店的周节律）',
+        '- 门店渠道：周周期（周末约为工作日的 1.6 倍）+ 缓慢增长 + 3% 噪声',
+        '- 企业渠道：**30 天结算周期**（27 天平段 + 月末 3 天集中冲量，约 2.2 倍平段）+ 更快的增长 + 4% 噪声',
+        '- 评估方式：留出法。前 716 天作为 `history`，最后 14 天作为测试，只评测 1 次',
+        '- 测试窗口覆盖月末冲量：14 天里有 3 天是峰值',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 额外上下文',
+        '',
+        '`ctx.parts`：数组，每项 `{ name, period, values }`。',
+        '`values` 与 `history` **等长且下标对齐**（都截到第 716 天，不含未来）。',
+        '`period` 是该渠道自己的周期：门店 7，企业 30。',
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**MSE**（越小越好）',
+        '- 对照基线：`naive` / `seasonal_naive` / `mean` / `moving_average` / `linear_trend`',
+        '- 误差比 `ratio = 你的 MSE / 最优基线 MSE`；`ratio <= 0.5` 得 100 分，',
+        '  `ratio = 0.9` 恰好 60 分（通过线），`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '模板是总量上的季节朴素（m=7），55 分——**它就是本题的最优基线**。',
+        '三个看起来都很合理的做法，一个都过不了线：',
+        '',
+        '- 换成 Holt-Winters（把 P6 的参考解原样搬过来）：**41 分**，比模板还低。',
+        '  模型更复杂，但它看不见 30 天的结算周期；',
+        '- 把周期换成 30：**55 分**，和模板打平。这次丢的是门店的周节律；',
+        '- 拆开了，但把企业渠道当成常数水平：**23 分**，比不做还低。窗口里那 3 天冲量全漏了。',
+        '',
+        '**先拆、再各自用对周期**，两步缺一不可。'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 716 个历史观测（件，总量）。`ctx.parts: Array<{name, period, values}>` —— 两个渠道的历史，`values` 与 `history` 等长对齐。',
+      outputSpec: '`number[]` —— 长度必须为 14，每个元素是当天**总销量**的预测（件）。',
+
+      hints: [
+        '先交模板（纯季节朴素）看 55 分：它正好是最优基线，说明这题的胜负点不在「比基线更聪明」，而在「换一个信息粒度」。',
+        '把总量拆成两个渠道看：门店每 7 天一个起伏，企业每 30 天一组 3 天尖峰。`ctx.season` 只告诉你 7，另一个周期得自己从 `ctx.parts[i].period` 读。',
+        '在总量上试两个反例：m=30 的季节朴素 55 分（打平），P6 的 Holt-Winters 原样搬过来 41 分。单一序列上你只能选一个周期——这就是上限。',
+        '`ctx.parts` 已切好且与 `history` 对齐：各渠道用 `period` 取「上一个周期的同日」，再逐点相加。注意别把企业渠道当常数水平——那样只有 23 分。'
+      ],
+
+      guide: [
+        {
+          title: '先看模板错在哪',
+          text: '模板是总量上的季节朴素，55 分 WA，而且它就是本题的最优基线。' +
+            '把预测线和实际线叠起来看：每 7 天的起伏跟得还行，但窗口里有一组 3 天的尖峰完全没跟上。'
+        },
+        {
+          title: '在总量上换周期：打平',
+          text: '把那 3 天尖峰的间隔量一下，是 30 天。于是把周期换成 30 再跑一次——**还是 55 分**。' +
+            '因为这一次，门店的周节律又全错了。单一序列上，你只能选一个周期。'
+        },
+        {
+          title: '在总量上换模型：更差',
+          text: '把 P6 的 Holt-Winters 参考解原样搬过来（加法、m=7），只有 **41 分**。' +
+            '它的水平项会去追那 3 天尖峰，追不上还把平段带偏。**模型复杂度救不了错误的信息粒度。**'
+        },
+        {
+          title: '拆开：各用各的周期，再相加',
+          text: '`ctx.parts` 已经把两个渠道切好了，`period` 分别是 7 和 30。' +
+            '各自取「上一个周期的同日」，再逐点相加，应得 100 分。',
+          code: [
+            'var out = [];',
+            'for (var h = 0; h < horizon; h++) out.push(0);',
+            'for (var p = 0; p < ctx.parts.length; p++) {',
+            '  var v = ctx.parts[p].values;',
+            '  var m = ctx.parts[p].period;',
+            '  var n = v.length;',
+            '  for (var h = 0; h < horizon; h++) {',
+            '    out[h] += v[n - m + (h % m)];   // 该渠道上一个周期同日',
+            '  }',
+            '}'
+          ].join('\n')
+        }
+      ],
+
+      solution: toPredictSource(solChannelBottomUp),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  // 洞：在总量上做季节朴素。ctx.season = 7 只描述了门店渠道，',
+        '  // 企业渠道的 30 天结算周期被完全忽略——总量上你只能选一个周期。',
         '  var m = ctx.season > 1 ? ctx.season : 7;',
         '  var n = history.length;',
         '  var out = [];',
@@ -6546,6 +6768,22 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       limit: '事件效应可能随时间衰减或互相叠加；促销日太少时倍数估计不稳（用中位数或收缩估计）。',
       runnable: true,
       practice: 'p17-promo-covariate'
+    },
+    {
+      id: 'bottom-up',
+      name: '自底向上聚合',
+      title: 'Optimal combination forecasts for hierarchical time series',
+      venue: 'Computational Statistics & Data Analysis（2011）',
+      year: 2011,
+      authors: 'Hyndman, Ahmed, Athanasopoulos & Shang',
+      tier: 'classic',
+      tags: ['聚合', '分解', '多周期', '层级预测'],
+      idea: '聚合序列会把不同分量的周期叠成一个不可分的形状：单一周期的模型只能拟合其中一部分。先在各分量上按各自周期建模，再相加回聚合层（自底向上），往往比在聚合层直接建模更准。',
+      formula: 'y_hat_总,t = Σ_i y_hat_i,t ，每个分量用各自的周期 m_i',
+      when: '有渠道 / 品类 / 地区拆分，且各层动态不同（周期不同、增长率不同）；聚合后形态复杂到单模型拟合不了。',
+      limit: '分量噪声大时求和会放大误差；要求各分量历史齐全；自底向上并不保证方差最优，更一般的做法是最优调和（MinT）。',
+      runnable: true,
+      practice: 'p18-channel-mix'
     },
 
     /* ================= competition：竞赛级方法 ================= */
@@ -7562,6 +7800,17 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       url: 'https://doi.org/10.1016/j.eswa.2009.04.052',
       checkedAt: '2026-10-26',
       note: '促销协变量与促销期预测的系统比较：无促销期简单时序难被击败，有促销期显式促销特征提升最大。'
+    },
+    {
+      id: 'hyndman-2011-hier',
+      title: 'Optimal combination forecasts for hierarchical time series',
+      authors: 'Rob J. Hyndman, Roman A. Ahmed, George Athanasopoulos, Han Lin Shang',
+      year: 2011,
+      venue: 'Computational Statistics & Data Analysis 55(9)',
+      status: 'journal',
+      url: 'https://doi.org/10.1016/j.csda.2011.03.006',
+      checkedAt: '2026-10-26',
+      note: '层级预测的系统框架：把自底向上 / 自顶向下与最优调和（MinT）放在同一个回归视角下比较，并给出各自成立的条件。'
     }
   ];
 
@@ -8642,6 +8891,16 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       workedExample: '历史促销日中位数是非促销日的 1.6 倍 → 先把历史促销日销量除以 1.6 还原基线，跑季节朴素得到未来基线，再把未来促销日乘回 1.6。',
       counterexample: '只清洗历史不乘回未来 → 未来促销日全低估；只乘未来不清洗 → 基线被促销尖峰抬高，所有非促销日一起高估。两件事缺一件都过不了线。',
       referenceIds: ['ali-2009']
+    },
+    'bottom-up': {
+      runLevel: 'sandbox',
+      intuition: '总量不是「一个更大的序列」，而是两个不同节律的叠加。门店按周走，企业按月走，加起来之后总量上同时存在 7 天和 30 天两个周期——而任何一个季节模型只能选一个周期。拆回渠道，每个渠道都退回「单周期 + 噪声」，季节朴素就够了。',
+      assumptions: ['各分量的历史与总量同坐标系、可逐点相加', '分量各自的周期在预测窗口内稳定', '分量之间没有强相关（否则求和会放大共同误差）'],
+      complexity: '低（各分量各扫一遍，O(n)）',
+      limitations: ['分量噪声大时，求和会把各自的误差累加', '要求分量历史齐全；缺一路就只能退回聚合层建模', '自底向上不保证是方差最优，更一般的做法是最优调和（MinT）'],
+      workedExample: '总量 1900 件：门店 1250（周末 1.6 倍、周期 7）+ 企业 650（月末 3 天冲量、周期 30）。门店取上周同日、企业取上月同日，逐点相加 → 预测误差从 135755 降到 8895（MSE）。',
+      counterexample: '在总量上把周期从 7 换成 30：55 分，和模板打平——这次丢的是门店的周节律。把 Holt-Winters 搬到总量上：41 分，比模板还低。拆开了但把企业渠道当常数水平：23 分，窗口里那 3 天冲量全漏。三种做法都说明：换周期、换模型都不解决粒度问题。',
+      referenceIds: ['hyndman-2011-hier']
     }
   };
 
@@ -11733,7 +11992,10 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
  * 供 attachChartHover 做「最近索引」反查 —— 这样 hover 逻辑不需要知道任何绘制细节。
  *
  * 特性：devicePixelRatio 适配、水平网格线 + y 轴刻度、虚线预测、窗口 resize 自动重绘、指针悬停十字线 + tooltip。
- * 挂载点：window.TSJ.drawSeries / TSJ.attachChartHover
+ * drawParts(container, parts, { testStart, height })
+ *   - 把聚合序列拆回各分量，各画一张小图（P18 的「总量里两个周期」只能拆开看）
+ *
+ * 挂载点：window.TSJ.drawSeries / TSJ.drawParts / TSJ.attachChartHover
  */
 (function (global) {
   'use strict';
@@ -11841,6 +12103,41 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     canvas.__tsjChart = options;
     canvas.setAttribute('data-tsj-chart', '1');
     paint(canvas, options);
+  }
+
+  /**
+   * 画一组「分量预览图」：把聚合序列拆回各分量，每路一张小图。
+   *
+   * 用于 P18 这类「总量里藏了两个周期」的题目：总量图上两个周期叠在一起，
+   * 只有拆开才看得见。canvas 由题目模板渲染（class="part-chart"，data-part 是分量下标），
+   * 这里只按顺序画——保持「谁生成 DOM、谁负责画」的分工不变。
+   *
+   * @param {Element} container 容器（内含若干 .part-chart canvas）
+   * @param {Array<{name:string, period:number, values:number[]}>} parts 分量
+   * @param {Object} [opts] { testStart, height, window }
+   *   window > 0 时只画最近 window 个点：730 点挤进 300px 会把周节律糊成一条实心带，
+   *   「拆开看」就失去意义了。testStart 会同步左移，高亮带仍落在正确位置。
+   */
+  function drawParts(container, parts, opts) {
+    if (!container || !parts || !container.querySelectorAll) return;
+    var o = opts || {};
+    var canvases = container.querySelectorAll('.part-chart');
+    for (var i = 0; i < canvases.length; i++) {
+      var canvas = canvases[i];
+      var part = parts[Number(canvas.getAttribute('data-part'))];
+      if (!part) continue;
+      var values = part.values;
+      var from = 0;
+      if (o.window > 0 && values.length > o.window) {
+        from = values.length - o.window;
+        values = values.slice(from);
+      }
+      drawSeries(canvas, {
+        values: values,
+        testStart: Math.max(0, (o.testStart || 0) - from),
+        height: o.height || 120
+      });
+    }
   }
 
   /**
@@ -12330,12 +12627,14 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   }
 
   TSJ.drawSeries = drawSeries;
+  TSJ.drawParts = drawParts;
   TSJ.attachChartHover = attachChartHover;
   TSJ.redrawCharts = redrawAll;
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       drawSeries: drawSeries,
+      drawParts: drawParts,
       attachChartHover: attachChartHover,
       redrawCharts: redrawAll
     };
@@ -16344,6 +16643,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   var md = ui.md;
   var mdInline = ui.mdInline;
 
+  /** 分量预览只画最近这么多点：730 点挤进 300px，周节律会糊成一条实心带。140 = 20 个整周。 */
+  var PART_WINDOW = 140;
+
   /* ---------- 1. 题目页 ---------- */
   /** 渲染题目详情页（左题面 / 右编辑器）。 */
   function renderProblem(id) {
@@ -16376,6 +16678,11 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       if (typeof TSJ.attachChartHover === 'function') {
         store.state.chartHover = TSJ.attachChartHover(canvas);
       }
+    }
+    // 分量小图：只画形状，不挂 hover（总量图才是交互主体）
+    var strip = $('.parts-strip', view);
+    if (strip && ds.parts && typeof TSJ.drawParts === 'function') {
+      TSJ.drawParts(strip, ds.parts, { testStart: ds.values.length - p.horizon, window: PART_WINDOW });
     }
 
     /** 保存草稿（输入走防抖，Ctrl+S 直接调用）。 */
@@ -16510,7 +16817,17 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       html.push('      <span class="legend-item"><i class="legend-dot dot-mark"></i>' + esc(markLabel) + '</span>');
     }
     html.push('      <span class="legend-item"><i class="legend-dot" style="border-top-color:var(--v3-chart-actual)"></i>测试集真实值</span>');
-    html.push('      <span class="legend-item"><i class="legend-dot dash" style="border-top-color:var(--v3-chart-pred)"></i>你的预测</span>\n    </div>\n  </div>');
+    html.push('      <span class="legend-item"><i class="legend-dot dash" style="border-top-color:var(--v3-chart-pred)"></i>你的预测</span>\n    </div>');
+    // 分量预览（P18）：总量图上两个周期是叠在一起的，拆开才看得见各自的节律
+    if (ds.parts && ds.parts.length) {
+      var cells = ds.parts.map(function (x, i) {
+        return '<div class="part-cell"><div class="part-name">' + esc(x.name) + ' · 周期 ' + x.period +
+          '</div><canvas class="chart-canvas part-chart" data-part="' + i + '" height="120"></canvas></div>';
+      });
+      html.push('    <div class="parts-head">分量预览 · 最近 ' + PART_WINDOW + ' 天（右端高亮为测试区间）</div>' +
+        '<div class="parts-strip">' + cells.join('') + '</div>');
+    }
+    html.push('  </div>');
 
     html.push('  <div class="md" style="margin-top:14px">\n    <h3 class="md-h">输入</h3><p class="md-p">' + mdInline(p.inputSpec) + '</p>');
     html.push('    <h3 class="md-h">输出</h3><p class="md-p">' + mdInline(p.outputSpec) + '</p>\n  </div>');

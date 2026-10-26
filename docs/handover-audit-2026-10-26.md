@@ -212,3 +212,62 @@ var extra = typeof problem.ctxExtra === 'function' ? problem.ctxExtra : null;
 - README：17 题 / 47 方法 / 14 经典 / 15 可练 / 221 条 / 811KB；题库表补 P16、P17（P16 此前漏登记）
 - `v3-architecture.md` 12.6 节、`v3.2-changelog.md` 第十一节
 - 单文件版重建 811.5KB / 47 脚本，`standalone-check` 全绿
+
+## 十四、同日追加：P18 渠道拆分（信息粒度）
+
+P17 之后，题库还剩两块结构性空白：**层级/聚合一致性** 与 **概率预测的校准**。P16 已经把分位数（单侧 pinball）用掉了，所以只剩前者。但它一开始并不成立——先试的两个方向都被数据否决了：
+
+| 方向 | 原型实测 | 否决理由 |
+|---|---|---|
+| 乘法季节（P18 候选 A） | `hw_mul` ratio 1.000 vs `hw_add` 6.3–7.9 | 最优基线本身 ratio 20–37，任何带趋势的模型都拿 100，梯度被压平 |
+| 双季节（P18 候选 B） | HW 加法 m=7 就 ratio 0.285–0.351 | 14 天窗口里年周期近似常数，被趋势项完全吸收 |
+
+这两次失败的共同点值得记住：**「某方法明显更好」不等于「题目有教学梯度」**。判据是「错的做法会不会被扣分」，不是「对的做法能不能拿满分」。所以第三次改成先用 `judge.evaluateSync` 跑一张「错误做法得分表」，再决定要不要写题。
+
+### 14.1 新增内容
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 数据 | `assets/js/datasets.js` | `channels_daily`（730 点，D，周期 7）：门店 + 企业两路逐日相加；生成器可返回 `{values, parts}` |
+| 题目 | `assets/js/problems.js` | P18 `p18-channel-mix`（提高 / holdout / horizon 14 / MSE / 0.9 / 60）+ `solChannelBottomUp` + 带洞模板 + 4 提示 + 4 步 guide |
+| 图表 | `assets/js/chart.js` | `drawParts(container, parts, {testStart, height, window})`：分量预览小图 |
+| 视图 | `assets/js/app/problem.js` | 分量预览的 DOM（`PART_WINDOW = 140`）+ 绘制调用（348 行，未破 350 上限） |
+| 样式 | `assets/css/style.css` | `.parts-head` / `.parts-strip` / `.part-cell` / `.part-chart` |
+| 内容 | `assets/js/methods.js` | `bottom-up` 方法卡（classic，`practice: 'p18-channel-mix'`） |
+| 内容 | `assets/js/content/method-details.js` | `bottom-up` 详情（反例直接引用 55 / 41 / 23） |
+| 内容 | `assets/js/content/references.js` | `hyndman-2011-hier`（DOI `10.1016/j.csda.2011.03.006`，已核） |
+| 测试 | `tests/qa/solutions.test.js` | `channels_daily` 元数据 + `parts` 可加性护栏 + 冲量峰宽度护栏 + 四个分数锚点 |
+| 测试 | `tests/qa/v3-browser.test.js` | P18 分量预览：两张小图、窗口上限、高亮带贴右端、周期标注 |
+
+### 14.2 引擎一行没动
+
+P18 复用了 P17 留下的 `ctxExtra` 扩展点，`judge.js` 零改动。`buildTestPoints` 的四字段、指标、基线、`scoreForRatio` 全部保持原样——这是加题的前提，不是巧合：**先找不需要改判题语义的方向，再谈题目内容。**
+
+### 14.3 被数据设计修掉的第二个「半成品能过线」
+
+第一版形态是 27 天缓坡爬到月末峰。结果 `m=7` 的 Holt-Winters 拿 59 分——离通过线只差 1 分，「模型更复杂没用」这句话就站不住。把峰改窄（3 天陡峰）之后，`m=30` 的单序列模型又拿到 99 分：尖峰在 30 天周期上完全可复现。
+
+最终形态让**两个周期各自的误差量级相当**（周振幅 ×1.4、峰高 1.9）：
+
+| 解法 | 得分 | verdict |
+|---|---|---|
+| 模板（总量 + 季节朴素 m=7） | 55 | WA |
+| 总量 + 季节朴素 m=30 | 55 | WA |
+| 总量 + P6 的 Holt-Winters 原样搬来 | 41 | WA |
+| 拆开但企业当常数水平 | 23 | WA |
+| 参考解（拆开 + 各自周期） | 100 | AC |
+
+三条约束全部固化成用例：`parts` 逐点可加、窗口内冲量峰 2–4 天、四个分数锚点。以后改生成器不会把「换个周期就能过」放回来。
+
+### 14.4 顺手修掉的一类缺陷
+
+`library.test.js` 里有 12 处硬编码的 `47 / 15 / 14`，加一个方法要改 12 个地方——和上一轮 README 数字漂移是同一类问题（多份副本、无单一来源）。现在改为从 `TSJ.methods` 推导，绝对数量只由 `content-v3.test.js` 的 `METHOD_COUNT` 持有。静态检查同时抓到两处真问题：`problem.js` 涨到 357 行（压回 348）、`part-chart` 类缺样式定义（补上）。
+
+### 14.5 收尾清单
+
+- `library.test.js` 五层 `classic 14→15`、可练 `15→16`（且改为推导，不再有魔法数）
+- `content-v3.test.js` `METHOD_COUNT 47→48`、`TIER_COUNTS classic 14→15`
+- `solutions.test.js` 19 条全绿（含 2 条 P18 分数锚点 + 2 条数据集护栏）
+- README：18 题 / 48 方法 / 15 经典 / 16 可练 / 11 数据集 / 230 条 / 829KB；题库表、模板表、数据集表各补一行
+- `v3-architecture.md` 12.9 / 12.10、`v3.2-changelog.md` 第十二节
+- 单文件版重建 828.7KB / 47 脚本，`standalone-check` 全绿

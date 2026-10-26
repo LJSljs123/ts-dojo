@@ -376,6 +376,13 @@ body.dragging { user-select: none; cursor: col-resize; }
 /* 事件标记（促销日）：实心圆点，与三种线型图例区分开 */
 .legend-dot.dot-mark { width: 7px; height: 7px; border: 0; border-radius: 50%; background: var(--v3-warn); }
 
+/* 分量预览（P18）：总量图下方并排的小图，窄屏自动堆叠 */
+.parts-head { font-size: 11px; color: var(--muted); margin-top: 10px; }
+.parts-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 4px; }
+.part-cell { min-width: 0; }
+.part-cell .part-name { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.part-chart { display: block; width: 100%; }
+
 /* 提示折叠 */
 .hints {
   margin-top: 18px;

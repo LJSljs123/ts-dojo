@@ -2,10 +2,10 @@
  * library.test.js —— v2.2 第一批：方法库（知识库）页面验收
  *
  * 覆盖（对应施工图 5.2 的 6 条）：
- *   1. 数据层完整性：47 条、tier 只有五个合法值、必填字段齐全、id 唯一；
+ *   1. 数据层完整性：分层求和 = 总数、tier 只有五个合法值、必填字段齐全、id 唯一；
  *   2. practice 引用的题目必须存在（第二批的 6 道新题尚未落地，用精确白名单兜住）；
  *   3. runnable 与 practice 的一致性（可跑且有题 / 有题必须可跑）；
- *   4. 无头浏览器：#/methods 默认 47 张、搜索 patch、层筛选 14 张、只看能练的 15 张、清空回 47；
+ *   4. 无头浏览器：#/methods 默认全量、搜索 patch、层筛选 deep、只看能练的、清空回全量；
  *   5. 点「去练这道题」→ hash 变成对应 #/problem/<id>；
  *   6. 375px 下 scrollWidth === 375，展开区两栏改堆叠、卡片不溢出。
  *
@@ -25,6 +25,19 @@ const TSJ = engine.TSJ;
 // methods.js 挂到 window.TSJ 上，同时 module.exports 出数组本身（附带 tiers / methodsById）
 const methods = require(fileOf('methods'));
 const TIERS = methods.tiers.map((t) => t.id);
+
+/**
+ * 期望的卡片数一律从数据推导，不写死。
+ *
+ * 之前这里有 12 处硬编码的 47 / 15 / 14，加一个方法就要改 12 个地方——和 README 里
+ * 的数字漂移是同一类缺陷（漏改一处就红，改错一处更糟）。绝对数量由
+ * content-v3.test.js 的 METHOD_COUNT 单一持有；这里只验证「页面渲染出来的数量
+ * 与数据一致」，那才是本文件真正要守的东西。
+ */
+const N_ALL = methods.length;
+const N_CLASSIC = methods.filter((m) => m.tier === 'classic').length;
+const N_DEEP = methods.filter((m) => m.tier === 'deep').length;
+const N_PRACTICE = methods.filter((m) => !!m.practice).length;
 
 /**
  * practice 引用白名单：methods.js 里每条方法的 practice 指向的题目必须真实存在。
@@ -83,8 +96,8 @@ async function resetMethods() {
   );
   await page.reload();
   await page.evaluate('if (location.hash !== "#/methods") location.hash = "#/methods";');
-  const ok = await waitFor('document.querySelectorAll(".mcard").length === 47');
-  assert.ok(ok, '方法库未渲染出 47 张卡片');
+  const ok = await waitFor('document.querySelectorAll(".mcard").length === ' + N_ALL);
+  assert.ok(ok, '方法库未渲染出 ' + N_ALL + ' 张卡片');
 }
 
 /** 当前卡片数。 */
@@ -108,8 +121,15 @@ async function setSearch(q, expect) {
  * 1–3 数据层（纯 Node，无浏览器）
  * ================================================================== */
 
-test('L01 数据层：47 条方法，tier 只有五个合法值，必填字段齐全且 id 唯一', () => {
-  assert.equal(methods.length, 47, '方法数应为 47，实际 ' + methods.length);
+test('L01 数据层：方法条数与分层求和一致，tier 只有五个合法值，必填字段齐全且 id 唯一', () => {
+  // 绝对数量由 content-v3.test.js 的 METHOD_COUNT 单一持有；这里只保证「分层的和 = 总数」，
+  // 避免同一份契约在两个文件里各写一遍、加方法时只改一处。
+  assert.ok(methods.length > 0, '方法库为空');
+  assert.equal(
+    methods.tiers.reduce((s, t) => s + methods.filter((m) => m.tier === t.id).length, 0),
+    methods.length,
+    '分层求和与总数不一致（有方法落在五个 tier 之外）'
+  );
   assert.deepEqual(TIERS, ['classic', 'competition', 'deep', 'foundation', 'eval'], '分层定义与施工图不一致');
 
   const required = ['id', 'name', 'venue', 'year', 'idea', 'when', 'limit', 'runnable'];
@@ -134,10 +154,10 @@ test('L01 数据层：47 条方法，tier 只有五个合法值，必填字段�
   assert.deepEqual(
     { classic: byTier('classic'), competition: byTier('competition'), deep: byTier('deep'),
       foundation: byTier('foundation'), eval: byTier('eval') },
-    { classic: 14, competition: 3, deep: 14, foundation: 10, eval: 6 },
+    { classic: 15, competition: 3, deep: 14, foundation: 10, eval: 6 },
     '五层数量与内容契约不一致'
   );
-  assert.equal(methods.filter((m) => !!m.practice).length, 15, '「可练」应为 15 条');
+  assert.equal(methods.filter((m) => !!m.practice).length, 16, '「可练」应为 16 条');
 });
 
 test('L02 practice 引用的题目必须存在（第二批 6 题未落地时走精确白名单）', () => {
@@ -177,7 +197,7 @@ test('L03 runnable 与 practice 一致：有题的必须可跑，可跑的题必
  * 4–6 真实浏览器
  * ================================================================== */
 
-test('L04 #/methods 默认 47 张卡片；搜索 patch；层筛选 14 张；只看能练的 15 张；清空回 47', async (t) => {
+test('L04 #/methods 默认渲染全部方法；搜索 patch；层筛选 deep；只看能练的；清空回到全量', async (t) => {
   if (!(await ensurePage())) return t.skip('无浏览器');
   await resetMethods();
 
@@ -192,19 +212,18 @@ test('L04 #/methods 默认 47 张卡片；搜索 patch；层筛选 14 张；只�
   const chips = await page.evaluate(
     '[].map.call(document.querySelectorAll(".chip[data-tier]"), function(c){return c.textContent;})'
   );
-  const expectChips = ['全部(' + methods.length + ')'].concat(
+  const expectChips = ['全部(' + N_ALL + ')'].concat(
     methods.tiers.map((t) => t.name + '(' + methods.filter((m) => m.tier === t.id).length + ')')
   );
   console.log('    chips：' + JSON.stringify(chips));
   assert.deepEqual(chips, expectChips);
-  assert.deepEqual(chips, ['全部(47)', '经典统计(14)', '竞赛级方法(3)', '顶会深度学习(14)', '时序基础模型(10)', '评估方法论(6)']);
 
-  // 默认态：47 张，且没有任何预置筛选
+  // 默认态：全量，且没有任何预置筛选
   const base = await cardCount();
   console.log('    默认卡片数=' + base + ' · 搜索框初值=' +
     JSON.stringify(await page.evaluate('document.getElementById("methodSearch").value')) +
     ' · 开关=' + (await page.evaluate('document.getElementById("onlyPractice").checked')));
-  assert.equal(base, 47, '默认态必须是 47 张卡片');
+  assert.equal(base, N_ALL, '默认态必须渲染全部 ' + N_ALL + ' 张卡片');
 
   // 搜索 patch（命中 PatchTST 的 name / idea；v3.2 起 patch 已是通用术语，
   // TimesFM/Timer/Sundial/Time-LLM 等新卡的 idea 里也会出现，只约束上界）
@@ -218,12 +237,13 @@ test('L04 #/methods 默认 47 张卡片；搜索 patch；层筛选 14 张；只�
   assert.ok(patch >= 1 && patch <= 8, '搜索 patch 应命中 1–8 张，实际 ' + patch);
   assert.ok(patchIds.includes('patchtst'), 'patch 必须命中 PatchTST');
 
-  // 清空搜索 → 回 29
-  assert.ok(await setSearch('', '=== 47'), '清空搜索后应回到 47 张');
+  // 清空搜索 → 回全量
+  assert.ok(await setSearch('', '=== ' + N_ALL), '清空搜索后应回到 ' + N_ALL + ' 张');
 
-  // 层筛选「顶会深度学习」= 9 张
+  // 层筛选「顶会深度学习」
   await page.evaluate('document.querySelector(".chip[data-tier=\\"deep\\"]").click()');
-  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === 14'), '深度学习层应为 14 张');
+  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === ' + N_DEEP),
+    '深度学习层应为 ' + N_DEEP + ' 张');
   const deepIds = await page.evaluate(
     '[].map.call(document.querySelectorAll(".mcard"), function(c){return c.getAttribute("data-tier");})'
   );
@@ -236,19 +256,20 @@ test('L04 #/methods 默认 47 张卡片；搜索 patch；层筛选 14 张；只�
 
   // 回到全部 + 空搜索
   await page.evaluate('document.querySelector(".chip[data-tier=\\"all\\"]").click()');
-  assert.ok(await setSearch('', '=== 47'), '层回到全部、搜索清空后应回 47 张');
+  assert.ok(await setSearch('', '=== ' + N_ALL), '层回到全部、搜索清空后应回 ' + N_ALL + ' 张');
 
-  // 「只看能练的」= 15 张
+  // 「只看能练的」= 带 practice 的数量
   await page.evaluate(
     '(function(){var b=document.getElementById("onlyPractice");b.checked=true;' +
       'b.dispatchEvent(new Event("change",{bubbles:true}));})()'
   );
-  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === 15'), '只看能练的应为 15 张');
+  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === ' + N_PRACTICE),
+    '只看能练的应为 ' + N_PRACTICE + ' 张');
   const withPractice = await page.evaluate(
     '[].every.call(document.querySelectorAll(".mcard"), function(c){' +
       'return !!TSJ.methodsById(c.getAttribute("data-mid")).practice;})'
   );
-  console.log('    只看能练的 → 15 张 · 全部带 practice=' + withPractice);
+  console.log('    只看能练的 → ' + N_PRACTICE + ' 张 · 全部带 practice=' + withPractice);
   assert.equal(withPractice, true, '开关打开后仍有方法没有 practice');
 
   // 空态：开关 + 一个搜不到的词
@@ -259,10 +280,11 @@ test('L04 #/methods 默认 47 张卡片；搜索 patch；层筛选 14 张；只�
   assert.equal(empty.has, true, '无结果必须有空态');
   assert.equal(empty.btn, true, '空态里要有「清除筛选」');
 
-  // 清除筛选 → 回 47 张
+  // 清除筛选 → 回全量
   await page.evaluate('document.querySelector("#btnMethodClear").click()');
-  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === 47'), '清除筛选后应回到 47 张');
-  console.log('    清除筛选 → 47 张');
+  assert.ok(await waitFor('document.querySelectorAll(".mcard").length === ' + N_ALL),
+    '清除筛选后应回到 ' + N_ALL + ' 张');
+  console.log('    清除筛选 → ' + N_ALL + ' 张');
   assert.deepEqual(page.exceptions, [], '方法库出现未捕获异常：' + JSON.stringify(page.exceptions));
 });
 
@@ -365,7 +387,7 @@ test('L06 375px：scrollWidth === 375，展开区两栏改堆叠，卡片不溢�
 
     assert.equal(m.client, 375, '视口不是 375（CDP 覆盖失败）');
     assert.equal(m.scroll, 375, '375px 下整页横向溢出：scrollWidth=' + m.scroll);
-    assert.equal(m.cards, 47, '375px 下仍应渲染 47 张卡片');
+    assert.equal(m.cards, N_ALL, '375px 下仍应渲染 ' + N_ALL + ' 张卡片');
     assert.ok(m.maxRight <= 375, '卡片右侧超出视口：' + m.maxRight);
     assert.equal(m.cols.split(' ').length, 1, '窄屏展开区应堆叠成一栏，实际列宽「' + m.cols + '」');
     assert.ok(m.formulaRight <= 375, '关键式子块溢出：' + m.formulaRight);

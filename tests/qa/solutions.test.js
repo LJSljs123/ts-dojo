@@ -134,6 +134,43 @@ test('p9 模板：总分可能高于通过线，但必须有窗口低于通过�
 });
 
 /* ================================================================== *
+ * 2b. P18：题目必须真的在考「信息粒度」
+ * ================================================================== */
+
+test('p18：模板 55 分打平最优基线，拆开才 100 分', () => {
+  const p = problems.find((x) => x.id === 'p18-channel-mix');
+  assert.ok(p, 'p18-channel-mix 不存在');
+  const base = evalCode(p, p.starter);
+  assert.equal(base.score, 55, '模板应与最优基线打平（55 分）');
+  assert.ok(Math.abs(base.cases[0].ratio - 1) < 1e-9, 'ratio 应恰为 1.00');
+  assert.equal(base.cases[0].baselineName, 'seasonal_naive');
+
+  const sol = evalCode(p, p.solution);
+  assert.equal(sol.score, 100);
+  assert.ok(sol.cases[0].ratio < 0.2, '参考解应把误差压到基线的 20% 以内，实际 ' + sol.cases[0].ratio);
+});
+
+test('p18：在总量上换周期 / 换模型都过不了线（否则题目考的是「猜对周期」）', () => {
+  const p = problems.find((x) => x.id === 'p18-channel-mix');
+  // ① 把周期从 7 换成 30：只补上企业渠道，丢掉门店的周节律
+  const sn30 = evalCode(p, [
+    'function predict(history, horizon, ctx) {',
+    '  var m = 30, n = history.length, out = [];',
+    '  for (var h = 0; h < horizon; h++) out.push(history[n - m + (h % m)]);',
+    '  return out;',
+    '}'
+  ].join('\n'));
+  assert.equal(sn30.verdict, 'WA', 'm=30 的单序列模型不应通过');
+  assert.equal(sn30.score, 55, '题面写的是「55 分，和模板打平」');
+
+  // ② 把 P6 的 Holt-Winters 参考解原样搬到总量上：模型更复杂，分数更低
+  const hw = problems.find((x) => x.id === 'p6-holt-winters');
+  const hwOn18 = evalCode(p, hw.solution);
+  assert.equal(hwOn18.verdict, 'WA', 'Holt-Winters 不应通过');
+  assert.equal(hwOn18.score, 41, '题面写的是「41 分，比模板还低」');
+});
+
+/* ================================================================== *
  * 3. 数据集可复现性 / 完整性
  * ================================================================== */
 
@@ -164,6 +201,7 @@ test('数据集元数据与题面声明一致（长度 / 周期 / 频率）', ()
     gmv: [160, 7, 'D'],
     intermittent: [120, 12, 'M'],
     retail_daily: [730, 7, 'D'],
+    channels_daily: [730, 7, 'D'],
   };
   for (const d of datasets) {
     const e = expect[d.id];
@@ -198,6 +236,47 @@ test('外生协变量数据集：promoDays 升序去重且落在序列范围内'
     'retail_daily 最后一个周期内必须有促销日（考「未来促销修正」）');
   assert.ok(tail.some((i) => i < rd.values.length - rd.season),
     'retail_daily 倒数第二个周期内必须有促销日（考「历史促销污染」）');
+});
+
+test('分量数据集：parts 与 values 等长、逐点可加、周期互不相同', () => {
+  // P18 的全部前提都压在「总量 = 各分量逐点相加」上。这一条坏了不会报错，
+  // 只会让参考解静默失准，所以必须逐点钉死。
+  let seen = 0;
+  for (const d of datasets) {
+    if (!d.parts) continue;
+    seen++;
+    assert.ok(Array.isArray(d.parts) && d.parts.length >= 2, d.id + ' 的 parts 至少要两路');
+    for (const part of d.parts) {
+      assert.ok(part.name, d.id + ' 的分量缺少 name');
+      assert.ok(Number.isInteger(part.period) && part.period > 1,
+        d.id + ' 的分量周期非法：' + part.period);
+      assert.equal(part.values.length, d.values.length,
+        d.id + '/' + part.name + ' 长度与总量不一致');
+    }
+    const periods = d.parts.map((p) => p.period);
+    assert.equal(new Set(periods).size, periods.length,
+      d.id + ' 两路分量周期相同，拆开就没有意义：' + periods.join(','));
+    for (let i = 0; i < d.values.length; i++) {
+      const sum = d.parts.reduce((s, p) => s + p.values[i], 0);
+      assert.ok(Math.abs(sum - d.values[i]) < 1e-6,
+        d.id + '[' + i + '] 分量之和 ' + sum + ' ≠ 总量 ' + d.values[i]);
+    }
+  }
+  assert.ok(seen >= 1, '没有任何数据集提供 parts（P18 依赖 channels_daily）');
+});
+
+test('channels_daily：测试窗口必须覆盖月末冲量，否则「不拆」也能过线', () => {
+  const d = datasets.find((x) => x.id === 'channels_daily');
+  assert.ok(d && d.parts, 'channels_daily 必须提供 parts（P18 依赖它）');
+  const corp = d.parts.find((p) => p.period === 30);
+  assert.ok(corp, 'channels_daily 必须有一路 30 天周期的分量');
+  const meanOf = (a) => a.reduce((s, v) => s + v, 0) / a.length;
+  const overall = meanOf(corp.values);
+  const peaks = corp.values.slice(-14).filter((v) => v > overall * 1.5);
+  // 少了 → 模板不会失准，「不拆」也能过线；多了 → 峰变宽，Holt-Winters 的水平项
+  // 会顺手吸收，题目就退化成「换个更复杂的模型」。
+  assert.ok(peaks.length >= 2, '最后 14 天至少要有 2 天处在冲量峰，实际 ' + peaks.length);
+  assert.ok(peaks.length <= 4, '冲量峰过宽（' + peaks.length + ' 天），会削弱题目区分度');
 });
 
 test('数据集全部为有限数值，且保留 1 位小数', () => {

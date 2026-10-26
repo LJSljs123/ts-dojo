@@ -810,6 +810,27 @@
   }
 
   /**
+   * P18 自底向上聚合：两个渠道各按自己的周期做季节朴素，再逐点相加。
+   *
+   * 聚合层只标注了一个周期（7），但两个渠道的周期不同（7 / 30）。
+   * 在总量上无论选 7 还是 30，都只能拟合其中一半——这不是模型复杂度问题，
+   * 是信息粒度问题。拆到渠道后，每个渠道都变成「单周期 + 噪声」，季节朴素就够。
+   */
+  function solChannelBottomUp(history, horizon, ctx) {
+    var parts = ctx.parts || [];
+    var out = [];
+    var h, p, v, m, n;
+    for (h = 0; h < horizon; h++) out.push(0);
+    for (p = 0; p < parts.length; p++) {
+      v = parts[p].values;
+      m = parts[p].period;
+      n = v.length;
+      for (h = 0; h < horizon; h++) out[h] += v[n - m + (h % m)];
+    }
+    return out;
+  }
+
+  /**
    * P15 DLinear：趋势 / 季节分解，两条分支各做一次线性映射。
    * 论文里那两层是训练出来的，这里用最小二乘在历史窗口上拟合等价映射。
    */
@@ -2786,8 +2807,146 @@
 
       starter: [
         'function predict(history, horizon, ctx) {',
-        '  // 洞：纯季节朴素。它完全无视 ctx.promoDays ——',
-        '  // 既没修正未来促销日，也没清洗历史里的促销尖峰。',
+        '  // 洞：在总量上做季节朴素。ctx.season = 7 只描述了门店渠道，',
+        '  // 企业渠道的 30 天结算周期被完全忽略——总量上你只能选一个周期。',
+        '  var m = ctx.season > 1 ? ctx.season : 7;',
+        '  var n = history.length;',
+        '  var out = [];',
+        '  for (var h = 0; h < horizon; h++) {',
+        '    out.push(history[n - m + (h % m)]);',
+        '  }',
+        '  return out;',
+        '}'
+      ].join('\n')
+    },
+
+    {
+      id: 'p18-channel-mix',
+      index: 18,
+      title: '渠道拆分：一个总量，两个周期',
+      difficulty: '提高',
+      tags: ['聚合', '分解', '多周期', '层级预测', '自底向上'],
+      points: 100,
+      passScore: 60,
+      dataset: 'channels_daily',
+      mode: 'holdout',
+      horizon: 14,
+      metric: 'mse',
+      baselines: ['naive', 'seasonal_naive', 'mean', 'moving_average', 'linear_trend'],
+      threshold: 0.9,
+      passRate: 20,
+
+      /** 只读上下文：两个渠道的历史，按 history 的长度截断（不含未来）。切分逻辑不参与。 */
+      ctxExtra: function (point, dataset) {
+        var end = point.history.length;
+        return {
+          parts: (dataset.parts || []).map(function (p) {
+            return { name: p.name, period: p.period, values: p.values.slice(0, end) };
+          })
+        };
+      },
+
+      statement: [
+        '### 背景',
+        '',
+        '你是某品牌的需求计划岗。系统里只有一条「总销量」，但业务其实由两个渠道构成：',
+        '**门店渠道**（零售，按周节律）和**企业渠道**（批量采购，按月结算节律）。',
+        '两个渠道的日销量都在 `ctx.parts` 里，总销量就是它们逐日相加。',
+        '',
+        '你要给出未来 14 天的**总销量**预测。',
+        '',
+        '这题考的不是模型，而是**信息粒度**：总量把两个周期叠在一起，',
+        '任何一个单一周期的模型都只能拟合其中一半。更麻烦的是——总量看起来很「有规律」，',
+        '你会以为季节朴素已经够了。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`channels_daily`（日销量，单位：件）',
+        '- 长度：730 天；聚合层标注周期 7（门店的周节律）',
+        '- 门店渠道：周周期（周末约为工作日的 1.6 倍）+ 缓慢增长 + 3% 噪声',
+        '- 企业渠道：**30 天结算周期**（27 天平段 + 月末 3 天集中冲量，约 2.2 倍平段）+ 更快的增长 + 4% 噪声',
+        '- 评估方式：留出法。前 716 天作为 `history`，最后 14 天作为测试，只评测 1 次',
+        '- 测试窗口覆盖月末冲量：14 天里有 3 天是峰值',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 额外上下文',
+        '',
+        '`ctx.parts`：数组，每项 `{ name, period, values }`。',
+        '`values` 与 `history` **等长且下标对齐**（都截到第 716 天，不含未来）。',
+        '`period` 是该渠道自己的周期：门店 7，企业 30。',
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**MSE**（越小越好）',
+        '- 对照基线：`naive` / `seasonal_naive` / `mean` / `moving_average` / `linear_trend`',
+        '- 误差比 `ratio = 你的 MSE / 最优基线 MSE`；`ratio <= 0.5` 得 100 分，',
+        '  `ratio = 0.9` 恰好 60 分（通过线），`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '模板是总量上的季节朴素（m=7），55 分——**它就是本题的最优基线**。',
+        '三个看起来都很合理的做法，一个都过不了线：',
+        '',
+        '- 换成 Holt-Winters（把 P6 的参考解原样搬过来）：**41 分**，比模板还低。',
+        '  模型更复杂，但它看不见 30 天的结算周期；',
+        '- 把周期换成 30：**55 分**，和模板打平。这次丢的是门店的周节律；',
+        '- 拆开了，但把企业渠道当成常数水平：**23 分**，比不做还低。窗口里那 3 天冲量全漏了。',
+        '',
+        '**先拆、再各自用对周期**，两步缺一不可。'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 716 个历史观测（件，总量）。`ctx.parts: Array<{name, period, values}>` —— 两个渠道的历史，`values` 与 `history` 等长对齐。',
+      outputSpec: '`number[]` —— 长度必须为 14，每个元素是当天**总销量**的预测（件）。',
+
+      hints: [
+        '先交模板（纯季节朴素）看 55 分：它正好是最优基线，说明这题的胜负点不在「比基线更聪明」，而在「换一个信息粒度」。',
+        '把总量拆成两个渠道看：门店每 7 天一个起伏，企业每 30 天一组 3 天尖峰。`ctx.season` 只告诉你 7，另一个周期得自己从 `ctx.parts[i].period` 读。',
+        '在总量上试两个反例：m=30 的季节朴素 55 分（打平），P6 的 Holt-Winters 原样搬过来 41 分。单一序列上你只能选一个周期——这就是上限。',
+        '`ctx.parts` 已切好且与 `history` 对齐：各渠道用 `period` 取「上一个周期的同日」，再逐点相加。注意别把企业渠道当常数水平——那样只有 23 分。'
+      ],
+
+      guide: [
+        {
+          title: '先看模板错在哪',
+          text: '模板是总量上的季节朴素，55 分 WA，而且它就是本题的最优基线。' +
+            '把预测线和实际线叠起来看：每 7 天的起伏跟得还行，但窗口里有一组 3 天的尖峰完全没跟上。'
+        },
+        {
+          title: '在总量上换周期：打平',
+          text: '把那 3 天尖峰的间隔量一下，是 30 天。于是把周期换成 30 再跑一次——**还是 55 分**。' +
+            '因为这一次，门店的周节律又全错了。单一序列上，你只能选一个周期。'
+        },
+        {
+          title: '在总量上换模型：更差',
+          text: '把 P6 的 Holt-Winters 参考解原样搬过来（加法、m=7），只有 **41 分**。' +
+            '它的水平项会去追那 3 天尖峰，追不上还把平段带偏。**模型复杂度救不了错误的信息粒度。**'
+        },
+        {
+          title: '拆开：各用各的周期，再相加',
+          text: '`ctx.parts` 已经把两个渠道切好了，`period` 分别是 7 和 30。' +
+            '各自取「上一个周期的同日」，再逐点相加，应得 100 分。',
+          code: [
+            'var out = [];',
+            'for (var h = 0; h < horizon; h++) out.push(0);',
+            'for (var p = 0; p < ctx.parts.length; p++) {',
+            '  var v = ctx.parts[p].values;',
+            '  var m = ctx.parts[p].period;',
+            '  var n = v.length;',
+            '  for (var h = 0; h < horizon; h++) {',
+            '    out[h] += v[n - m + (h % m)];   // 该渠道上一个周期同日',
+            '  }',
+            '}'
+          ].join('\n')
+        }
+      ],
+
+      solution: toPredictSource(solChannelBottomUp),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  // 洞：在总量上做季节朴素。ctx.season = 7 只描述了门店渠道，',
+        '  // 企业渠道的 30 天结算周期被完全忽略——总量上你只能选一个周期。',
         '  var m = ctx.season > 1 ? ctx.season : 7;',
         '  var n = history.length;',
         '  var out = [];',
