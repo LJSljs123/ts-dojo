@@ -50,6 +50,25 @@ html:root {
   --v3-chart-grid:    rgba(147, 165, 183, 0.18);
   --v3-chart-axis:    #8b98a9;
 
+  /* 代码编辑器（自研编辑器用）：浅色主题必须整套换掉，
+     否则浅底上还是粉彩字——正文 #c9d5e1 在 #f8fafc 上对比度只有 1.3:1 */
+  --ed-fg:         #c9d5e1;
+  --ed-gutter-bg:  #0b1116;
+  --ed-gutter-fg:  #55636f;
+  --tok-com:       #5a6a7a;
+  --tok-str:       #a5e8a0;
+  --tok-num:       #f0b072;
+  --tok-kw:        #8b9cff;
+  --tok-bi:        #4fd1c5;
+
+  /* 难度徽章 / 正文代码块：浅色下必须换深色字，否则 1.2–1.6:1 */
+  --diff-ru:       #4ade80;
+  --diff-pu:       #60a5fa;
+  --diff-ti:       #fbbf24;
+  --diff-ch:       #f87171;
+  --md-code-fg:    #9ee9dc;
+  --md-pre-fg:     #c8d4e0;
+
   /* 字体与节奏 */
   --v3-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
@@ -117,6 +136,22 @@ html[data-theme="light"] {
   --v3-chart-interval:rgba(3, 105, 161, 0.12);
   --v3-chart-grid:    rgba(100, 116, 139, 0.24);
   --v3-chart-axis:    #475569;
+
+  /* 编辑器：浅底深字。取值都按 WCAG AA（≥4.5:1）对着 --v3-panel-2 校过 */
+  --ed-fg:         #1f2937;
+  --ed-gutter-bg:  #eef2f7;
+  --ed-gutter-fg:  #64748b;
+  --tok-com:       #6b7280;
+  --tok-str:       #047857;
+  --tok-num:       #b45309;
+  --tok-kw:        #4338ca;
+  --tok-bi:        #0f766e;
+  --diff-ru:       #15803d;
+  --diff-pu:       #1d4ed8;
+  --diff-ti:       #b45309;
+  --diff-ch:       #b91c1c;
+  --md-code-fg:    #0f766e;
+  --md-pre-fg:     #1f2937;
 }
 
 /* 让旧变量跟随新令牌，减少“半新半旧”的色板 */

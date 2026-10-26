@@ -191,7 +191,7 @@
       host.innerHTML = '<div class="result-empty">' +
         '写一个 <code>predict(history, horizon, ctx)</code> 函数，<br>' +
         '点「提交判题」或按 <code>Ctrl/⌘ + Enter</code> 开始评测。<br>' +
-        '<span style="color:#4d5a68">通过线 ' + p.passScore + ' 分 · 需全部测试点达标</span>' +
+        '<span class="result-hint">通过线 ' + p.passScore + ' 分 · 需全部测试点达标</span>' +
         '</div>';
       return;
     }
