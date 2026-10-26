@@ -373,6 +373,8 @@ body.dragging { user-select: none; cursor: col-resize; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
 .legend-dot { width: 14px; height: 0; border-top-width: 2px; border-top-style: solid; display: inline-block; }
 .legend-dot.dash { border-top-style: dashed; }
+/* 事件标记（促销日）：实心圆点，与三种线型图例区分开 */
+.legend-dot.dot-mark { width: 7px; height: 7px; border: 0; border-radius: 50%; background: var(--v3-warn); }
 
 /* 提示折叠 */
 .hints {

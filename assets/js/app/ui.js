@@ -281,22 +281,6 @@
     host.innerHTML = html.join('\n');
   }
 
-  /** 把最后一个测试点的预测画到预览图上（hover 绑定由 views 负责，paint 后几何信息自动更新）。 */
-  function paintPrediction(res, p, ds) {
-    if (!res || !res.cases || res.cases.length === 0) return;
-    var last = res.cases[res.cases.length - 1];
-    if (!last || !last.predictions) return;
-    var view = $('#view');
-    var canvas = view ? $('#seriesChart', view) : null;
-    if (!canvas) return;
-    TSJ.drawSeries(canvas, {
-      values: ds.values,
-      testStart: ds.values.length - p.horizon,
-      predictions: last.predictions,
-      height: 190
-    });
-  }
-
   /* ---------- 5. 左右分栏拖拽 ---------- */
   function bindSplitter(view) {
     var layout = $('#problemLayout', view);
@@ -344,7 +328,6 @@
     renderCaseList: renderCaseList,
     renderGuardNotice: renderGuardNotice,
     renderResult: renderResult,
-    paintPrediction: paintPrediction,
     bindSplitter: bindSplitter
   };
 })(typeof window !== 'undefined' ? window : this);

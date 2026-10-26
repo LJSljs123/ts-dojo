@@ -160,7 +160,7 @@
 
       if (isSubmit) persistResult(p, res, code);
       ui.renderResult(res, p);
-      ui.paintPrediction(res, p, ds);
+      views.paintPrediction(res, p, ds);
 
       // RE：把错误行标注到编辑器上（同时更新 aria-describedby 指向的说明文本）
       if (res.verdict === 'RE' && res.cases && res.cases.length > 0) {

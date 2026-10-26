@@ -15,6 +15,15 @@ const { launch, findBrowser } = require('./helpers/cdp');
 
 const INDEX_URL = pathToFileURL(path.join(ROOT, 'index.html')).href;
 const HAS_BROWSER = !!findBrowser();
+
+/** P17 的事件标记契约：数据集 promoDays 的长度就是图上应有的标记数。 */
+const P17 = (() => {
+  const e = loadEngine({ fresh: true });
+  const p = e.problems.find((x) => x.id === 'p17-promo-covariate');
+  const ds = e.datasets.find((d) => d.id === p.dataset);
+  return { id: p.id, horizon: p.horizon, promos: ds.promoDays.length, label: p.markerLabel };
+})();
+
 const COURSE_COUNT = (() => {
   global.window = global;
   loadEngine({ fresh: true });
@@ -402,4 +411,113 @@ test('模型工坊：分享卡自包含、字段齐全、数据集名被转义',
   assert.ok(m.doctype, '分享卡必须是完整 HTML 文档');
   assert.ok(m.title && m.hash && m.mse && m.runs && m.split, '分享卡字段缺失：' + raw);
   assert.ok(m.escaped, '分享卡未转义数据集名：' + raw);
+});
+
+/* ================================================================== *
+ * 事件标记：P17 的促销日必须画进图里（且跑完预测后不消失）
+ * ================================================================== */
+
+test('P17 数据预览：促销日画成标记点，图例与标题同步说明', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await goto('#/problem/' + P17.id);
+
+  const raw = await page.evaluate(`(function(){
+    var c = document.querySelector('#view #seriesChart');
+    var chart = c.__tsjChart || {};
+    var g = c.__tsjGeom || {};
+    var marks = (chart.markers && chart.markers.indices) || [];
+    var legend = document.querySelector('#view .chart-legend');
+    var title = document.querySelector('#view .chart-title');
+    return JSON.stringify({
+      label: chart.markers && chart.markers.label,
+      markCount: marks.length,
+      geomCount: g.markers ? Object.keys(g.markers).length : 0,
+      inRange: marks.every(function (i) { return i >= 0 && i < g.n; }),
+      legend: legend ? legend.innerText : '',
+      title: title ? title.innerText : ''
+    });
+  })()`);
+  const r = JSON.parse(raw);
+  console.log('    标记 ' + r.markCount + ' 个 · geom ' + r.geomCount + ' 个 · 图例「' + r.legend.replace(/\s+/g, ' ') + '」');
+  console.log('    标题「' + r.title.replace(/\s+/g, ' ') + '」');
+
+  assert.equal(r.markCount, P17.promos, '图上标记数应等于数据集 promoDays 长度');
+  assert.equal(r.geomCount, P17.promos, 'geom.markers 应覆盖全部促销日（hover 反查依赖它）');
+  assert.ok(r.inRange, '标记下标越界（会被静默跳过，图上少点）');
+  assert.equal(r.label, P17.label, '标记图例文案应取题目的 markerLabel');
+  assert.match(r.legend, /促销日/, '图例里必须解释黄点是什么');
+  assert.match(r.title, new RegExp('促销日 ' + P17.promos + ' 天'), '标题应给出促销日天数');
+});
+
+test('P17 跑完预测后重绘：标记点仍在，预测线也画上了', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await goto('#/problem/' + P17.id);
+
+  // 模板能跑完（返回长度 14 的数组），跑完会重绘整张图 —— 这里正是标记最容易丢的地方
+  await page.evaluate('document.querySelector("#view #btnRun").click()');
+  const painted = await (async () => {
+    const end = Date.now() + 15000;
+    while (Date.now() < end) {
+      const ok = await page.evaluate(
+        '(function(){var c=document.querySelector("#view #seriesChart");var g=c&&c.__tsjGeom;return !!(g&&g.predictions&&g.predictions.length);})()'
+      );
+      if (ok) return true;
+      await sleep(120);
+    }
+    return false;
+  })();
+  assert.ok(painted, '运行后预测线没有画出来（paintPrediction 未生效）');
+
+  const raw = await page.evaluate(`(function(){
+    var c = document.querySelector('#view #seriesChart');
+    var chart = c.__tsjChart || {};
+    var g = c.__tsjGeom || {};
+    return JSON.stringify({
+      markCount: ((chart.markers && chart.markers.indices) || []).length,
+      geomCount: g.markers ? Object.keys(g.markers).length : 0,
+      preds: g.predictions ? g.predictions.length : 0,
+      legend: (document.querySelector('#view .chart-legend') || {}).innerText || ''
+    });
+  })()`);
+  const r = JSON.parse(raw);
+  assert.equal(r.markCount, P17.promos, '重绘后标记点丢了（chartOpts 没被 paintPrediction 复用）');
+  assert.equal(r.geomCount, P17.promos, '重绘后 hover 用的标记索引丢了');
+  assert.equal(r.preds, P17.horizon, '预测点数应等于 horizon');
+  assert.match(r.legend, /促销日/, '重绘后图例里的促销日说明丢了');
+});
+
+test('P17 hover 到促销日：tooltip 首行标出「促销日」', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await goto('#/problem/' + P17.id);
+
+  const raw = await page.evaluate(`(function(){
+    var c = document.querySelector('#view #seriesChart');
+    var g = c.__tsjGeom;
+    var handle = TSJ.appStore.state.chartHover;
+    if (!g || !handle) return JSON.stringify({ err: '缺少几何信息或 hover 句柄' });
+    var idx = (c.__tsjChart.markers.indices || [])[10];   // 任取一个促销日
+    var rect = c.getBoundingClientRect();
+    c.dispatchEvent(new PointerEvent('pointermove', {
+      clientX: rect.left + g.xOf(idx), clientY: rect.top + g.yOf(g.values[idx]),
+      bubbles: true, pointerId: 1
+    }));
+    var tip = handle.tip();
+    var plain = idx + 1;
+    while (c.__tsjChart.markers.indices.indexOf(plain) >= 0) plain++;
+    c.dispatchEvent(new PointerEvent('pointermove', {
+      clientX: rect.left + g.xOf(plain), clientY: rect.top + g.yOf(g.values[plain]),
+      bubbles: true, pointerId: 1
+    }));
+    var tipPlain = handle.tip();
+    c.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true, pointerId: 1 }));
+    return JSON.stringify({
+      idx: idx, marked: tip && tip.lines, plain: tipPlain && tipPlain.lines
+    });
+  })()`);
+  const r = JSON.parse(raw);
+  assert.ok(!r.err, r.err);
+  console.log('    促销日 tooltip：' + JSON.stringify(r.marked));
+  console.log('    普通日 tooltip：' + JSON.stringify(r.plain));
+  assert.match(r.marked[0], /促销日/, '促销日的 tooltip 首行应标出「促销日」');
+  assert.doesNotMatch(r.plain[0], /促销日/, '非促销日不应被标成促销日');
 });

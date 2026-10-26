@@ -53,11 +53,7 @@
     // ---- 数据预览图（画完挂上 hover 交互；句柄存进 state 供路由切换时 destroy）----
     var canvas = $('#seriesChart', view);
     if (canvas) {
-      TSJ.drawSeries(canvas, {
-        values: ds.values,
-        testStart: ds.values.length - p.horizon,
-        height: 190
-      });
+      TSJ.drawSeries(canvas, TSJ.appViews.chartOpts(p, ds));
       if (typeof TSJ.attachChartHover === 'function') {
         store.state.chartHover = TSJ.attachChartHover(canvas);
       }
@@ -181,10 +177,19 @@
 
     html.push('  <div class="md">' + md(p.statement) + '</div>');
 
+    // 事件标记（如促销日）：图例与标题都要说清「圆点是什么」，否则图上多出一排黄点没人解释
+    var markField = p.markerField;
+    var markCount = (markField && Array.isArray(ds[markField])) ? ds[markField].length : 0;
+    var markLabel = p.markerLabel || '事件';
+
     html.push('  <div class="chart-card">\n    <div class="chart-title"><span>数据预览 · ' + esc(ds.name) + '（' + esc(ds.unit) + '）</span>');
-    html.push('      <span>共 ' + ds.values.length + ' 点 · 周期 ' + ds.season + '</span></div>');
+    html.push('      <span>共 ' + ds.values.length + ' 点 · 周期 ' + ds.season +
+      (markCount ? ' · ' + esc(markLabel) + ' ' + markCount + ' 天' : '') + '</span></div>');
     html.push('    <canvas id="seriesChart" class="chart-canvas" height="190"></canvas>\n    <div class="chart-legend">');
     html.push('      <span class="legend-item"><i class="legend-dot" style="border-top-color:var(--v3-chart-history)"></i>历史</span>');
+    if (markCount) {
+      html.push('      <span class="legend-item"><i class="legend-dot dot-mark"></i>' + esc(markLabel) + '</span>');
+    }
     html.push('      <span class="legend-item"><i class="legend-dot" style="border-top-color:var(--v3-chart-actual)"></i>测试集真实值</span>');
     html.push('      <span class="legend-item"><i class="legend-dot dash" style="border-top-color:var(--v3-chart-pred)"></i>你的预测</span>\n    </div>\n  </div>');
 

@@ -19,7 +19,7 @@
 双击 ts-dojo-standalone.html
 ```
 
-它把 CSS 与 47 个脚本全部内联成一个约 808KB 的 HTML，**不依赖任何相对路径**。
+它把 CSS 与 47 个脚本全部内联成一个约 811KB 的 HTML，**不依赖任何相对路径**。
 所以无论是双击打开、丢进 http 服务器、还是被塞进 iframe / `srcdoc` / 预览面板里，都能正常渲染。
 
 **方式 B：模块化版**
@@ -106,10 +106,10 @@ ts-dojo/
 │           ├── store.js       #   state（含判题令牌）+ 派生量 + 合并写盘策略
 │           ├── storage.js     #   进度导出 / 导入 / 清空、跨标签页 storage 同步
 │           ├── lifecycle.js   #   路由生命周期与在途任务清理
-│           ├── ui.js          #   Markdown、结果面板、预测曲线、按钮态、分栏拖拽
+│           ├── ui.js          #   Markdown、结果面板、按钮态、分栏拖拽
 │           ├── a11y.js        #   焦点陷阱、ESC 关闭、aria-live、焦点恢复
 │           ├── theme.js       #   system/light/dark 主题与画布重绘联动
-│           ├── views.js       #   题库页（搜索 / 标签 / 难度 / 随机一题 / 卡片列表）
+│           ├── views.js       #   题库页（搜索 / 标签 / 难度 / 随机一题 / 卡片列表）+ 预览图装配
 │           ├── problem.js     #   题目页、编辑器装配、题解弹层、引导弹层
 │           ├── pages.js       #   提交记录、提交详情、排行榜、学习路径
 │           ├── lab-storage.js #   实验室最近 20 组记录、导入导出
@@ -132,7 +132,7 @@ ts-dojo/
 │   ├── charts/                # v3 图表内核：core / series / diagnostics
 │   └── lab/                   # v3 实验室引擎：config / adapters / stats / runner
 ├── tests/
-│   ├── qa/                    # node --test tests/qa/*.test.js（218 条）
+│   ├── qa/                    # node --test tests/qa/*.test.js（221 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
 │   ├── starter-check.js       # 17 题模板原样提交必须全 WA
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
@@ -232,7 +232,9 @@ datasets → problems → methods
   hints: [...],                        // 折叠显示的提示
   solution,                            // 参考实现代码字符串（通过后可见）
   starter,                             // 预填到编辑器的模板
-  passRate                             // 无本地记录时展示的通过率
+  passRate,                            // 无本地记录时展示的通过率
+  ctxExtra(point, dataset) -> {...},   // 可选：题目专属上下文（如 P17 的 promoDays）
+  markerField, markerLabel             // 可选：把数据集字段画成预览图上的事件标记
 }
 ```
 
@@ -546,7 +548,7 @@ node tests/standalone-check.js  # 单文件版是否与源码同步、是否残�
 node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
 ```
 
-**测试规模：218 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
+**测试规模：221 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
 找不到浏览器时自动 skip，并在输出里注明「未验证」，不假装通过）。
 浏览器用例自带**全局文件锁**：多个测试文件并发时只会排队、不会同时 spawn 多个 Chromium，
 因此 `node --test tests/qa/*.test.js` 直接并发跑也是稳的。

@@ -2693,6 +2693,10 @@
       threshold: 0.9,
       passRate: 22,
 
+      /** 预览图上把数据集里的这个字段画成事件标记（数据集字段名 + 图例文案）。 */
+      markerField: 'promoDays',
+      markerLabel: '促销日',
+
       /** 只读上下文：促销日历（绝对下标，含历史与未来）。切分逻辑不参与。 */
       ctxExtra: function (point, dataset) {
         return { promoDays: dataset.promoDays || [] };

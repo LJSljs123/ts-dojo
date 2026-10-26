@@ -1,10 +1,11 @@
 /**
  * chart.js —— 纯 Canvas 折线图 + 指针悬停读数
  *
- * drawSeries(canvas, { values, testStart, predictions, height, unit })
+ * drawSeries(canvas, { values, testStart, predictions, markers, height, unit })
  *   - values      完整序列（历史 + 测试区间）
  *   - testStart   测试区间起点下标（画半透明高亮带）
  *   - predictions 预测值数组（从 testStart 开始，与测试区间重叠绘制）
+ *   - markers     { indices: number[], label: string } 事件标记（如促销日），画成贴在序列点上的实心圆
  *   - height      CSS 高度（px），宽度自适应父容器
  *
  * 画完会把几何信息挂到 canvas.__tsjGeom（xOf / yOf / n / testStart / values / predictions / padL / padR），
@@ -31,6 +32,7 @@
     bandEdgeHot: 'rgba(45, 212, 191, 0.75)',
     predict: '#a5b4fc',
     actual: '#8a97a8',
+    marker: '#f5b942',
     cross: 'rgba(165, 180, 252, 0.55)',
     tipBg: 'rgba(8, 12, 17, 0.94)',
     tipBorder: 'rgba(139, 156, 255, 0.45)',
@@ -60,6 +62,7 @@
       bandEdgeHot: light ? 'rgba(3, 105, 161, 0.85)' : FALLBACK.bandEdgeHot,
       predict: cssVar('--v3-chart-pred', FALLBACK.predict),
       actual: cssVar('--v3-chart-actual', FALLBACK.actual),
+      marker: cssVar('--v3-warn', FALLBACK.marker),
       cross: light ? 'rgba(3, 105, 161, 0.5)' : FALLBACK.cross,
       tipBg: light ? 'rgba(255, 255, 255, 0.96)' : FALLBACK.tipBg,
       tipBorder: light ? 'rgba(3, 105, 161, 0.35)' : FALLBACK.tipBorder,
@@ -241,8 +244,19 @@
     ctx.textAlign = 'right';
     ctx.fillText(String(n - 1), PAD.left + plotW, height - 8);
     if (testStart > 0 && testStart < n) {
-      ctx.textAlign = 'center';
-      ctx.fillText('测试区间', xOf(testStart) + (PAD.left + plotW - xOf(testStart)) / 2, height - 8);
+      // 测试窗口很窄时（如 P17 的 14/730 ≈ 11px），居中的标签会压到右端刻度数字上：
+      // 这时改成右对齐、贴在高亮带左侧，信息不丢也不重叠。
+      var bandStart = xOf(testStart);
+      var bandW = PAD.left + plotW - bandStart;
+      if (bandW >= 64) {
+        ctx.textAlign = 'center';
+        ctx.fillText('测试区间', bandStart + bandW / 2, height - 8);
+      } else {
+        // 右端刻度数字（n-1）右对齐占着最右边，标签必须让到它左侧，否则两者叠在一起
+        var edgeW = ctx.measureText(String(n - 1)).width;
+        ctx.textAlign = 'right';
+        ctx.fillText('测试区间', PAD.left + plotW - edgeW - 8, height - 8);
+      }
     }
 
     // ---- 历史折线（下方渐变面积增强体量感） ----
@@ -319,6 +333,23 @@
       }
     }
 
+    // ---- 事件标记（如促销日）：贴在序列点上的实心圆 ----
+    // 画在折线之后、预测之前：既压住折线保证可见，也不会被虚线预测盖掉。
+    var marks = (opts.markers && opts.markers.indices) || null;
+    var markerSet = null;
+    if (marks && marks.length) {
+      markerSet = {};
+      ctx.fillStyle = C.marker;
+      for (i = 0; i < marks.length; i++) {
+        var mi = marks[i];
+        if (!(mi >= 0 && mi < n)) continue;
+        markerSet[mi] = 1;
+        ctx.beginPath();
+        ctx.arc(xOf(mi), yOf(values[mi]), 2.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     // ---- 几何信息（hover 反查用）----
     canvas.__tsjGeom = {
       xOf: xOf,
@@ -327,6 +358,8 @@
       testStart: testStart,
       values: values,
       predictions: preds,
+      markers: markerSet,
+      markerLabel: (opts.markers && opts.markers.label) || '事件',
       padL: PAD.left,
       padR: PAD.right,
       plotW: plotW,
@@ -415,8 +448,9 @@
     if (hasPred) dot(x, g.yOf(predVal), C.predict);
 
     // tooltip
+    var isMarked = !!(g.markers && g.markers[idx]);
     var lines = [
-      '#' + idx + (inTest ? ' · 测试区间' : ' · 历史'),
+      '#' + idx + (isMarked ? ' · ' + g.markerLabel : '') + (inTest ? ' · 测试区间' : ' · 历史'),
       '真值 ' + axisLabel(v, g.span)
     ];
     if (hasPred) {

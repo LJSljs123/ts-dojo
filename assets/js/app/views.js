@@ -296,6 +296,44 @@
     if (pick) global.location.hash = '#/problem/' + pick.id;
   }
 
+  /* ---------- 题面预览图：初始绘制与跑完叠加预测共用同一份 opts ---------- */
+
+  /**
+   * 题面预览图的绘制参数。
+   * 初始绘制（app/problem.js）与「跑完画预测」（paintPrediction）必须走同一个函数：
+   * 否则跑一次之后，事件标记（如促销日）就随着重绘消失了。
+   *
+   * @param {Object} p 题目
+   * @param {Object} ds 数据集
+   * @param {number[]} [predictions] 最后一个测试点的预测（可选）
+   * @returns {Object} drawSeries 的 opts
+   */
+  function chartOpts(p, ds, predictions) {
+    var opts = {
+      values: ds.values,
+      testStart: ds.values.length - p.horizon,
+      height: 190
+    };
+    if (predictions) opts.predictions = predictions;
+    var field = p && p.markerField;
+    var marks = (field && ds) ? ds[field] : null;
+    if (Array.isArray(marks) && marks.length) {
+      opts.markers = { indices: marks, label: p.markerLabel || '事件' };
+    }
+    return opts;
+  }
+
+  /** 把最后一个测试点的预测画到预览图上（hover 绑定由题目页负责，paint 后几何信息自动更新）。 */
+  function paintPrediction(res, p, ds) {
+    if (!res || !res.cases || res.cases.length === 0) return;
+    var last = res.cases[res.cases.length - 1];
+    if (!last || !last.predictions) return;
+    var view = $('#view');
+    var canvas = view ? $('#seriesChart', view) : null;
+    if (!canvas) return;
+    TSJ.drawSeries(canvas, chartOpts(p, ds, last.predictions));
+  }
+
   TSJ.appViews = {
     bindRunner: bindRunner,
     invokeRunner: invokeRunner,
@@ -303,6 +341,8 @@
     matches: matches,
     renderProblemList: renderProblemList,
     paintList: paintList,
-    goRandom: goRandom
+    goRandom: goRandom,
+    chartOpts: chartOpts,
+    paintPrediction: paintPrediction
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -6,7 +6,7 @@
  */
 'use strict';
 
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -94,6 +94,28 @@ function releaseBrowserLock() {
 }
 
 /**
+ * 结束浏览器进程树。
+ *
+ * Windows 上 `proc.kill()` 只杀掉启动器，Edge 真正的浏览器进程是它的子进程，
+ * 会变成孤儿继续跑（一次全量测试能漏下十几个实例、上百个进程，把后续用例拖到超时）。
+ * 所以 Windows 走 `taskkill /T /F`，其它平台走 SIGKILL。
+ *
+ * @param {import('node:child_process').ChildProcess} proc 启动的进程
+ */
+function killTree(proc) {
+  if (!proc || !proc.pid) return;
+  if (process.platform === 'win32') {
+    try {
+      spawnSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { stdio: 'ignore' });
+      return;
+    } catch (e) {
+      /* 退回到 proc.kill */
+    }
+  }
+  try { proc.kill('SIGKILL'); } catch (e) { /* 已退出 */ }
+}
+
+/**
  * 启动无头浏览器并连上第一个 page target。
  *
  * 返回前会内置调用 waitReady()，因此调用方拿到 page 时 `window.TSJ.findProblem` 已可调用、
@@ -165,16 +187,30 @@ async function launchInner(url, opts) {
     await sleep(200);
   }
   if (!target) {
-    try { proc.kill(); } catch (e) { /* ignore */ }
+    killTree(proc);
+    try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) { /* ignore */ }
     return null;
   }
 
+  // 兜底：测试进程异常退出（未走到 close）时也不能把浏览器留在机器上
+  const onExit = () => killTree(proc);
+  process.once('exit', onExit);
+
   const ws = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => {
-    ws.addEventListener('open', resolve, { once: true });
-    ws.addEventListener('error', reject, { once: true });
-    setTimeout(() => reject(new Error('CDP 连接超时')), 10000);
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      ws.addEventListener('open', resolve, { once: true });
+      ws.addEventListener('error', reject, { once: true });
+      setTimeout(() => reject(new Error('CDP 连接超时')), 10000);
+    });
+  } catch (e) {
+    // 连不上也必须收尸：否则浏览器进程留在后台，下一轮测试被它拖慢
+    try { ws.close(); } catch (e2) { /* ignore */ }
+    killTree(proc);
+    try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e3) { /* ignore */ }
+    process.removeListener('exit', onExit);
+    throw e;
+  }
 
   let seq = 0;
   const pending = new Map();
@@ -324,8 +360,9 @@ async function launchInner(url, opts) {
     },
     close() {
       try { ws.close(); } catch (e) { /* ignore */ }
-      try { proc.kill(); } catch (e) { /* ignore */ }
+      killTree(proc);
       try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+      process.removeListener('exit', onExit);
     },
   };
 }

@@ -544,6 +544,8 @@ body.dragging { user-select: none; cursor: col-resize; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
 .legend-dot { width: 14px; height: 0; border-top-width: 2px; border-top-style: solid; display: inline-block; }
 .legend-dot.dash { border-top-style: dashed; }
+/* 事件标记（促销日）：实心圆点，与三种线型图例区分开 */
+.legend-dot.dot-mark { width: 7px; height: 7px; border: 0; border-radius: 50%; background: var(--v3-warn); }
 
 /* 提示折叠 */
 .hints {
@@ -6141,6 +6143,10 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       threshold: 0.9,
       passRate: 22,
 
+      /** 预览图上把数据集里的这个字段画成事件标记（数据集字段名 + 图例文案）。 */
+      markerField: 'promoDays',
+      markerLabel: '促销日',
+
       /** 只读上下文：促销日历（绝对下标，含历史与未来）。切分逻辑不参与。 */
       ctxExtra: function (point, dataset) {
         return { promoDays: dataset.promoDays || [] };
@@ -11716,10 +11722,11 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 /**
  * chart.js —— 纯 Canvas 折线图 + 指针悬停读数
  *
- * drawSeries(canvas, { values, testStart, predictions, height, unit })
+ * drawSeries(canvas, { values, testStart, predictions, markers, height, unit })
  *   - values      完整序列（历史 + 测试区间）
  *   - testStart   测试区间起点下标（画半透明高亮带）
  *   - predictions 预测值数组（从 testStart 开始，与测试区间重叠绘制）
+ *   - markers     { indices: number[], label: string } 事件标记（如促销日），画成贴在序列点上的实心圆
  *   - height      CSS 高度（px），宽度自适应父容器
  *
  * 画完会把几何信息挂到 canvas.__tsjGeom（xOf / yOf / n / testStart / values / predictions / padL / padR），
@@ -11746,6 +11753,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     bandEdgeHot: 'rgba(45, 212, 191, 0.75)',
     predict: '#a5b4fc',
     actual: '#8a97a8',
+    marker: '#f5b942',
     cross: 'rgba(165, 180, 252, 0.55)',
     tipBg: 'rgba(8, 12, 17, 0.94)',
     tipBorder: 'rgba(139, 156, 255, 0.45)',
@@ -11775,6 +11783,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       bandEdgeHot: light ? 'rgba(3, 105, 161, 0.85)' : FALLBACK.bandEdgeHot,
       predict: cssVar('--v3-chart-pred', FALLBACK.predict),
       actual: cssVar('--v3-chart-actual', FALLBACK.actual),
+      marker: cssVar('--v3-warn', FALLBACK.marker),
       cross: light ? 'rgba(3, 105, 161, 0.5)' : FALLBACK.cross,
       tipBg: light ? 'rgba(255, 255, 255, 0.96)' : FALLBACK.tipBg,
       tipBorder: light ? 'rgba(3, 105, 161, 0.35)' : FALLBACK.tipBorder,
@@ -11956,8 +11965,19 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     ctx.textAlign = 'right';
     ctx.fillText(String(n - 1), PAD.left + plotW, height - 8);
     if (testStart > 0 && testStart < n) {
-      ctx.textAlign = 'center';
-      ctx.fillText('测试区间', xOf(testStart) + (PAD.left + plotW - xOf(testStart)) / 2, height - 8);
+      // 测试窗口很窄时（如 P17 的 14/730 ≈ 11px），居中的标签会压到右端刻度数字上：
+      // 这时改成右对齐、贴在高亮带左侧，信息不丢也不重叠。
+      var bandStart = xOf(testStart);
+      var bandW = PAD.left + plotW - bandStart;
+      if (bandW >= 64) {
+        ctx.textAlign = 'center';
+        ctx.fillText('测试区间', bandStart + bandW / 2, height - 8);
+      } else {
+        // 右端刻度数字（n-1）右对齐占着最右边，标签必须让到它左侧，否则两者叠在一起
+        var edgeW = ctx.measureText(String(n - 1)).width;
+        ctx.textAlign = 'right';
+        ctx.fillText('测试区间', PAD.left + plotW - edgeW - 8, height - 8);
+      }
     }
 
     // ---- 历史折线（下方渐变面积增强体量感） ----
@@ -12034,6 +12054,23 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       }
     }
 
+    // ---- 事件标记（如促销日）：贴在序列点上的实心圆 ----
+    // 画在折线之后、预测之前：既压住折线保证可见，也不会被虚线预测盖掉。
+    var marks = (opts.markers && opts.markers.indices) || null;
+    var markerSet = null;
+    if (marks && marks.length) {
+      markerSet = {};
+      ctx.fillStyle = C.marker;
+      for (i = 0; i < marks.length; i++) {
+        var mi = marks[i];
+        if (!(mi >= 0 && mi < n)) continue;
+        markerSet[mi] = 1;
+        ctx.beginPath();
+        ctx.arc(xOf(mi), yOf(values[mi]), 2.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     // ---- 几何信息（hover 反查用）----
     canvas.__tsjGeom = {
       xOf: xOf,
@@ -12042,6 +12079,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       testStart: testStart,
       values: values,
       predictions: preds,
+      markers: markerSet,
+      markerLabel: (opts.markers && opts.markers.label) || '事件',
       padL: PAD.left,
       padR: PAD.right,
       plotW: plotW,
@@ -12130,8 +12169,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     if (hasPred) dot(x, g.yOf(predVal), C.predict);
 
     // tooltip
+    var isMarked = !!(g.markers && g.markers[idx]);
     var lines = [
-      '#' + idx + (inTest ? ' · 测试区间' : ' · 历史'),
+      '#' + idx + (isMarked ? ' · ' + g.markerLabel : '') + (inTest ? ' · 测试区间' : ' · 历史'),
       '真值 ' + axisLabel(v, g.span)
     ];
     if (hasPred) {
@@ -15556,22 +15596,6 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     host.innerHTML = html.join('\n');
   }
 
-  /** 把最后一个测试点的预测画到预览图上（hover 绑定由 views 负责，paint 后几何信息自动更新）。 */
-  function paintPrediction(res, p, ds) {
-    if (!res || !res.cases || res.cases.length === 0) return;
-    var last = res.cases[res.cases.length - 1];
-    if (!last || !last.predictions) return;
-    var view = $('#view');
-    var canvas = view ? $('#seriesChart', view) : null;
-    if (!canvas) return;
-    TSJ.drawSeries(canvas, {
-      values: ds.values,
-      testStart: ds.values.length - p.horizon,
-      predictions: last.predictions,
-      height: 190
-    });
-  }
-
   /* ---------- 5. 左右分栏拖拽 ---------- */
   function bindSplitter(view) {
     var layout = $('#problemLayout', view);
@@ -15619,7 +15643,6 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     renderCaseList: renderCaseList,
     renderGuardNotice: renderGuardNotice,
     renderResult: renderResult,
-    paintPrediction: paintPrediction,
     bindSplitter: bindSplitter
   };
 })(typeof window !== 'undefined' ? window : this);
@@ -16241,6 +16264,44 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     if (pick) global.location.hash = '#/problem/' + pick.id;
   }
 
+  /* ---------- 题面预览图：初始绘制与跑完叠加预测共用同一份 opts ---------- */
+
+  /**
+   * 题面预览图的绘制参数。
+   * 初始绘制（app/problem.js）与「跑完画预测」（paintPrediction）必须走同一个函数：
+   * 否则跑一次之后，事件标记（如促销日）就随着重绘消失了。
+   *
+   * @param {Object} p 题目
+   * @param {Object} ds 数据集
+   * @param {number[]} [predictions] 最后一个测试点的预测（可选）
+   * @returns {Object} drawSeries 的 opts
+   */
+  function chartOpts(p, ds, predictions) {
+    var opts = {
+      values: ds.values,
+      testStart: ds.values.length - p.horizon,
+      height: 190
+    };
+    if (predictions) opts.predictions = predictions;
+    var field = p && p.markerField;
+    var marks = (field && ds) ? ds[field] : null;
+    if (Array.isArray(marks) && marks.length) {
+      opts.markers = { indices: marks, label: p.markerLabel || '事件' };
+    }
+    return opts;
+  }
+
+  /** 把最后一个测试点的预测画到预览图上（hover 绑定由题目页负责，paint 后几何信息自动更新）。 */
+  function paintPrediction(res, p, ds) {
+    if (!res || !res.cases || res.cases.length === 0) return;
+    var last = res.cases[res.cases.length - 1];
+    if (!last || !last.predictions) return;
+    var view = $('#view');
+    var canvas = view ? $('#seriesChart', view) : null;
+    if (!canvas) return;
+    TSJ.drawSeries(canvas, chartOpts(p, ds, last.predictions));
+  }
+
   TSJ.appViews = {
     bindRunner: bindRunner,
     invokeRunner: invokeRunner,
@@ -16248,7 +16309,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     matches: matches,
     renderProblemList: renderProblemList,
     paintList: paintList,
-    goRandom: goRandom
+    goRandom: goRandom,
+    chartOpts: chartOpts,
+    paintPrediction: paintPrediction
   };
 })(typeof window !== 'undefined' ? window : this);
 
@@ -16309,11 +16372,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     // ---- 数据预览图（画完挂上 hover 交互；句柄存进 state 供路由切换时 destroy）----
     var canvas = $('#seriesChart', view);
     if (canvas) {
-      TSJ.drawSeries(canvas, {
-        values: ds.values,
-        testStart: ds.values.length - p.horizon,
-        height: 190
-      });
+      TSJ.drawSeries(canvas, TSJ.appViews.chartOpts(p, ds));
       if (typeof TSJ.attachChartHover === 'function') {
         store.state.chartHover = TSJ.attachChartHover(canvas);
       }
@@ -16437,10 +16496,19 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 
     html.push('  <div class="md">' + md(p.statement) + '</div>');
 
+    // 事件标记（如促销日）：图例与标题都要说清「圆点是什么」，否则图上多出一排黄点没人解释
+    var markField = p.markerField;
+    var markCount = (markField && Array.isArray(ds[markField])) ? ds[markField].length : 0;
+    var markLabel = p.markerLabel || '事件';
+
     html.push('  <div class="chart-card">\n    <div class="chart-title"><span>数据预览 · ' + esc(ds.name) + '（' + esc(ds.unit) + '）</span>');
-    html.push('      <span>共 ' + ds.values.length + ' 点 · 周期 ' + ds.season + '</span></div>');
+    html.push('      <span>共 ' + ds.values.length + ' 点 · 周期 ' + ds.season +
+      (markCount ? ' · ' + esc(markLabel) + ' ' + markCount + ' 天' : '') + '</span></div>');
     html.push('    <canvas id="seriesChart" class="chart-canvas" height="190"></canvas>\n    <div class="chart-legend">');
     html.push('      <span class="legend-item"><i class="legend-dot" style="border-top-color:var(--v3-chart-history)"></i>历史</span>');
+    if (markCount) {
+      html.push('      <span class="legend-item"><i class="legend-dot dot-mark"></i>' + esc(markLabel) + '</span>');
+    }
     html.push('      <span class="legend-item"><i class="legend-dot" style="border-top-color:var(--v3-chart-actual)"></i>测试集真实值</span>');
     html.push('      <span class="legend-item"><i class="legend-dot dash" style="border-top-color:var(--v3-chart-pred)"></i>你的预测</span>\n    </div>\n  </div>');
 
@@ -20018,7 +20086,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 
       if (isSubmit) persistResult(p, res, code);
       ui.renderResult(res, p);
-      ui.paintPrediction(res, p, ds);
+      views.paintPrediction(res, p, ds);
 
       // RE：把错误行标注到编辑器上（同时更新 aria-describedby 指向的说明文本）
       if (res.verdict === 'RE' && res.cases && res.cases.length > 0) {

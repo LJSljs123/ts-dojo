@@ -13,7 +13,7 @@
 | 项目性质 | 纯前端、零依赖、零构建的时间序列判题学习平台（类洛谷） |
 | 代码规模 | 47 个脚本（含 30 个 app 层模块）+ 4 个样式表，无打包器、无 ESM、无外部资源 |
 | 内容规模 | 17 题 / 10 套合成数据 / 47 个方法（5 层）/ 9 门课程 / 83 条术语 / 12 个实验室白名单方法 |
-| 测试基线 | **218 条 QA 用例**（198 原有 + 10 CSV 解析 + 8 成就判定 + 1 分享卡 + 1 促销日历护栏），另有 selftest / starter-check / storage-audit / standalone-check 四件套 |
+| 测试基线 | **221 条 QA 用例**（198 原有 + 10 CSV 解析 + 8 成就判定 + 1 分享卡 + 1 促销日历护栏 + 3 预览图标记），另有 selftest / starter-check / storage-audit / standalone-check 四件套 |
 | 判题语义 | 指标 / 基线 / 评分 / 切分 17 题锚点全部稳定，selftest 参考解 17/17 passed |
 | 产品约束 | file:// 双击可用、单文件版可嵌 iframe/srcdoc、无网络请求（CSP `connect-src 'none'`） |
 | 接手风险 | 低。剩余风险集中在「浏览器用例并发 flake」与「新功能行为测试缺口」，不影响正确性 |
@@ -209,6 +209,6 @@ var extra = typeof problem.ctxExtra === 'function' ? problem.ctxExtra : null;
 - `library.test.js` 五层数量 `classic 13→14`、可练 `14→15`
 - `content-v3.test.js` 47 方法详情 / 47 条引用 / 三级标签全部转绿（13/13）
 - `solutions.test.js` 数据集元数据表 + 促销日历护栏（15/15）
-- README：17 题 / 47 方法 / 14 经典 / 15 可练 / 218 条 / 808KB；题库表补 P16、P17（P16 此前漏登记）
+- README：17 题 / 47 方法 / 14 经典 / 15 可练 / 221 条 / 811KB；题库表补 P16、P17（P16 此前漏登记）
 - `v3-architecture.md` 12.6 节、`v3.2-changelog.md` 第十一节
-- 单文件版重建 808.1KB / 47 脚本，`standalone-check` 全绿
+- 单文件版重建 811.5KB / 47 脚本，`standalone-check` 全绿

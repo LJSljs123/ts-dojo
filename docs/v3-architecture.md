@@ -285,3 +285,23 @@ ctx = merge(p.ctx, add);   // 新对象，不写回测试点
 3. **数据集生成器可以返回对象**：`datasets.js` 注册表接受 `build(rng) → number[] | {values, ...extra}`，对象形态下 `values` 必填，其余字段原样挂到 `ds` 上。P17 的 `retail_daily` 用它携带 `promoDays`（绝对下标，与 `history` 同一坐标系）。
 
 数据设计上有一条硬约束：**测试窗口内必须同时存在历史促销日与未来促销日**。P17 让生成器在最后两周固定放 2 个促销日（`n-9`、`n-3`），否则「只清洗历史」或「只乘未来」的半成品解能过线——这是通过数据设计而非改评分解决的问题。实测梯度：模板 55 / 只清洗历史 44 / 只修正未来 54 / 参考解 100（通过线 60）。
+
+### 12.7 事件标记与预览图契约
+
+`chart.js` 只认一个通用入参，不认识「促销」这个概念：
+
+```js
+TSJ.drawSeries(canvas, {
+  values, testStart, predictions,
+  markers: { indices: [721, 727], label: '促销日' }   // 可选
+});
+```
+
+题目侧用两个字段声明（`problems.js`）：`markerField: 'promoDays'` 指向数据集上的字段，`markerLabel: '促销日'` 决定图例与 tooltip 文案。**为什么不让 chart 直接读 `ctxExtra`**：`ctxExtra` 是按测试点计算的，而预览图画的是整条序列；标记必须来自数据集本身（全序列下标），否则 holdout 与 rolling 会画出不同的标记集。
+
+两条实现约束：
+
+1. **opts 必须只有一个来源**。初始绘制（`app/problem.js`）与跑完重绘（`app/views.js#paintPrediction`）共用 `TSJ.appViews.chartOpts(p, ds, predictions)`。历史上这两处各写一份 opts，加标记后「跑一次标记就消失」——已由 `v3-browser.test.js` 的「跑完预测后重绘：标记点仍在」守住。
+2. **几何信息要带上标记索引**。`canvas.__tsjGeom.markers` 是 `{ [index]: 1 }` 的查找表，供 hover 层在 tooltip 首行加「促销日」；`__tsjChart.markers` 保留原始数组供测试与调试读取。
+
+标记的绘制位置在折线之后、预测虚线之前：压在历史线上保证可见，又不会被预测虚线覆盖。颜色取 `--v3-warn`（深色 `#f5b942` / 浅色 `#b45309`），与三条线型图例（历史 / 真实值 / 预测）区分开。
