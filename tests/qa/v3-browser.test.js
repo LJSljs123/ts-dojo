@@ -699,3 +699,111 @@ test('题目页「继续深入」：挂了课程的题要给出课程链接', as
     await page.send('Emulation.clearDeviceMetricsOverride');
   }
 });
+
+/**
+ * 左右分栏：题目页与模型工坊共用 `.problem-layout`（三列网格：左栏 / 7px 分隔条 / 右栏）。
+ * 少一个分隔条，右栏就会被自动排到那 7px 的列里——页面看起来「右半边全黑」，
+ * 而所有既有用例都只查 `#view` 的 scrollWidth，查不出来。
+ */
+test('分栏：题目页与模型工坊都有可拖拽的分隔条，右栏不塌陷', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    width: 1280, height: 1000, deviceScaleFactor: 1, mobile: false
+  });
+  try {
+    for (const hash of ['#/problem/p18-channel-mix', '#/studio']) {
+      await goto(hash);
+      const m = await page.evaluate(
+        `(function(){
+          var lay = document.querySelector('#view .problem-layout');
+          if (!lay) return {missing: true};
+          var sp = lay.querySelector('.splitter');
+          var left = lay.querySelector('.pane-left');
+          var right = lay.querySelector('.pane-right');
+          if (!right) return {missing: true};
+          var lw = lay.getBoundingClientRect().width;
+          return {
+            missing: false,
+            layoutW: Math.round(lw),
+            hasSplitter: !!sp,
+            leftW: Math.round(left.getBoundingClientRect().width),
+            rightW: Math.round(right.getBoundingClientRect().width),
+            rightMin: Math.round(right.getBoundingClientRect().width / lw * 100)
+          };
+        })()`
+      );
+      assert.equal(m.missing, false, hash + ' 没有 .problem-layout / .pane-right');
+      assert.equal(m.hasSplitter, true, hash + ' 缺少分隔条（右栏会被挤进 7px 列）');
+      console.log('    ' + hash + ' 左 ' + m.leftW + ' / 右 ' + m.rightW + '（右占 ' + m.rightMin + '%）');
+      assert.ok(m.rightMin >= 30, hash + ' 右栏只占 ' + m.rightMin + '% 宽度，疑似塌陷');
+    }
+
+    // 拖拽：把分隔条拉到 60%，左栏宽度必须跟着变
+    await goto('#/studio');
+    const drag = await page.evaluate(
+      `(function(){
+        var lay = document.querySelector('#view .problem-layout');
+        var sp = lay.querySelector('.splitter');
+        var rect = lay.getBoundingClientRect();
+        var b = sp.getBoundingClientRect();
+        function ev(type, x){
+          sp.dispatchEvent(new PointerEvent(type, {bubbles:true, clientX:x, clientY:b.y + 40, pointerId:1}));
+        }
+        ev('pointerdown', b.x + 3);
+        ev('pointermove', rect.left + rect.width * 0.6);
+        ev('pointerup', rect.left + rect.width * 0.6);
+        return {
+          split: lay.style.getPropertyValue('--split'),
+          leftW: Math.round(lay.querySelector('.pane-left').getBoundingClientRect().width),
+          layoutW: Math.round(rect.width),
+          dragging: document.body.classList.contains('dragging')
+        };
+      })()`
+    );
+    console.log('    拖拽到 60%：--split=' + drag.split + ' · 左栏 ' + drag.leftW + '/' + drag.layoutW);
+    assert.equal(drag.split, '60.00%', '拖拽没有写回 --split');
+    assert.ok(Math.abs(drag.leftW - drag.layoutW * 0.6) <= 3, '左栏宽度没跟上拖拽');
+    assert.equal(drag.dragging, false, 'pointerup 后 body.dragging 没摘掉');
+  } finally {
+    await page.send('Emulation.clearDeviceMetricsOverride');
+  }
+});
+
+/**
+ * 工作台是入口页，却一条结构用例都没有——和模型工坊右栏塌陷是同一类漏洞：
+ * 布局被某个子元素撑坏时，既有用例只看 `#view` 的 scrollWidth，查不出来。
+ * 这里守两条用户能直接感知的性质：主 CTA 在首屏内、底部三张卡高度不被某一个撑爆。
+ */
+test('工作台：主 CTA 在首屏内，底部三列高度相当', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    width: 1280, height: 1000, deviceScaleFactor: 1, mobile: false
+  });
+  try {
+    await goto('#/');
+    const r = await page.evaluate(
+      `(function(){
+        var cta = document.querySelector('#view .wk-cta-row');
+        var cards = [].map.call(document.querySelectorAll('#view .wk-grid-3 > .ds-card'), function (e) {
+          return Math.round(e.getBoundingClientRect().height);
+        });
+        return {
+          ctaBottom: cta ? Math.round(cta.getBoundingClientRect().bottom) : -1,
+          viewport: window.innerHeight,
+          cards: cards,
+          maxSpread: cards.length ? Math.max.apply(null, cards) - Math.min.apply(null, cards) : -1
+        };
+      })()`
+    );
+    console.log('    CTA 底边 ' + r.ctaBottom + ' / 视口 ' + r.viewport +
+      ' · 三卡高度 ' + JSON.stringify(r.cards));
+    assert.ok(r.ctaBottom > 0, '工作台没有 .wk-cta-row');
+    assert.ok(r.ctaBottom <= r.viewport,
+      '主 CTA 掉到首屏外（底边 ' + r.ctaBottom + ' > 视口 ' + r.viewport + '）——hero 被右栏撑高了');
+    assert.equal(r.cards.length, 3, '底部应有三张卡，实际 ' + r.cards.length);
+    assert.ok(r.maxSpread <= 40,
+      '底部三张卡高度差 ' + r.maxSpread + 'px，有一张被内容撑爆了整行：' + JSON.stringify(r.cards));
+  } finally {
+    await page.send('Emulation.clearDeviceMetricsOverride');
+  }
+});

@@ -282,9 +282,16 @@
   }
 
   /* ---------- 5. 左右分栏拖拽 ---------- */
-  function bindSplitter(view) {
-    var layout = $('#problemLayout', view);
-    var splitter = $('#splitter', view);
+  /**
+   * 绑定左右分栏拖拽。
+   * @param {Element} view 视图根
+   * @param {{layoutId?:string, splitterId?:string}} [opts] 题目页用默认 id，
+   *        模型工坊是另一套（studioLayout / studioSplitter）——两页共用同一份拖拽逻辑。
+   */
+  function bindSplitter(view, opts) {
+    var o = opts || {};
+    var layout = $('#' + (o.layoutId || 'problemLayout'), view);
+    var splitter = $('#' + (o.splitterId || 'splitter'), view);
     if (!layout || !splitter) return;
 
     var dragging = false;

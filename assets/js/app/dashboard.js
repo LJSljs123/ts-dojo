@@ -134,18 +134,10 @@
       '  <div class="wk-side-stack">',
       overviewCard(state),
       achievementsCard(),
-      '    <div class="ds-card"><h2 class="ds-card-title">快速入口</h2><div class="wk-list">',
-      '      <a class="wk-list-item" href="#/problems"><span class="wk-list-main"><b>题库</b><span>' + TSJ.problems.length + ' 道可判题练习</span></span><span class="ds-badge">去练习</span></a>',
-      '      <a class="wk-list-item" href="#/learn/m0"><span class="wk-list-main"><b>零基础第一课</b><span>25 分钟：从看懂一条曲线到写出第一个 predict</span></span><span class="ds-badge">去入门</span></a>',
-      '      <a class="wk-list-item" href="#/learn"><span class="wk-list-main"><b>课程</b><span>9 个模块与先修路径</span></span><span class="ds-badge">去学习</span></a>',
-      '      <a class="wk-list-item" href="#/glossary"><span class="wk-list-main"><b>术语表</b><span>题面与课程里的行话速查</span></span><span class="ds-badge">去查阅</span></a>',
-      '      <a class="wk-list-item" href="#/studio"><span class="wk-list-main"><b>模型工坊</b><span>自己搓一个模型，跑完验证/最终两阶段实验</span></span><span class="ds-badge">去搓模型</span></a>',
-      '      <a class="wk-list-item" href="#/submissions"><span class="wk-list-main"><b>提交记录</b><span>代码快照与逐测试点复盘</span></span><span class="ds-badge">去复盘</span></a>',
-      '    </div></div>',
       '  </div>',
       '</div>',
 
-      '<div class="wk-grid-2">',
+      '<div class="wk-grid-3">',
       '  <div class="ds-card"><h2 class="ds-card-title">最近提交</h2><p class="ds-card-sub">点开可看当时的代码与逐测试点。</p>',
       subs.length ? '<div class="wk-list">' + subs.map(function (s) {
         return '<a class="wk-list-item" href="#/submission/' + encodeURIComponent(s.id) + '"><span class="wk-list-main"><b>' + esc(s.title) + '</b><span>' + fmtTime(s.at) + ' · ' + esc(s.verdict) + '</span></span><span class="ds-badge">' + s.score + ' 分</span></a>';
@@ -158,6 +150,14 @@
         return '<div class="lab-history-item"><span>' + esc(r.config.datasetId) + ' · ' + esc(r.config.method) + '</span><span>' + (first ? (first.toUpperCase() + ' ' + m[first].toFixed(2)) : '—') + '</span></div>';
       }).join('') + '</div>' : '<div class="ds-empty"><strong>还没有实验</strong><span>选一个数据集和方法，先跑一次受控回测。</span><a class="ds-btn" href="#/lab">打开实验室</a></div>',
       '  </div>',
+      // 快速入口原本挂在 hero 右栏，把整行撑到 1000px 以上，主 CTA 被挤到首屏外。
+      // 现在放第三列，只留「动手做」的三项：课程 / 术语表 / 方法库都在顶栏与 hero CTA 里，
+      // 再列一遍只会把这行撑高，让旁边两张卡空出半截。
+      '  <div class="ds-card"><h2 class="ds-card-title">快速入口</h2><div class="wk-list">',
+      '    <a class="wk-list-item" href="#/problems"><span class="wk-list-main"><b>题库</b><span>' + TSJ.problems.length + ' 道可判题练习</span></span><span class="ds-badge">去练习</span></a>',
+      '    <a class="wk-list-item" href="#/studio"><span class="wk-list-main"><b>模型工坊</b><span>自己搓一个模型，跑完验证/最终两阶段实验</span></span><span class="ds-badge">去搓模型</span></a>',
+      '    <a class="wk-list-item" href="#/submissions"><span class="wk-list-main"><b>提交记录</b><span>代码快照与逐测试点复盘</span></span><span class="ds-badge">去复盘</span></a>',
+      '  </div></div>',
       '</div>'
     ].join('\n');
 

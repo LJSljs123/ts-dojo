@@ -122,6 +122,7 @@
       '  <div class="editor-host" id="studioEditorHost"></div>',
       '  <p class="ed-help" id="studioEdHelp">代码出错时会在这里说明行号与原因。</p>',
       '</section>',
+      '<div class="splitter" id="studioSplitter" role="separator" aria-orientation="vertical" aria-label="调整左右分栏宽度" tabindex="-1"></div>',
       '<section class="pane pane-right">',
       '  <div class="ds-card"><h2 class="ds-card-title">实验报告</h2><div id="studioReport">' +
       '    <div class="ds-empty"><strong>还没有运行</strong><span>先「① 验证集评估」迭代模型，满意后「② 最终评测」。</span></div></div></div>',
@@ -143,6 +144,9 @@
       onRun: function () { runPhase('val'); },
       onSave: function () { core.writeJSON(core.STORE.studioDraft, ctx.code); a11y.toast('草稿已保存', 'ok'); }
     });
+
+    // 左右分栏可拖拽：与题目页同一份逻辑，只是 id 不同
+    TSJ.appUi.bindSplitter(host, { layoutId: 'studioLayout', splitterId: 'studioSplitter' });
 
     TSJ.appStudioCsv.setupPanel({ onDatasetChanged: paintSplits });
     paintSplits();

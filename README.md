@@ -19,7 +19,7 @@
 双击 ts-dojo-standalone.html
 ```
 
-它把 CSS 与 48 个脚本全部内联成一个约 833KB 的 HTML，**不依赖任何相对路径**。
+它把 CSS 与 48 个脚本全部内联成一个约 834KB 的 HTML，**不依赖任何相对路径**。
 所以无论是双击打开、丢进 http 服务器、还是被塞进 iframe / `srcdoc` / 预览面板里，都能正常渲染。
 
 **方式 B：模块化版**
@@ -138,7 +138,7 @@ ts-dojo/
 │   ├── charts/                # v3 图表内核：core / series / diagnostics
 │   └── lab/                   # v3 实验室引擎：config / adapters / stats / runner
 ├── tests/
-│   ├── qa/                    # node --test tests/qa/*.test.js（235 条）
+│   ├── qa/                    # node --test tests/qa/*.test.js（237 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
 │   ├── starter-check.js       # 18 题模板原样提交必须全 WA
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
@@ -566,7 +566,7 @@ node tests/standalone-check.js  # 单文件版是否与源码同步、是否残�
 node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
 ```
 
-**测试规模：235 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
+**测试规模：237 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
 找不到浏览器时自动 skip，并在输出里注明「未验证」，不假装通过）。
 浏览器用例自带**全局文件锁**：多个测试文件并发时只会排队、不会同时 spawn 多个 Chromium，
 因此 `node --test tests/qa/*.test.js` 直接并发跑也是稳的。

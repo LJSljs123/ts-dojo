@@ -2195,11 +2195,16 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 1fr);
   gap: var(--v3-space-5);
+  /* 右栏是三张卡叠起来（约 1040px），左栏只有一段文案。拉伸是对的，
+     但左卡必须自己把内容上下撑开（见 .wk-cta-row 的 margin-top:auto），
+     否则文案挤在顶部、下半张卡片整片空白。 */
   align-items: stretch;
   margin-bottom: var(--v3-space-5);
 }
 
 .wk-hero-main {
+  display: flex;
+  flex-direction: column;
   padding: var(--v3-space-6);
   border: 1px solid var(--v3-line);
   border-radius: var(--v3-radius-lg);
@@ -2229,7 +2234,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.wk-cta-row { display: flex; flex-wrap: wrap; gap: var(--v3-space-3); }
+/* margin-top:auto：把 CTA 钉在卡片底部，卡片被右栏拉高时不会留下半张空白 */
+.wk-cta-row { display: flex; flex-wrap: wrap; gap: var(--v3-space-3); margin-top: auto; padding-top: var(--v3-space-4); }
 
 .wk-side-stack { display: grid; gap: var(--v3-space-4); align-content: start; }
 
@@ -2264,7 +2270,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 .wk-grid-3 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--v3-space-4);
+  /* 与 .wk-hero / .wk-grid-2 同一档间距，否则底部一行看起来比上面更挤 */
+  gap: var(--v3-space-5);
 }
 
 .wk-list { display: grid; gap: var(--v3-space-3); }
@@ -15921,9 +15928,16 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   }
 
   /* ---------- 5. 左右分栏拖拽 ---------- */
-  function bindSplitter(view) {
-    var layout = $('#problemLayout', view);
-    var splitter = $('#splitter', view);
+  /**
+   * 绑定左右分栏拖拽。
+   * @param {Element} view 视图根
+   * @param {{layoutId?:string, splitterId?:string}} [opts] 题目页用默认 id，
+   *        模型工坊是另一套（studioLayout / studioSplitter）——两页共用同一份拖拽逻辑。
+   */
+  function bindSplitter(view, opts) {
+    var o = opts || {};
+    var layout = $('#' + (o.layoutId || 'problemLayout'), view);
+    var splitter = $('#' + (o.splitterId || 'splitter'), view);
     if (!layout || !splitter) return;
 
     var dragging = false;
@@ -18415,6 +18429,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       '  <div class="editor-host" id="studioEditorHost"></div>',
       '  <p class="ed-help" id="studioEdHelp">代码出错时会在这里说明行号与原因。</p>',
       '</section>',
+      '<div class="splitter" id="studioSplitter" role="separator" aria-orientation="vertical" aria-label="调整左右分栏宽度" tabindex="-1"></div>',
       '<section class="pane pane-right">',
       '  <div class="ds-card"><h2 class="ds-card-title">实验报告</h2><div id="studioReport">' +
       '    <div class="ds-empty"><strong>还没有运行</strong><span>先「① 验证集评估」迭代模型，满意后「② 最终评测」。</span></div></div></div>',
@@ -18436,6 +18451,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       onRun: function () { runPhase('val'); },
       onSave: function () { core.writeJSON(core.STORE.studioDraft, ctx.code); a11y.toast('草稿已保存', 'ok'); }
     });
+
+    // 左右分栏可拖拽：与题目页同一份逻辑，只是 id 不同
+    TSJ.appUi.bindSplitter(host, { layoutId: 'studioLayout', splitterId: 'studioSplitter' });
 
     TSJ.appStudioCsv.setupPanel({ onDatasetChanged: paintSplits });
     paintSplits();
@@ -18923,18 +18941,10 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       '  <div class="wk-side-stack">',
       overviewCard(state),
       achievementsCard(),
-      '    <div class="ds-card"><h2 class="ds-card-title">快速入口</h2><div class="wk-list">',
-      '      <a class="wk-list-item" href="#/problems"><span class="wk-list-main"><b>题库</b><span>' + TSJ.problems.length + ' 道可判题练习</span></span><span class="ds-badge">去练习</span></a>',
-      '      <a class="wk-list-item" href="#/learn/m0"><span class="wk-list-main"><b>零基础第一课</b><span>25 分钟：从看懂一条曲线到写出第一个 predict</span></span><span class="ds-badge">去入门</span></a>',
-      '      <a class="wk-list-item" href="#/learn"><span class="wk-list-main"><b>课程</b><span>9 个模块与先修路径</span></span><span class="ds-badge">去学习</span></a>',
-      '      <a class="wk-list-item" href="#/glossary"><span class="wk-list-main"><b>术语表</b><span>题面与课程里的行话速查</span></span><span class="ds-badge">去查阅</span></a>',
-      '      <a class="wk-list-item" href="#/studio"><span class="wk-list-main"><b>模型工坊</b><span>自己搓一个模型，跑完验证/最终两阶段实验</span></span><span class="ds-badge">去搓模型</span></a>',
-      '      <a class="wk-list-item" href="#/submissions"><span class="wk-list-main"><b>提交记录</b><span>代码快照与逐测试点复盘</span></span><span class="ds-badge">去复盘</span></a>',
-      '    </div></div>',
       '  </div>',
       '</div>',
 
-      '<div class="wk-grid-2">',
+      '<div class="wk-grid-3">',
       '  <div class="ds-card"><h2 class="ds-card-title">最近提交</h2><p class="ds-card-sub">点开可看当时的代码与逐测试点。</p>',
       subs.length ? '<div class="wk-list">' + subs.map(function (s) {
         return '<a class="wk-list-item" href="#/submission/' + encodeURIComponent(s.id) + '"><span class="wk-list-main"><b>' + esc(s.title) + '</b><span>' + fmtTime(s.at) + ' · ' + esc(s.verdict) + '</span></span><span class="ds-badge">' + s.score + ' 分</span></a>';
@@ -18947,6 +18957,14 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
         return '<div class="lab-history-item"><span>' + esc(r.config.datasetId) + ' · ' + esc(r.config.method) + '</span><span>' + (first ? (first.toUpperCase() + ' ' + m[first].toFixed(2)) : '—') + '</span></div>';
       }).join('') + '</div>' : '<div class="ds-empty"><strong>还没有实验</strong><span>选一个数据集和方法，先跑一次受控回测。</span><a class="ds-btn" href="#/lab">打开实验室</a></div>',
       '  </div>',
+      // 快速入口原本挂在 hero 右栏，把整行撑到 1000px 以上，主 CTA 被挤到首屏外。
+      // 现在放第三列，只留「动手做」的三项：课程 / 术语表 / 方法库都在顶栏与 hero CTA 里，
+      // 再列一遍只会把这行撑高，让旁边两张卡空出半截。
+      '  <div class="ds-card"><h2 class="ds-card-title">快速入口</h2><div class="wk-list">',
+      '    <a class="wk-list-item" href="#/problems"><span class="wk-list-main"><b>题库</b><span>' + TSJ.problems.length + ' 道可判题练习</span></span><span class="ds-badge">去练习</span></a>',
+      '    <a class="wk-list-item" href="#/studio"><span class="wk-list-main"><b>模型工坊</b><span>自己搓一个模型，跑完验证/最终两阶段实验</span></span><span class="ds-badge">去搓模型</span></a>',
+      '    <a class="wk-list-item" href="#/submissions"><span class="wk-list-main"><b>提交记录</b><span>代码快照与逐测试点复盘</span></span><span class="ds-badge">去复盘</span></a>',
+      '  </div></div>',
       '</div>'
     ].join('\n');
 

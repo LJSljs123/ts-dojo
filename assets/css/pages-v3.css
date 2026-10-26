@@ -7,11 +7,16 @@
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 1fr);
   gap: var(--v3-space-5);
+  /* 右栏是三张卡叠起来（约 1040px），左栏只有一段文案。拉伸是对的，
+     但左卡必须自己把内容上下撑开（见 .wk-cta-row 的 margin-top:auto），
+     否则文案挤在顶部、下半张卡片整片空白。 */
   align-items: stretch;
   margin-bottom: var(--v3-space-5);
 }
 
 .wk-hero-main {
+  display: flex;
+  flex-direction: column;
   padding: var(--v3-space-6);
   border: 1px solid var(--v3-line);
   border-radius: var(--v3-radius-lg);
@@ -41,7 +46,8 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.wk-cta-row { display: flex; flex-wrap: wrap; gap: var(--v3-space-3); }
+/* margin-top:auto：把 CTA 钉在卡片底部，卡片被右栏拉高时不会留下半张空白 */
+.wk-cta-row { display: flex; flex-wrap: wrap; gap: var(--v3-space-3); margin-top: auto; padding-top: var(--v3-space-4); }
 
 .wk-side-stack { display: grid; gap: var(--v3-space-4); align-content: start; }
 
@@ -76,7 +82,8 @@
 .wk-grid-3 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--v3-space-4);
+  /* 与 .wk-hero / .wk-grid-2 同一档间距，否则底部一行看起来比上面更挤 */
+  gap: var(--v3-space-5);
 }
 
 .wk-list { display: grid; gap: var(--v3-space-3); }
