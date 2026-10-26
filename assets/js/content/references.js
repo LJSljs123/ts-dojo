@@ -443,6 +443,17 @@
       url: 'https://doi.org/10.2307/1913643',
       checkedAt: '2026-10-25',
       note: '分位数回归与 pinball 损失的原始出处。'
+    },
+    {
+      id: 'ali-2009',
+      title: 'SKU demand forecasting in the presence of promotions',
+      authors: 'Özden Gür Ali, Serpil Sayın, Tom van Woensel, Jan Fransoo',
+      year: 2009,
+      venue: 'Expert Systems with Applications 36(10)',
+      status: 'journal',
+      url: 'https://doi.org/10.1016/j.eswa.2009.04.052',
+      checkedAt: '2026-10-26',
+      note: '促销协变量与促销期预测的系统比较：无促销期简单时序难被击败，有促销期显式促销特征提升最大。'
     }
   ];
 

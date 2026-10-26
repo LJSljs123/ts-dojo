@@ -163,6 +163,7 @@ test('数据集元数据与题面声明一致（长度 / 周期 / 频率）', ()
     demand_shift: [200, 7, 'D'],
     gmv: [160, 7, 'D'],
     intermittent: [120, 12, 'M'],
+    retail_daily: [730, 7, 'D'],
   };
   for (const d of datasets) {
     const e = expect[d.id];
@@ -171,6 +172,32 @@ test('数据集元数据与题面声明一致（长度 / 周期 / 频率）', ()
     assert.equal(d.season, e[1], d.id + ' 周期');
     assert.equal(d.freq, e[2], d.id + ' 频率');
   }
+});
+
+test('外生协变量数据集：promoDays 升序去重且落在序列范围内', () => {
+  // 只有 retail_daily 带促销日历；下标与 history 同一坐标系，越界会让「未来促销」永远落空，
+  // 重复会让倍数估计把同一个促销日算两遍。两条都不报错，只会静默降低题目质量。
+  for (const d of datasets) {
+    if (!d.promoDays) continue;
+    const days = d.promoDays;
+    assert.ok(days.length > 0, d.id + ' 声明了促销日历但为空');
+    for (let i = 0; i < days.length; i++) {
+      assert.ok(Number.isInteger(days[i]), d.id + ' promoDays[' + i + '] 不是整数：' + days[i]);
+      assert.ok(days[i] >= 0 && days[i] < d.values.length,
+        d.id + ' promoDays[' + i + '] 越界：' + days[i] + '（长度 ' + d.values.length + '）');
+      if (i > 0) assert.ok(days[i] > days[i - 1], d.id + ' promoDays 必须严格升序且不重复：' +
+        days[i - 1] + ' → ' + days[i]);
+    }
+  }
+  const rd = datasets.find((d) => d.id === 'retail_daily');
+  assert.ok(rd && rd.promoDays, 'retail_daily 必须带促销日历（P17 依赖它）');
+  // 最后两周必须各有促销日：否则「只清洗历史」或「只乘未来」的半成品解能过线
+  const tail = rd.promoDays.filter((i) => i >= rd.values.length - 14);
+  assert.ok(tail.length >= 2, 'retail_daily 最后 14 天至少要有 2 个促销日，实际 ' + tail.length);
+  assert.ok(tail.some((i) => i >= rd.values.length - rd.season),
+    'retail_daily 最后一个周期内必须有促销日（考「未来促销修正」）');
+  assert.ok(tail.some((i) => i < rd.values.length - rd.season),
+    'retail_daily 倒数第二个周期内必须有促销日（考「历史促销污染」）');
 });
 
 test('数据集全部为有限数值，且保留 1 位小数', () => {

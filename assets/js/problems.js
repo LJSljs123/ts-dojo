@@ -773,6 +773,43 @@
   }
 
   /**
+   * P17 促销协变量：先估促销倍数，再「清洗历史 + 修正未来」。
+   * 两步缺一不可：
+   *   - 不清洗历史 → lag-7 基线会取到历史促销日，未来对应相位被整体抬高；
+   *   - 不修正未来 → 两个促销日被当成普通日子，各低估约 60%。
+   */
+  function solPromoCovariate(history, horizon, ctx) {
+    var m = ctx.season > 1 ? ctx.season : 7;
+    var n = history.length;
+    var days = ctx.promoDays || [];
+    // 1) 促销倍数：历史促销日 / 同 weekday 的前一周，取中位数抗噪
+    var ratios = [];
+    for (var i = 0; i < days.length; i++) {
+      var d = days[i];
+      if (d >= m && d < n && history[d - m] > 0) ratios.push(history[d] / history[d - m]);
+    }
+    var mult = 1;
+    if (ratios.length) {
+      ratios.sort(function (a, b) { return a - b; });
+      mult = ratios[Math.floor(ratios.length / 2)];
+    }
+    // 2) 清洗历史：把促销日还原成「非促销水平」，避免污染季节基线
+    var clean = history.slice();
+    for (i = 0; i < days.length; i++) {
+      if (days[i] < n) clean[days[i]] = history[days[i]] / mult;
+    }
+    // 3) 季节朴素（周期 m，多步取模）
+    var out = [];
+    for (var h = 0; h < horizon; h++) out.push(clean[n - m + (h % m)]);
+    // 4) 修正未来：落在 horizon 内的促销日乘回倍数
+    for (i = 0; i < days.length; i++) {
+      var f = days[i] - n;
+      if (f >= 0 && f < horizon) out[f] *= mult;
+    }
+    return out;
+  }
+
+  /**
    * P15 DLinear：趋势 / 季节分解，两条分支各做一次线性映射。
    * 论文里那两层是训练出来的，这里用最小二乘在历史窗口上拟合等价映射。
    */
@@ -2633,6 +2670,125 @@
         '  var out = [];',
         '  for (var h = 0; h < horizon; h++) {',
         '    out.push(history[n - m + h]);',
+        '  }',
+        '  return out;',
+        '}'
+      ].join('\n')
+    },
+
+    /* ---------------- P17 ---------------- */
+    {
+      id: 'p17-promo-covariate',
+      index: 17,
+      title: '促销日历：外生事件怎么进模型',
+      difficulty: '提高',
+      tags: ['协变量', '促销', '事件效应', '外生变量', '零售'],
+      points: 100,
+      passScore: 60,
+      dataset: 'retail_daily',
+      mode: 'holdout',
+      horizon: 14,
+      metric: 'mse',
+      baselines: ['naive', 'seasonal_naive', 'mean', 'moving_average', 'linear_trend'],
+      threshold: 0.9,
+      passRate: 22,
+
+      /** 只读上下文：促销日历（绝对下标，含历史与未来）。切分逻辑不参与。 */
+      ctxExtra: function (point, dataset) {
+        return { promoDays: dataset.promoDays || [] };
+      },
+
+      statement: [
+        '### 背景',
+        '',
+        '你是某连锁零售的预测岗。未来两周的**促销排期已经确定**（业务提前排期，属于已知信息），',
+        '促销日销量比平日高约 60%。你要给出未来 14 天的日销量预测。',
+        '',
+        '这题考的不是「更复杂的模型」，而是**外生信息怎么进模型**：',
+        '促销日历是已知的，模型却不一定用得上；更隐蔽的是——**历史里的促销日会污染季节基线**。',
+        '按 lag-7 取「上周同日」时，如果上周同日恰好是促销日，你会把一次促销当成常态水平。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`retail_daily`（日销量，单位：件）',
+        '- 长度：730 天（2 年），周周期 7；缓慢增长 + 周末高 + 不定期促销尖峰 + 2.5% 噪声',
+        '- 评估方式：留出法。前 716 天作为 `history`，最后 14 天（含 **2 个促销日**）作为测试，只评测 1 次',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 额外上下文',
+        '',
+        '`ctx.promoDays`：**全部促销日的绝对下标**（相对整条序列，含历史与未来）。',
+        '`history` 的下标与它对齐（`history[i]` 就是序列第 `i` 天），所以可以直接比较。',
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**MSE**（越小越好）',
+        '- 对照基线：`naive` / `seasonal_naive` / `mean` / `moving_average` / `linear_trend`',
+        '- 误差比 `ratio = 你的 MSE / 最优基线 MSE`；`ratio <= 0.5` 得 100 分，',
+        '  `ratio = 0.9` 恰好 60 分（通过线），`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '模板就是纯季节朴素，它能拿 55 分——但错得最狠的两天正是促销日。',
+        '再看这两天的「上周同日」：其中一天上周也是促销日。**历史被污染了**。',
+        '只修未来或只洗历史都不够：前者 54 分，后者 44 分（比不做还低）。'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 716 个历史观测（件）。`ctx.promoDays: number[]` —— 全部促销日下标（含历史与未来）。',
+      outputSpec: '`number[]` —— 长度必须为 14，每个元素是当天的销量预测（件）。',
+
+      hints: [
+        '先交模板（纯季节朴素）看 55 分，再把预测与实际并排看：错得最狠的两天就在 `ctx.promoDays` 里。',
+        '检查那两天的「上周同日」：`history[d - 7]`。其中一天上周也是促销日——这就是历史污染：lag-7 基线把一次促销当成了常态。',
+        '估倍数：对所有历史促销日算 `history[d] / history[d - 7]`，取中位数（约 1.6）。用中位数而不是均值，避免个别异常日带偏。',
+        '两步都要做：① 把历史促销日除以倍数「清洗」掉，再做季节朴素；② 未来促销日乘回倍数。只做一步是 54 / 44 分，都不过线。'
+      ],
+
+      guide: [
+        {
+          title: '先看模板错在哪',
+          text: '模板是纯季节朴素，55 分 WA。把预测线和实际线叠在一起，两个尖峰完全没跟上——它们就是促销日。'
+        },
+        {
+          title: '检查历史污染',
+          text: '对每个未来促销日 d，看 history[d - 7]。如果上周同日也是促销日，你的基线会系统性偏高。' +
+            '这题的两天里有一天被污染——这就是「只修未来」也过不了线的原因。'
+        },
+        {
+          title: '估促销倍数（复制这段）',
+          text: '用历史促销日与前一周同日的比值，取中位数：',
+          code: [
+            'var ratios = [];',
+            'for (var i = 0; i < ctx.promoDays.length; i++) {',
+            '  var d = ctx.promoDays[i];',
+            '  if (d >= 7 && d < history.length) {',
+            '    ratios.push(history[d] / history[d - 7]);',
+            '  }',
+            '}',
+            'ratios.sort(function (a, b) { return a - b; });',
+            'var mult = ratios[Math.floor(ratios.length / 2)];   // 中位数，约 1.6'
+          ].join('\n')
+        },
+        {
+          title: '清洗 + 修正，两步都做',
+          text: '先清洗历史再做季节朴素，最后把未来促销日乘回去。运行应得 100 分。' +
+            '然后做两个反例：只清洗历史（44 分）、只修正未来（54 分）——都不过线。' +
+            '**外生信息必须前后一致**：历史里的效应要抹掉，未来的效应要加上。'
+        }
+      ],
+
+      solution: toPredictSource(solPromoCovariate),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  // 洞：纯季节朴素。它完全无视 ctx.promoDays ——',
+        '  // 既没修正未来促销日，也没清洗历史里的促销尖峰。',
+        '  var m = ctx.season > 1 ? ctx.season : 7;',
+        '  var n = history.length;',
+        '  var out = [];',
+        '  for (var h = 0; h < horizon; h++) {',
+        '    out.push(history[n - m + (h % m)]);',
         '  }',
         '  return out;',
         '}'

@@ -3166,6 +3166,38 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   }
 
   /**
+   * retail_daily：730 点日销量，带「可外生给定的促销日历」。
+   * 形态：缓慢增长 + 周季节（周末高）+ 不定期促销尖峰（间隔 9–13 天，+55%~65%）+ 2.5% 噪声。
+   * 与 retail 的区别：促销不是固定节奏，且日历通过 ctx.promoDays 明确给出——
+   * 模型必须用外生事件，而不是指望季节项自己学到。
+   * @param {Object} rng 随机源
+   * @returns {{values: number[], promoDays: number[]}}
+   */
+  function buildRetailDaily(rng) {
+    var n = 730;
+    var promoDays = [];
+    var next = 11;
+    while (next < n - 14) {
+      promoDays.push(next);
+      next += 8 + Math.floor(rng.next() * 4);   // 间隔 8–11 天
+    }
+    // 最后两周固定放 2 个促销日：题目要考「未来促销 + 历史促销污染」两件事，
+    // 测试窗口里必须各有足够代价，否则「只做一半」也能过线。
+    promoDays.push(n - 9, n - 3);
+    var isPromo = {};
+    for (var k = 0; k < promoDays.length; k++) isPromo[promoDays[k]] = 1;
+    var weekly = [0.88, 0.9, 0.93, 0.96, 1.04, 1.18, 1.1];
+    var values = [];
+    for (var t = 0; t < n; t++) {
+      var level = 120 + 0.05 * t;
+      var promo = isPromo[t] ? 1.55 + (t % 3) * 0.05 : 1;
+      var noise = 1 + rng.normal() * 0.025;
+      values.push(round(level * weekly[t % 7] * promo * noise, 1));
+    }
+    return { values: values, promoDays: promoDays };
+  }
+
+  /**
    * sunspot：300 点年级太阳黑子相对数。
    * 形态：约 11 年准周期（周期本身缓慢变化）+ 振幅调制（大小年）+ 非对称波形。
    * @param {Object} rng 随机源
@@ -3359,13 +3391,24 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       seed: 17171717,
       build: buildIntermittent,
       desc: '120 个月备件需求：约半数月份为零，有需求的月份 20–180 件；随服役期推进，需求频率由约 18% 升至约 85%、单次量级放大约 1.2 倍，偶发 3–5 倍大单。'
+    },
+    {
+      id: 'retail_daily',
+      name: '日销量（含促销日历）',
+      unit: '件',
+      freq: 'D',
+      season: 7,
+      seed: 515151,
+      build: buildRetailDaily,
+      desc: '730 点日销量：缓慢增长 + 周季节（周末高）+ 不定期促销尖峰（间隔 9–13 天，+55%~65%）+ 2.5% 噪声；促销日以 promoDays 明确给出，是已知的外生日历。'
     }
   ];
 
   var datasets = DEFINITIONS.map(function (def) {
     var rng = makeRng(def.seed);
-    var values = def.build(rng);
-    return {
+    var built = def.build(rng);
+    var values = Array.isArray(built) ? built : built.values;
+    var ds = {
       id: def.id,
       name: def.name,
       unit: def.unit,
@@ -3374,6 +3417,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       desc: def.desc,
       values: values
     };
+    // 可选：外生事件日历（目前只有 retail_daily 提供）
+    if (!Array.isArray(built) && built.promoDays) ds.promoDays = built.promoDays.slice();
+    return ds;
   });
 
   /** id → dataset 映射，便于 O(1) 查找 */
@@ -4171,6 +4217,43 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     var q = lo === hi ? a[lo] : a[lo] + (a[hi] - a[lo]) * (pos - lo);   // 线性插值经验分位数
     var out = [];
     for (var h = 0; h < horizon; h++) out.push(history[n - m + h] + q);  // 典型日曲线 + 安全余量
+    return out;
+  }
+
+  /**
+   * P17 促销协变量：先估促销倍数，再「清洗历史 + 修正未来」。
+   * 两步缺一不可：
+   *   - 不清洗历史 → lag-7 基线会取到历史促销日，未来对应相位被整体抬高；
+   *   - 不修正未来 → 两个促销日被当成普通日子，各低估约 60%。
+   */
+  function solPromoCovariate(history, horizon, ctx) {
+    var m = ctx.season > 1 ? ctx.season : 7;
+    var n = history.length;
+    var days = ctx.promoDays || [];
+    // 1) 促销倍数：历史促销日 / 同 weekday 的前一周，取中位数抗噪
+    var ratios = [];
+    for (var i = 0; i < days.length; i++) {
+      var d = days[i];
+      if (d >= m && d < n && history[d - m] > 0) ratios.push(history[d] / history[d - m]);
+    }
+    var mult = 1;
+    if (ratios.length) {
+      ratios.sort(function (a, b) { return a - b; });
+      mult = ratios[Math.floor(ratios.length / 2)];
+    }
+    // 2) 清洗历史：把促销日还原成「非促销水平」，避免污染季节基线
+    var clean = history.slice();
+    for (i = 0; i < days.length; i++) {
+      if (days[i] < n) clean[days[i]] = history[days[i]] / mult;
+    }
+    // 3) 季节朴素（周期 m，多步取模）
+    var out = [];
+    for (var h = 0; h < horizon; h++) out.push(clean[n - m + (h % m)]);
+    // 4) 修正未来：落在 horizon 内的促销日乘回倍数
+    for (i = 0; i < days.length; i++) {
+      var f = days[i] - n;
+      if (f >= 0 && f < horizon) out[f] *= mult;
+    }
     return out;
   }
 
@@ -6039,6 +6122,125 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
         '  return out;',
         '}'
       ].join('\n')
+    },
+
+    /* ---------------- P17 ---------------- */
+    {
+      id: 'p17-promo-covariate',
+      index: 17,
+      title: '促销日历：外生事件怎么进模型',
+      difficulty: '提高',
+      tags: ['协变量', '促销', '事件效应', '外生变量', '零售'],
+      points: 100,
+      passScore: 60,
+      dataset: 'retail_daily',
+      mode: 'holdout',
+      horizon: 14,
+      metric: 'mse',
+      baselines: ['naive', 'seasonal_naive', 'mean', 'moving_average', 'linear_trend'],
+      threshold: 0.9,
+      passRate: 22,
+
+      /** 只读上下文：促销日历（绝对下标，含历史与未来）。切分逻辑不参与。 */
+      ctxExtra: function (point, dataset) {
+        return { promoDays: dataset.promoDays || [] };
+      },
+
+      statement: [
+        '### 背景',
+        '',
+        '你是某连锁零售的预测岗。未来两周的**促销排期已经确定**（业务提前排期，属于已知信息），',
+        '促销日销量比平日高约 60%。你要给出未来 14 天的日销量预测。',
+        '',
+        '这题考的不是「更复杂的模型」，而是**外生信息怎么进模型**：',
+        '促销日历是已知的，模型却不一定用得上；更隐蔽的是——**历史里的促销日会污染季节基线**。',
+        '按 lag-7 取「上周同日」时，如果上周同日恰好是促销日，你会把一次促销当成常态水平。',
+        '',
+        '### 数据说明',
+        '',
+        '- 数据集：`retail_daily`（日销量，单位：件）',
+        '- 长度：730 天（2 年），周周期 7；缓慢增长 + 周末高 + 不定期促销尖峰 + 2.5% 噪声',
+        '- 评估方式：留出法。前 716 天作为 `history`，最后 14 天（含 **2 个促销日**）作为测试，只评测 1 次',
+        '',
+        SIGNATURE_MD,
+        '',
+        '### 额外上下文',
+        '',
+        '`ctx.promoDays`：**全部促销日的绝对下标**（相对整条序列，含历史与未来）。',
+        '`history` 的下标与它对齐（`history[i]` 就是序列第 `i` 天），所以可以直接比较。',
+        '',
+        '### 评分规则',
+        '',
+        '- 主指标：**MSE**（越小越好）',
+        '- 对照基线：`naive` / `seasonal_naive` / `mean` / `moving_average` / `linear_trend`',
+        '- 误差比 `ratio = 你的 MSE / 最优基线 MSE`；`ratio <= 0.5` 得 100 分，',
+        '  `ratio = 0.9` 恰好 60 分（通过线），`ratio >= 2` 得 0 分',
+        '',
+        '### 数据形态提示',
+        '',
+        '模板就是纯季节朴素，它能拿 55 分——但错得最狠的两天正是促销日。',
+        '再看这两天的「上周同日」：其中一天上周也是促销日。**历史被污染了**。',
+        '只修未来或只洗历史都不够：前者 54 分，后者 44 分（比不做还低）。'
+      ].join('\n'),
+
+      inputSpec: '`history: number[]` —— 716 个历史观测（件）。`ctx.promoDays: number[]` —— 全部促销日下标（含历史与未来）。',
+      outputSpec: '`number[]` —— 长度必须为 14，每个元素是当天的销量预测（件）。',
+
+      hints: [
+        '先交模板（纯季节朴素）看 55 分，再把预测与实际并排看：错得最狠的两天就在 `ctx.promoDays` 里。',
+        '检查那两天的「上周同日」：`history[d - 7]`。其中一天上周也是促销日——这就是历史污染：lag-7 基线把一次促销当成了常态。',
+        '估倍数：对所有历史促销日算 `history[d] / history[d - 7]`，取中位数（约 1.6）。用中位数而不是均值，避免个别异常日带偏。',
+        '两步都要做：① 把历史促销日除以倍数「清洗」掉，再做季节朴素；② 未来促销日乘回倍数。只做一步是 54 / 44 分，都不过线。'
+      ],
+
+      guide: [
+        {
+          title: '先看模板错在哪',
+          text: '模板是纯季节朴素，55 分 WA。把预测线和实际线叠在一起，两个尖峰完全没跟上——它们就是促销日。'
+        },
+        {
+          title: '检查历史污染',
+          text: '对每个未来促销日 d，看 history[d - 7]。如果上周同日也是促销日，你的基线会系统性偏高。' +
+            '这题的两天里有一天被污染——这就是「只修未来」也过不了线的原因。'
+        },
+        {
+          title: '估促销倍数（复制这段）',
+          text: '用历史促销日与前一周同日的比值，取中位数：',
+          code: [
+            'var ratios = [];',
+            'for (var i = 0; i < ctx.promoDays.length; i++) {',
+            '  var d = ctx.promoDays[i];',
+            '  if (d >= 7 && d < history.length) {',
+            '    ratios.push(history[d] / history[d - 7]);',
+            '  }',
+            '}',
+            'ratios.sort(function (a, b) { return a - b; });',
+            'var mult = ratios[Math.floor(ratios.length / 2)];   // 中位数，约 1.6'
+          ].join('\n')
+        },
+        {
+          title: '清洗 + 修正，两步都做',
+          text: '先清洗历史再做季节朴素，最后把未来促销日乘回去。运行应得 100 分。' +
+            '然后做两个反例：只清洗历史（44 分）、只修正未来（54 分）——都不过线。' +
+            '**外生信息必须前后一致**：历史里的效应要抹掉，未来的效应要加上。'
+        }
+      ],
+
+      solution: toPredictSource(solPromoCovariate),
+
+      starter: [
+        'function predict(history, horizon, ctx) {',
+        '  // 洞：纯季节朴素。它完全无视 ctx.promoDays ——',
+        '  // 既没修正未来促销日，也没清洗历史里的促销尖峰。',
+        '  var m = ctx.season > 1 ? ctx.season : 7;',
+        '  var n = history.length;',
+        '  var out = [];',
+        '  for (var h = 0; h < horizon; h++) {',
+        '    out.push(history[n - m + (h % m)]);',
+        '  }',
+        '  return out;',
+        '}'
+      ].join('\n')
     }
 
   ];
@@ -6322,6 +6524,22 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       limit: '聚合会损失相位信息；各层权重需要标定；强非线性时简单平均未必最优。',
       runnable: true,
       practice: null
+    },
+    {
+      id: 'promo-covariate',
+      name: '促销协变量回归',
+      title: 'SKU demand forecasting in the presence of promotions',
+      venue: 'Expert Systems with Applications（2009）',
+      year: 2009,
+      authors: 'Ali, Sayin, van Woensel & Fransoo',
+      tier: 'classic',
+      tags: ['协变量', '促销', '事件效应', '外生变量'],
+      idea: '促销日的需求不能靠历史季节解释：同一个 weekday 在促销与不促销时是两个水平。把促销日历作为外生 0/1 变量（或提升倍数）进模型，并同时清洗历史里的促销尖峰，才能让季节基线不被污染。',
+      formula: 'y_hat_t = base_t × (1 + β · promo_t)',
+      when: '促销 / 节假日 / 价格变动等「未来已知、历史可学」的事件；零售、电力、出行都适用。',
+      limit: '事件效应可能随时间衰减或互相叠加；促销日太少时倍数估计不稳（用中位数或收缩估计）。',
+      runnable: true,
+      practice: 'p17-promo-covariate'
     },
 
     /* ================= competition：竞赛级方法 ================= */
@@ -7327,6 +7545,17 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       url: 'https://doi.org/10.2307/1913643',
       checkedAt: '2026-10-25',
       note: '分位数回归与 pinball 损失的原始出处。'
+    },
+    {
+      id: 'ali-2009',
+      title: 'SKU demand forecasting in the presence of promotions',
+      authors: 'Özden Gür Ali, Serpil Sayın, Tom van Woensel, Jan Fransoo',
+      year: 2009,
+      venue: 'Expert Systems with Applications 36(10)',
+      status: 'journal',
+      url: 'https://doi.org/10.1016/j.eswa.2009.04.052',
+      checkedAt: '2026-10-26',
+      note: '促销协变量与促销期预测的系统比较：无促销期简单时序难被击败，有促销期显式促销特征提升最大。'
     }
   ];
 
@@ -8397,6 +8626,16 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       workedExample: 'τ=0.9，y=10，ŷ=8 → 损失 0.9×2=1.8；ŷ=12 → 损失 0.1×2=0.2。',
       counterexample: '间歇需求序列 95% 的真值为 0，τ=0.7 分位的最优解就是恒 0，区间失去意义。',
       referenceIds: ['koenker-1978']
+    },
+    'promo-covariate': {
+      runLevel: 'sandbox',
+      intuition: '促销日不是「季节变了」，是「同一天多卖了 60%」。把促销日历当协变量，就得分两件事做：先把历史里的促销尖峰除回去，别让它污染季节基线；再把未来的促销倍数乘上来。',
+      assumptions: ['促销日历可得，且未来促销日已知', '促销提升近似乘性（相对倍数在各次促销间稳定）', '非促销日的季节结构在窗口内不变'],
+      complexity: '低（两遍扫描 + 取中位数，O(n)）',
+      limitations: ['深度折扣、堆头、竞品促销会让倍数漂移', '多种促销类型需分别估倍数，样本很快不够', '连续促销日彼此污染，倍数会被低估'],
+      workedExample: '历史促销日中位数是非促销日的 1.6 倍 → 先把历史促销日销量除以 1.6 还原基线，跑季节朴素得到未来基线，再把未来促销日乘回 1.6。',
+      counterexample: '只清洗历史不乘回未来 → 未来促销日全低估；只乘未来不清洗 → 基线被促销尖峰抬高，所有非促销日一起高估。两件事缺一件都过不了线。',
+      referenceIds: ['ali-2009']
     }
   };
 
@@ -10613,8 +10852,20 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       datasetId: dataset.id
     };
     var points = buildTestPoints(dataset.values, opts);
+    // 题目可声明只读的额外上下文（如已知促销日历）。切分逻辑（buildTestPoints）保持纯净：
+    // split.test.js 用 deepEqual 钉死了 ctx 的四个基础字段，扩展只能发生在这里。
+    var extra = typeof problem.ctxExtra === 'function' ? problem.ctxExtra : null;
     return points.map(function (p) {
-      return { code: code, history: p.history, horizon: opts.horizon, ctx: p.ctx };
+      var ctx = p.ctx;
+      if (extra) {
+        var add = extra(p, dataset, problem);
+        if (add && typeof add === 'object') {
+          ctx = {};
+          for (var k in p.ctx) if (Object.prototype.hasOwnProperty.call(p.ctx, k)) ctx[k] = p.ctx[k];
+          for (var k2 in add) if (Object.prototype.hasOwnProperty.call(add, k2)) ctx[k2] = add[k2];
+        }
+      }
+      return { code: code, history: p.history, horizon: opts.horizon, ctx: ctx };
     });
   }
 
@@ -19613,7 +19864,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
  *
  * 路由表：
  *   #/problems            题库（搜索 / 标签 / 难度）
- *   #/methods             方法库（46 条方法卡片，按 5 个层次检索）
+ *   #/methods             方法库（47 条方法卡片，按 5 个层次检索）
  *   #/method/:id          方法详情（直觉 / 公式 / 假设 / 反例 / 引用）
  *   #/glossary            术语表（新手术语速查）
  *   #/learn[/:id]         课程地图与模块页（9 模块）

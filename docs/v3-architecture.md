@@ -222,7 +222,7 @@ scope.destroy();                               // 幂等、逆序执行、清空
 
 ## 12. v3.7 增量（相对 v3.0 蓝图）
 
-> v3.0 文中「15 题 / 158 断言」是当时口径；当前为 **16 题 / 216 条 QA**。判题语义未变，以下只记新增面。
+> v3.0 文中「15 题 / 158 断言」是当时口径；当前为 **17 题 / 218 条 QA**。判题语义未变，以下只记新增面。
 
 ### 12.1 新增模块与依赖方向
 
@@ -260,3 +260,28 @@ CSV 数据**不写入** `tsoj:datasets`（内置数据集是代码生成的只�
 ### 12.5 浏览器测试的并发契约
 
 `tests/qa/helpers/cdp.js` 的 `launch()` 内置全局文件锁（`os.tmpdir()/tsoj-cdp.lock`）：同一时刻只允许一个 headless 实例，其余测试进程排队等待。原因：8 个测试文件并发会 spawn 8 个 Chromium，把 `Runtime.evaluate` 拖过 20s 超时，产生成片假失败并污染页面状态。锁带 PID + 10 分钟陈旧检测，进程崩溃不会永久卡死。`--test-concurrency=1` 仍是推荐跑法，但不再是正确性的前提。
+
+### 12.6 外生协变量：P17 的 `ctxExtra` 扩展点
+
+P17（促销日历）是第一个需要「题目专属上下文」的题：它要求模型同时处理**历史促销污染**与**未来促销修正**，因此 `ctx` 里必须带 `promoDays`。但 `buildTestPoints` 的 `ctx` 四字段（`freq` / `season` / `datasetId` / `index`）被 `split.test.js` 用 `deepEqual` 钉死，**不能改**。
+
+于是扩展点放在 `buildJobs` 层，而不是切分层：
+
+```js
+// problems.js —— 题目声明自己需要什么额外上下文
+ctxExtra: function (point, dataset) { return { promoDays: dataset.promoDays || [] }; }
+```
+
+```js
+// judge.js —— buildJobs 里浅合并到 ctx 副本，p.ctx 本身不被修改
+var add = extra(p, dataset, problem);
+ctx = merge(p.ctx, add);   // 新对象，不写回测试点
+```
+
+三条约束：
+
+1. **`ctxExtra` 只能读数据集，不能读测试段真值**。它拿到的是 `(point, dataset, problem)`，`dataset.values` 包含完整序列——题面必须自己声明「只能用 `history` 与 `ctx`」，参考解不得碰 `dataset`（`solutions.test.js` 不检查这条，靠 code review）。
+2. **合并顺序是 `p.ctx` 在前、`add` 在后**，题目可以覆盖四字段，但现有题都没有这么做；新增题若要覆盖 `index`，必须同步改 `split.test.js`。
+3. **数据集生成器可以返回对象**：`datasets.js` 注册表接受 `build(rng) → number[] | {values, ...extra}`，对象形态下 `values` 必填，其余字段原样挂到 `ds` 上。P17 的 `retail_daily` 用它携带 `promoDays`（绝对下标，与 `history` 同一坐标系）。
+
+数据设计上有一条硬约束：**测试窗口内必须同时存在历史促销日与未来促销日**。P17 让生成器在最后两周固定放 2 个促销日（`n-9`、`n-3`），否则「只清洗历史」或「只乘未来」的半成品解能过线——这是通过数据设计而非改评分解决的问题。实测梯度：模板 55 / 只清洗历史 44 / 只修正未来 54 / 参考解 100（通过线 60）。

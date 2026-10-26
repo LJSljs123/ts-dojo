@@ -12,9 +12,9 @@
 |---|---|
 | 项目性质 | 纯前端、零依赖、零构建的时间序列判题学习平台（类洛谷） |
 | 代码规模 | 47 个脚本（含 30 个 app 层模块）+ 4 个样式表，无打包器、无 ESM、无外部资源 |
-| 内容规模 | 16 题 / 9 套合成数据 / 46 个方法（5 层）/ 9 门课程 / 83 条术语 / 12 个实验室白名单方法 |
-| 测试基线 | **217 条 QA 用例**（198 原有 + 10 CSV 解析 + 8 成就判定 + 1 分享卡），另有 selftest / starter-check / storage-audit / standalone-check 四件套 |
-| 判题语义 | 指标 / 基线 / 评分 / 切分 16 题锚点全部稳定，selftest 参考解 16/16 passed |
+| 内容规模 | 17 题 / 10 套合成数据 / 47 个方法（5 层）/ 9 门课程 / 83 条术语 / 12 个实验室白名单方法 |
+| 测试基线 | **218 条 QA 用例**（198 原有 + 10 CSV 解析 + 8 成就判定 + 1 分享卡 + 1 促销日历护栏），另有 selftest / starter-check / storage-audit / standalone-check 四件套 |
+| 判题语义 | 指标 / 基线 / 评分 / 切分 17 题锚点全部稳定，selftest 参考解 17/17 passed |
 | 产品约束 | file:// 双击可用、单文件版可嵌 iframe/srcdoc、无网络请求（CSP `connect-src 'none'`） |
 | 接手风险 | 低。剩余风险集中在「浏览器用例并发 flake」与「新功能行为测试缺口」，不影响正确性 |
 
@@ -159,3 +159,56 @@ node --test tests/qa/*.test.js   # 217 条，0 skip（并发跑也安全：浏�
 ```
 
 > 本报告基于 2026-10-26 的实际运行结果，不是对代码的静态猜测。所有「已修复」项都有对应的测试或校验命令可复现。
+
+---
+
+## 十三、同日追加：P17 促销协变量
+
+接手审查完成后，按「不只修补、继续推进项目」的思路补了第 17 题。选择这个方向的原因写在第九节：现有 16 题全在教「从序列自身挖结构」，`ctx` 里没有任何外生信息；**协变量**是题库最大的结构性空白，且不需要改判题语义就能加。
+
+### 13.1 新增内容
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 数据 | `assets/js/datasets.js` | `retail_daily`（730 点，周季节，促销间隔 8–11 天，`promoDays` 78 个）；生成器注册表支持 `build(rng) → {values, ...extra}` |
+| 引擎 | `assets/js/judge.js` | `buildJobs` 支持题目声明 `ctxExtra`，浅合并进 `ctx` 副本（`p.ctx` 不改） |
+| 题目 | `assets/js/problems.js` | P17 `p17-promo-covariate`（提高 / holdout / horizon 14 / MSE / threshold 0.9 / 通过线 60）+ 参考解 `solPromoCovariate` + 带洞模板 + 4 条提示 + 4 步 guide |
+| 内容 | `assets/js/methods.js` | `promo-covariate` 方法卡（classic 层，`practice: 'p17-promo-covariate'`） |
+| 内容 | `assets/js/content/method-details.js` | `promo-covariate` 详情（直觉 / 假设 / 复杂度 / 局限 / 数值小例 / 反例） |
+| 内容 | `assets/js/content/references.js` | `ali-2009`（DOI `10.1016/j.eswa.2009.04.052`，已核到 ScienceDirect 原文页） |
+| 测试 | `tests/qa/solutions.test.js` | 数据集元数据表补 `retail_daily`；新增促销日历不变量用例 |
+
+### 13.2 唯一一次引擎改动，以及为什么不能改切分层
+
+`buildTestPoints` 返回的 `ctx` 四字段被 `split.test.js:51` 用 `deepEqual` 钉死，是判题语义冻结的一部分。所以扩展点放在 `buildJobs`：
+
+```js
+var extra = typeof problem.ctxExtra === 'function' ? problem.ctxExtra : null;
+// 有 extra 时新建 ctx 对象，p.ctx 保持原样
+```
+
+这样「题目需要什么额外上下文」是题目的声明，而不是切分协议的参数。切分协议、指标、基线、评分函数一行没动。
+
+### 13.3 一个被数据设计修掉的设计缺陷
+
+第一版 P17 里「只清洗历史、不修正未来」能拿 66 分过线——半成品能过，题目就废了。根因不在评分，在数据：测试窗口里未来促销日的代价太小。
+
+修法是让生成器**在最后两周固定放 2 个促销日**（`n-9`、`n-3`），保证「未来修正」和「历史清洗」在窗口内各有足够代价。复验梯度：
+
+| 解法 | 得分 | verdict |
+|---|---|---|
+| 模板（纯季节朴素） | 55 | WA |
+| 只清洗历史 | 44 | WA |
+| 只修正未来 | 54 | WA |
+| 参考解（两步都做） | 100 | AC |
+
+这条约束已固化成用例（`solutions.test.js` 断言最后 14 天 ≥2 个促销日、且相邻两个周期各有促销日），以后改生成器不会悄悄把半成品放回来。
+
+### 13.4 收尾清单
+
+- `library.test.js` 五层数量 `classic 13→14`、可练 `14→15`
+- `content-v3.test.js` 47 方法详情 / 47 条引用 / 三级标签全部转绿（13/13）
+- `solutions.test.js` 数据集元数据表 + 促销日历护栏（15/15）
+- README：17 题 / 47 方法 / 14 经典 / 15 可练 / 218 条 / 808KB；题库表补 P16、P17（P16 此前漏登记）
+- `v3-architecture.md` 12.6 节、`v3.2-changelog.md` 第十一节
+- 单文件版重建 808.1KB / 47 脚本，`standalone-check` 全绿

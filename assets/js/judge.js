@@ -1108,8 +1108,20 @@
       datasetId: dataset.id
     };
     var points = buildTestPoints(dataset.values, opts);
+    // 题目可声明只读的额外上下文（如已知促销日历）。切分逻辑（buildTestPoints）保持纯净：
+    // split.test.js 用 deepEqual 钉死了 ctx 的四个基础字段，扩展只能发生在这里。
+    var extra = typeof problem.ctxExtra === 'function' ? problem.ctxExtra : null;
     return points.map(function (p) {
-      return { code: code, history: p.history, horizon: opts.horizon, ctx: p.ctx };
+      var ctx = p.ctx;
+      if (extra) {
+        var add = extra(p, dataset, problem);
+        if (add && typeof add === 'object') {
+          ctx = {};
+          for (var k in p.ctx) if (Object.prototype.hasOwnProperty.call(p.ctx, k)) ctx[k] = p.ctx[k];
+          for (var k2 in add) if (Object.prototype.hasOwnProperty.call(add, k2)) ctx[k2] = add[k2];
+        }
+      }
+      return { code: code, history: p.history, horizon: opts.horizon, ctx: ctx };
     });
   }
 

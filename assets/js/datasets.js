@@ -214,6 +214,38 @@
   }
 
   /**
+   * retail_daily：730 点日销量，带「可外生给定的促销日历」。
+   * 形态：缓慢增长 + 周季节（周末高）+ 不定期促销尖峰（间隔 9–13 天，+55%~65%）+ 2.5% 噪声。
+   * 与 retail 的区别：促销不是固定节奏，且日历通过 ctx.promoDays 明确给出——
+   * 模型必须用外生事件，而不是指望季节项自己学到。
+   * @param {Object} rng 随机源
+   * @returns {{values: number[], promoDays: number[]}}
+   */
+  function buildRetailDaily(rng) {
+    var n = 730;
+    var promoDays = [];
+    var next = 11;
+    while (next < n - 14) {
+      promoDays.push(next);
+      next += 8 + Math.floor(rng.next() * 4);   // 间隔 8–11 天
+    }
+    // 最后两周固定放 2 个促销日：题目要考「未来促销 + 历史促销污染」两件事，
+    // 测试窗口里必须各有足够代价，否则「只做一半」也能过线。
+    promoDays.push(n - 9, n - 3);
+    var isPromo = {};
+    for (var k = 0; k < promoDays.length; k++) isPromo[promoDays[k]] = 1;
+    var weekly = [0.88, 0.9, 0.93, 0.96, 1.04, 1.18, 1.1];
+    var values = [];
+    for (var t = 0; t < n; t++) {
+      var level = 120 + 0.05 * t;
+      var promo = isPromo[t] ? 1.55 + (t % 3) * 0.05 : 1;
+      var noise = 1 + rng.normal() * 0.025;
+      values.push(round(level * weekly[t % 7] * promo * noise, 1));
+    }
+    return { values: values, promoDays: promoDays };
+  }
+
+  /**
    * sunspot：300 点年级太阳黑子相对数。
    * 形态：约 11 年准周期（周期本身缓慢变化）+ 振幅调制（大小年）+ 非对称波形。
    * @param {Object} rng 随机源
@@ -407,13 +439,24 @@
       seed: 17171717,
       build: buildIntermittent,
       desc: '120 个月备件需求：约半数月份为零，有需求的月份 20–180 件；随服役期推进，需求频率由约 18% 升至约 85%、单次量级放大约 1.2 倍，偶发 3–5 倍大单。'
+    },
+    {
+      id: 'retail_daily',
+      name: '日销量（含促销日历）',
+      unit: '件',
+      freq: 'D',
+      season: 7,
+      seed: 515151,
+      build: buildRetailDaily,
+      desc: '730 点日销量：缓慢增长 + 周季节（周末高）+ 不定期促销尖峰（间隔 9–13 天，+55%~65%）+ 2.5% 噪声；促销日以 promoDays 明确给出，是已知的外生日历。'
     }
   ];
 
   var datasets = DEFINITIONS.map(function (def) {
     var rng = makeRng(def.seed);
-    var values = def.build(rng);
-    return {
+    var built = def.build(rng);
+    var values = Array.isArray(built) ? built : built.values;
+    var ds = {
       id: def.id,
       name: def.name,
       unit: def.unit,
@@ -422,6 +465,9 @@
       desc: def.desc,
       values: values
     };
+    // 可选：外生事件日历（目前只有 retail_daily 提供）
+    if (!Array.isArray(built) && built.promoDays) ds.promoDays = built.promoDays.slice();
+    return ds;
   });
 
   /** id → dataset 映射，便于 O(1) 查找 */

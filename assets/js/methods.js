@@ -252,6 +252,22 @@
       runnable: true,
       practice: null
     },
+    {
+      id: 'promo-covariate',
+      name: '促销协变量回归',
+      title: 'SKU demand forecasting in the presence of promotions',
+      venue: 'Expert Systems with Applications（2009）',
+      year: 2009,
+      authors: 'Ali, Sayin, van Woensel & Fransoo',
+      tier: 'classic',
+      tags: ['协变量', '促销', '事件效应', '外生变量'],
+      idea: '促销日的需求不能靠历史季节解释：同一个 weekday 在促销与不促销时是两个水平。把促销日历作为外生 0/1 变量（或提升倍数）进模型，并同时清洗历史里的促销尖峰，才能让季节基线不被污染。',
+      formula: 'y_hat_t = base_t × (1 + β · promo_t)',
+      when: '促销 / 节假日 / 价格变动等「未来已知、历史可学」的事件；零售、电力、出行都适用。',
+      limit: '事件效应可能随时间衰减或互相叠加；促销日太少时倍数估计不稳（用中位数或收缩估计）。',
+      runnable: true,
+      practice: 'p17-promo-covariate'
+    },
 
     /* ================= competition：竞赛级方法 ================= */
     {
