@@ -309,11 +309,29 @@
    ========================================================================= */
 
 /* 紧凑 hero：实验室这类没有右侧栏的页面不再撑出半幅空白 */
+/* 「slim」不是只把两列改一列：实验室与模型工坊是工具页，横幅必须给编辑器让位。
+   1366×768（最常见笔记本）下原样式占 201px，配置卡 278px + 工具栏 85px 之后，
+   编辑器要到 y=765 才开始——打开页面根本看不见编辑器。 */
 .wk-hero-slim {
   grid-template-columns: minmax(0, 1fr);
+  margin-bottom: var(--v3-space-4);
+}
+.wk-hero-slim .wk-hero-main {
+  padding: var(--v3-space-4) var(--v3-space-5);
+}
+.wk-hero-slim .wk-kicker {
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.wk-hero-slim .wk-hero-main h1 {
+  margin: 0 0 4px;
+  font-size: 19px;
+  line-height: 1.35;
 }
 .wk-hero-slim .wk-hero-main p {
   margin-bottom: 0;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 /* 结果工具条：测试点序号 + 诊断图分段控件同一行，窄屏折行 */

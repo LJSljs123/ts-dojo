@@ -1187,9 +1187,12 @@ body.dragging { user-select: none; cursor: col-resize; }
   .pane-right { height: auto; min-height: 60vh; }
   .editor-host { min-height: 60vh; margin: 10px 10px; }
   .editor-toolbar { flex-wrap: wrap; gap: 8px; height: auto; padding: 8px 10px; }
-  .editor-toolbar .btn { min-height: 40px; padding: 8px 13px; }
+  .editor-toolbar .btn { min-height: 40px; padding: 8px 10px; }
   .tb-left { flex-wrap: wrap; }
-  .tb-right { flex-wrap: wrap; gap: 6px; }
+  /* 5 个按钮在 390px 下宽 368px、可用 338px：tb-right 是 flex:0 0 auto，
+     既不肯缩也不肯换行，于是「提交判题」右边缘被切掉 4px（主操作被裁）。
+     允许它收缩，内部 flex-wrap 才会真正生效。 */
+  .tb-right { flex: 0 1 auto; min-width: 0; flex-wrap: wrap; gap: 6px; }
   .problem-head h1 { font-size: 17px; }
   .result-head { flex-wrap: wrap; }
   .modal { width: calc(100vw - 24px); padding: 18px 16px; }
@@ -1909,6 +1912,22 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
 .course-module > div:last-child h3 a { border-bottom: 1px dashed transparent; }
 .course-module > div:last-child h3 a:hover { border-bottom-color: var(--accent); }
 
+/* -------------------------------------------------------------------------
+   模型工坊：左栏是「配置卡 + 工具栏 + 编辑器」，必须让编辑器吃掉剩余高度。
+   否则 .editor-host 的 flex:1 在 block 流里不起作用，编辑器退化成内容高度
+   （实测 1080p 下 402px，下方空 600px；代码一长又会无限变高）。
+   ------------------------------------------------------------------------- */
+.studio-layout .pane-left { display: flex; flex-direction: column; }
+.studio-layout .pane-left > .ds-card { flex: 0 0 auto; }
+.studio-layout .editor-toolbar,
+.studio-layout .ed-help { flex: 0 0 auto; }
+.studio-layout .editor-host { flex: 1 1 auto; min-height: 240px; }
+
+/* 工坊工具栏换行的真正原因：flex-wrap 按「基准尺寸」分行，tb-left 内容宽 477px +
+   tb-right 319px 超过左栏 554px，于是整块右移到第二行（工具栏 30 → 85px）。
+   把 tb-left 的基准改成 0，它就会和按钮共处一行，超出部分用省略号收掉。 */
+.studio-layout .tb-left { flex: 1 1 0; }
+
 </style>
 <style>
 /* =========================================================================
@@ -2533,11 +2552,29 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
    ========================================================================= */
 
 /* 紧凑 hero：实验室这类没有右侧栏的页面不再撑出半幅空白 */
+/* 「slim」不是只把两列改一列：实验室与模型工坊是工具页，横幅必须给编辑器让位。
+   1366×768（最常见笔记本）下原样式占 201px，配置卡 278px + 工具栏 85px 之后，
+   编辑器要到 y=765 才开始——打开页面根本看不见编辑器。 */
 .wk-hero-slim {
   grid-template-columns: minmax(0, 1fr);
+  margin-bottom: var(--v3-space-4);
+}
+.wk-hero-slim .wk-hero-main {
+  padding: var(--v3-space-4) var(--v3-space-5);
+}
+.wk-hero-slim .wk-kicker {
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.wk-hero-slim .wk-hero-main h1 {
+  margin: 0 0 4px;
+  font-size: 19px;
+  line-height: 1.35;
 }
 .wk-hero-slim .wk-hero-main p {
   margin-bottom: 0;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 /* 结果工具条：测试点序号 + 诊断图分段控件同一行，窄屏折行 */
@@ -18443,7 +18480,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       '  <h1>自己搓一个模型，跑完完整实验流程</h1>',
       '  <p>训练逻辑写在 predict 里（只能用 history）——验证集上随便迭代，最终评测一次定论。沙箱、超时、防泄漏与判题完全同源。</p>',
       '</div></div>',
-      '<div class="problem-layout" id="studioLayout">',
+      '<div class="problem-layout studio-layout" id="studioLayout">',
       '<section class="pane pane-left">',
       '  <div class="ds-card"><h2 class="ds-card-title">实验配置</h2>',
       '    <label class="ds-field"><span>数据集</span><select id="studioDataset">' +

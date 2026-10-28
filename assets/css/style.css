@@ -981,9 +981,12 @@ body.dragging { user-select: none; cursor: col-resize; }
   .pane-right { height: auto; min-height: 60vh; }
   .editor-host { min-height: 60vh; margin: 10px 10px; }
   .editor-toolbar { flex-wrap: wrap; gap: 8px; height: auto; padding: 8px 10px; }
-  .editor-toolbar .btn { min-height: 40px; padding: 8px 13px; }
+  .editor-toolbar .btn { min-height: 40px; padding: 8px 10px; }
   .tb-left { flex-wrap: wrap; }
-  .tb-right { flex-wrap: wrap; gap: 6px; }
+  /* 5 个按钮在 390px 下宽 368px、可用 338px：tb-right 是 flex:0 0 auto，
+     既不肯缩也不肯换行，于是「提交判题」右边缘被切掉 4px（主操作被裁）。
+     允许它收缩，内部 flex-wrap 才会真正生效。 */
+  .tb-right { flex: 0 1 auto; min-width: 0; flex-wrap: wrap; gap: 6px; }
   .problem-head h1 { font-size: 17px; }
   .result-head { flex-wrap: wrap; }
   .modal { width: calc(100vw - 24px); padding: 18px 16px; }
@@ -1702,3 +1705,19 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
 }
 .course-module > div:last-child h3 a { border-bottom: 1px dashed transparent; }
 .course-module > div:last-child h3 a:hover { border-bottom-color: var(--accent); }
+
+/* -------------------------------------------------------------------------
+   模型工坊：左栏是「配置卡 + 工具栏 + 编辑器」，必须让编辑器吃掉剩余高度。
+   否则 .editor-host 的 flex:1 在 block 流里不起作用，编辑器退化成内容高度
+   （实测 1080p 下 402px，下方空 600px；代码一长又会无限变高）。
+   ------------------------------------------------------------------------- */
+.studio-layout .pane-left { display: flex; flex-direction: column; }
+.studio-layout .pane-left > .ds-card { flex: 0 0 auto; }
+.studio-layout .editor-toolbar,
+.studio-layout .ed-help { flex: 0 0 auto; }
+.studio-layout .editor-host { flex: 1 1 auto; min-height: 240px; }
+
+/* 工坊工具栏换行的真正原因：flex-wrap 按「基准尺寸」分行，tb-left 内容宽 477px +
+   tb-right 319px 超过左栏 554px，于是整块右移到第二行（工具栏 30 → 85px）。
+   把 tb-left 的基准改成 0，它就会和按钮共处一行，超出部分用省略号收掉。 */
+.studio-layout .tb-left { flex: 1 1 0; }

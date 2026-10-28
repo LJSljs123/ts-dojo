@@ -100,7 +100,7 @@
       '  <h1>自己搓一个模型，跑完完整实验流程</h1>',
       '  <p>训练逻辑写在 predict 里（只能用 history）——验证集上随便迭代，最终评测一次定论。沙箱、超时、防泄漏与判题完全同源。</p>',
       '</div></div>',
-      '<div class="problem-layout" id="studioLayout">',
+      '<div class="problem-layout studio-layout" id="studioLayout">',
       '<section class="pane pane-left">',
       '  <div class="ds-card"><h2 class="ds-card-title">实验配置</h2>',
       '    <label class="ds-field"><span>数据集</span><select id="studioDataset">' +

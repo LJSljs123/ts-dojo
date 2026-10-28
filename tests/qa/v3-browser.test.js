@@ -807,3 +807,74 @@ test('工作台：主 CTA 在首屏内，底部三列高度相当', async (t) =>
     await page.send('Emulation.clearDeviceMetricsOverride');
   }
 });
+
+/**
+ * 视口维度：前两轮修的都是「横向溢出」，但横向不溢出也可能没法用。
+ * 这里守两条用户直接感知的性质：
+ *   1) 1366×768（最常见笔记本）打开模型工坊，主按钮必须在首屏内、编辑器至少要露出 200px；
+ *   2) 390×844（手机）上工具栏的按钮不许被裁掉——「提交判题」是最重要的动作。
+ * 第二条挡的是一类问题：flex 容器里 `flex:0 0 auto` 的子块既不肯缩也不肯换行，
+ * 内容比容器宽就直接溢出（实测右边缘 394 > 视口 390，主按钮被切掉 4px）。
+ */
+test('视口：笔记本高度下工坊可用，移动端工具栏不裁切主按钮', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  try {
+    /* ---------- 1366×768 ---------- */
+    await page.send('Emulation.setDeviceMetricsOverride', {
+      width: 1366, height: 768, deviceScaleFactor: 1, mobile: false
+    });
+    await goto('#/studio');
+    const lap = await page.evaluate(
+      `(function(){
+        function box(sel){ var e = document.querySelector('#view ' + sel); if (!e) return null;
+          var b = e.getBoundingClientRect(); return {y: Math.round(b.y), h: Math.round(b.height), bottom: Math.round(b.bottom)}; }
+        var tb = document.querySelector('#view .editor-toolbar');
+        return {
+          vh: window.innerHeight,
+          hero: box('.wk-hero'),
+          btn: box('.btn-primary'),
+          editor: box('.editor-host'),
+          toolbarH: tb ? Math.round(tb.getBoundingClientRect().height) : -1
+        };
+      })()`
+    );
+    console.log('    1366×768 工坊：hero ' + lap.hero.h + 'px · 工具栏 ' + lap.toolbarH +
+      'px · 编辑器 ' + lap.editor.h + 'px · 主按钮底边 ' + lap.btn.bottom + '/' + lap.vh);
+    assert.ok(lap.btn.bottom <= lap.vh,
+      '工坊主按钮掉出首屏（底边 ' + lap.btn.bottom + ' > 视口 ' + lap.vh + '）');
+    assert.ok(lap.hero.h <= 150, '工具页的横幅仍有 ' + lap.hero.h + 'px 高，会把编辑器挤出首屏');
+    assert.ok(lap.toolbarH <= 60,
+      '工坊工具栏高 ' + lap.toolbarH + 'px，说明又换行了（单行约 49px）');
+    assert.ok(lap.editor.h >= 200, '工坊编辑器只剩 ' + lap.editor.h + 'px 高');
+
+    /* ---------- 390×844 ---------- */
+    await page.send('Emulation.setDeviceMetricsOverride', {
+      width: 390, height: 844, deviceScaleFactor: 2, mobile: true
+    });
+    await goto('#/problem/p18-channel-mix');
+    const mob = await page.evaluate(
+      `(function(){
+        var tb = document.querySelector('#view .editor-toolbar');
+        var btns = [].map.call(tb.querySelectorAll('.btn'), function (b) {
+          var r = b.getBoundingClientRect();
+          return {t: b.textContent.trim(), right: Math.round(r.right)};
+        });
+        return {
+          vw: window.innerWidth,
+          toolbarScrollW: tb.scrollWidth,
+          toolbarClientW: tb.clientWidth,
+          clipped: btns.filter(function (b) { return b.right > window.innerWidth; }),
+          btns: btns.map(function (b) { return b.t + '@' + b.right; })
+        };
+      })()`
+    );
+    console.log('    390×844 工具栏：' + mob.btns.join(' ') +
+      ' · scrollW ' + mob.toolbarScrollW + '/' + mob.toolbarClientW);
+    assert.deepEqual(mob.clipped, [],
+      '移动端有按钮被视口裁掉：' + JSON.stringify(mob.clipped));
+    assert.ok(mob.toolbarScrollW <= mob.toolbarClientW + 1,
+      '工具栏内容比容器宽（' + mob.toolbarScrollW + ' > ' + mob.toolbarClientW + '），右侧按钮会被裁');
+  } finally {
+    await page.send('Emulation.clearDeviceMetricsOverride');
+  }
+});
