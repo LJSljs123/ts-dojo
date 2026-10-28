@@ -891,14 +891,18 @@ test('T10 Ctrl+S 存草稿且不弹浏览器保存框', async (t) => {
  * T11 可访问性
  * ================================================================== */
 
-test('T11 弹层：焦点陷阱 / ESC 关闭 / 关闭后焦点回 #view', async (t) => {
+test('T11 弹层：焦点陷阱 / ESC 关闭 / 关闭后焦点回到触发按钮', async (t) => {
   if (!page) return t.skip('无浏览器');
   await reset('#/submissions');
   await sleep(250);
 
   const opened = await page.evaluate(
     `(function(){
-      document.getElementById('btnClear').click();
+      // 真实点击会先把按钮聚焦（Chrome 在 mousedown 时聚焦），
+      // 所以这里先 focus 再 click，才能测到「关闭后焦点回到触发者」。
+      var trigger = document.getElementById('btnClear');
+      trigger.focus();
+      trigger.click();
       var ov = document.getElementById('overlay');
       var view = document.getElementById('view');
       var list = [].filter.call(ov.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'),
@@ -962,7 +966,8 @@ test('T11 弹层：焦点陷阱 / ESC 关闭 / 关闭后焦点回 #view', async 
     ' · aria-live 元素=' + closed.liveCount);
   assert.equal(closed.hidden, true, 'ESC 应关闭弹层');
   assert.equal(closed.inert, false, '关闭后必须解除 inert');
-  assert.equal(closed.activeId, 'view', '关闭后焦点应回到 #view');
+  // 焦点回到触发按钮而不是 #view：一律回 #view 会让键盘用户按完 Esc 丢掉位置
+  assert.equal(closed.activeId, 'btnClear', '关闭后焦点应回到打开弹层的按钮');
   assert.equal(closed.tabindex, '-1');
   assert.ok(closed.liveCount >= 1, '页面必须存在 aria-live 区域');
 });
@@ -970,6 +975,11 @@ test('T11 弹层：焦点陷阱 / ESC 关闭 / 关闭后焦点回 #view', async 
 test('T11 判题结果面板 aria-live、编辑器 aria-describedby、路由切换更新标题并聚焦 #view', async (t) => {
   if (!page) return t.skip('无浏览器');
   await reset('#/problem/' + P1);
+  // reset() 会 reload，而首屏渲染不再抢焦点（「跳到主要内容」要能被第一个 Tab 到），
+  // 所以必须先真的切一次路由，才测得到「路由切换后聚焦 #view」。
+  await goto('#/methods');
+  await sleep(200);
+  await goto('#/problem/' + P1);
   await sleep(300);
 
   const a = await page.evaluate(

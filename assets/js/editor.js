@@ -9,17 +9,27 @@
  *   - 语法高亮（注释 / 字符串 / 数字 / 关键字 / 内置函数），转义 HTML 防 XSS
  *   - Tab 缩进 2 空格、Shift+Tab 反缩进、Enter 自动缩进、括号自动配对
  *   - Ctrl/Cmd + Enter 触发运行；Ctrl/Cmd + S 保存草稿（不弹浏览器保存框）
+ *   - Esc 退出编辑器并把焦点交给 escapeTo 指定的按钮（Tab 被缩进占用，必须留出口）
  *   - 括号匹配高亮（光标处的 ()[]{} 与它的配对项同时加 .ed-match）
  *   - markError(line) 标注错误行，并同步 aria-invalid / aria-describedby 说明
  *   - 字号 12 / 13 / 14 可切换（行高与 padding 一律运行时 getComputedStyle 读取，避免双写错位）
  *   - 超过 800 行自动降级：关闭实时语法高亮，只保留行号与纯文本，保证输入不卡
  *
- * 挂载点：window.TSJ.createEditor(container, { value, onChange, onRun, onSave, fontSize, errorHelpId })
+ * 挂载点：window.TSJ.createEditor(container, { value, onChange, onRun, onSave, fontSize, errorHelpId, escapeTo })
  */
 (function (global) {
   'use strict';
 
   var TSJ = global.TSJ || (global.TSJ = {});
+
+  /**
+   * 编辑器空闲时的帮助文案。
+   *
+   * 单独导出而不是在调用方各写一份：题目页与模型工坊都要渲染同一句话，
+   * 三处硬编码必然漂移。`clearError` 也复用它，保证「报错 → 清除」后
+   * 文案回到同一个初始状态。
+   */
+  var HELP_IDLE = '代码出错时会在这里说明行号与原因 · Tab 缩进、Esc 退出编辑器';
 
   /* ------------------------------------------------------------------ *
    * 语法高亮
@@ -628,6 +638,18 @@
         return;
       }
 
+      // Esc：退出编辑器。
+      // Tab / Shift+Tab 都被缩进占用（这是编辑器的正当行为），于是键盘用户
+      // 一旦 Tab 进来就没有任何键能出去 —— WCAG 2.1.2「键盘陷阱」明确禁止。
+      // 出口交给 escapeTo 指定的元素（通常是「提交判题」），没有就单纯 blur。
+      if (key === 'Escape' || key === 'Esc') {
+        ev.preventDefault();
+        var exit = opts.escapeTo ? document.querySelector(String(opts.escapeTo)) : null;
+        if (exit && typeof exit.focus === 'function') exit.focus();
+        else ta.blur();
+        return;
+      }
+
       if (key === 'Enter') {
         handleEnter(ev);
         schedulePaint();
@@ -689,7 +711,7 @@
     /** 清除错误行标注 */
     function clearError() {
       ta.removeAttribute('aria-invalid');
-      setErrorHelp('代码出错时会在这里说明行号与原因。');
+      setErrorHelp(HELP_IDLE);
       if (!errorLine) return;
       errorLine = 0;
       paintGutter();
@@ -747,6 +769,7 @@
   }
 
   TSJ.createEditor = createEditor;
+  TSJ.EDITOR_HELP_IDLE = HELP_IDLE;
   TSJ.highlightCode = highlightCode;
   TSJ.escapeHtml = escapeHtml;
 

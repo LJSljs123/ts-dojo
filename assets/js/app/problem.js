@@ -74,6 +74,8 @@
       value: code,
       fontSize: store.state.edFont,
       errorHelpId: 'edErrorHelp',
+      // Tab 被缩进占用，Esc 是键盘用户离开编辑器的唯一出口 → 焦点交给「提交判题」
+      escapeTo: '#btnSubmit',
       onChange: core.debounce(function (val) {
         store.state.drafts[p.id] = val;
         store.saveDrafts();
@@ -240,7 +242,7 @@
     html.push('      <button type="button" class="btn" id="btnRun">运行</button>');
     html.push('      <button type="button" class="btn btn-primary" id="btnSubmit">提交判题</button>\n    </div>');
     html.push('  </div>\n  <div class="editor-host" id="editorHost"></div>');
-    html.push('  <p class="ed-help" id="edErrorHelp">代码出错时会在这里说明行号与原因。</p>');
+    html.push('  <p class="ed-help" id="edErrorHelp">' + TSJ.escapeHtml(TSJ.EDITOR_HELP_IDLE) + '</p>');
     html.push('  <div class="result-panel" id="resultPanel" aria-live="polite" aria-label="判题结果"></div>\n</section>');
 
     html.push('</div>');

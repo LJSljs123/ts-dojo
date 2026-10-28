@@ -120,7 +120,7 @@
       '    <button type="button" class="btn" id="studioRunVal">① 验证集评估</button>' +
       '    <button type="button" class="btn btn-primary" id="studioRunFinal">② 最终评测</button></div></div>',
       '  <div class="editor-host" id="studioEditorHost"></div>',
-      '  <p class="ed-help" id="studioEdHelp">代码出错时会在这里说明行号与原因。</p>',
+      '  <p class="ed-help" id="studioEdHelp">' + TSJ.escapeHtml(TSJ.EDITOR_HELP_IDLE) + '</p>',
       '</section>',
       '<div class="splitter" id="studioSplitter" role="separator" aria-orientation="vertical" aria-label="调整左右分栏宽度" tabindex="-1"></div>',
       '<section class="pane pane-right">',
@@ -140,6 +140,7 @@
       value: ctx.code,
       fontSize: store.state.edFont,
       errorHelpId: 'studioEdHelp',
+      escapeTo: '#studioRunFinal',
       onChange: function (val) { ctx.code = val; core.writeJSON(core.STORE.studioDraft, val); },
       onRun: function () { runPhase('val'); },
       onSave: function () { core.writeJSON(core.STORE.studioDraft, ctx.code); a11y.toast('草稿已保存', 'ok'); }

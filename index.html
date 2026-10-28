@@ -95,6 +95,11 @@
 </head>
 <body>
 
+<!-- ============ 跳转链接 ============
+     必须是 body 的第一个可聚焦元素：放在顶栏之后的话，键盘用户要先 Tab 过
+     logo / 主题 / 菜单 三下才轮到它，「跳过导航」等于没跳。 -->
+<a class="ds-skip-link" href="#view">跳到主要内容</a>
+
 <!-- ============ 顶部固定栏 ============ -->
 <header class="topbar wk-topbar">
   <a class="brand wk-brand" href="#/" aria-label="时序竞技场 TSOJ 工作台">
@@ -145,7 +150,6 @@
 
 <!-- ============ 视图容器 ============
      tabindex="-1"：路由切换后把焦点交给 #view，读屏用户能感知「内容已更新」 -->
-<a class="ds-skip-link" href="#view">跳到主要内容</a>
 <main id="view" class="view wk-main" role="main" tabindex="-1"></main>
 
 <!-- ============ 引导 / 弹层 ============
@@ -168,7 +172,7 @@
 <script src="assets/js/content/content.js?v=2ddaf58b"></script>
 <script src="assets/js/content/glossary.js?v=87dd8666"></script>
 <script src="assets/js/judge.js?v=c2e265e6"></script>
-<script src="assets/js/editor.js?v=47a502bf"></script>
+<script src="assets/js/editor.js?v=e41fe62d"></script>
 <script src="assets/js/chart.js?v=30a3c952"></script>
 <script src="assets/js/charts/core.js?v=5595901f"></script>
 <script src="assets/js/charts/series.js?v=4a88d36e"></script>
@@ -184,11 +188,11 @@
 <script src="assets/js/app/storage.js?v=0830795b"></script>
 <script src="assets/js/app/lifecycle.js?v=a4d6578a"></script>
 <script src="assets/js/app/ui.js?v=2ae4d02e"></script>
-<script src="assets/js/app/a11y.js?v=a08ae5ec"></script>
+<script src="assets/js/app/a11y.js?v=4731cd94"></script>
 <script src="assets/js/app/theme.js?v=ed67524f"></script>
 <script src="assets/js/app/views.js?v=43b06c35"></script>
 <script src="assets/js/app/problem-extras.js?v=074fc346"></script>
-<script src="assets/js/app/problem.js?v=fe35d115"></script>
+<script src="assets/js/app/problem.js?v=e3df9dd5"></script>
 <script src="assets/js/app/pages.js?v=1667ea4e"></script>
 <script src="assets/js/app/lab-storage.js?v=7b178608"></script>
 <script src="assets/js/app/lab-panels.js?v=1dec2bd6"></script>
@@ -196,7 +200,7 @@
 <script src="assets/js/app/studio-storage.js?v=dfff11ae"></script>
 <script src="assets/js/app/studio-report.js?v=4410826a"></script>
 <script src="assets/js/app/studio-csv.js?v=f0070bb0"></script>
-<script src="assets/js/app/studio.js?v=fbbb74e3"></script>
+<script src="assets/js/app/studio.js?v=870bedb5"></script>
 <script src="assets/js/app/achievements.js?v=d79f0867"></script>
 <script src="assets/js/app/dashboard.js?v=efd6ea77"></script>
 <script src="assets/js/app/learn.js?v=cce3dd77"></script>
@@ -206,6 +210,6 @@
 <script src="assets/js/app/glossary.js?v=6ab46bc1"></script>
 <script src="assets/js/app/boards.js?v=8d7dd0d4"></script>
 <script src="assets/js/app/cmdk.js?v=8ed14d74"></script>
-<script src="assets/js/app.js?v=6fdb2ddd"></script>
+<script src="assets/js/app.js?v=63137515"></script>
 </body>
 </html>

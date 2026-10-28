@@ -544,3 +544,49 @@ pinball  point=62.09   pooled=43.14   perLead=43.83     ← 最优基线 = 点�
 两条都带**具体数字**而不是「看起来还行」：200px 是编辑器能露出 6 行代码的下限，60px 是工具栏不换行的上限。数字来自实际测量，不是拍的——`hero ≤ 150` 就是工坊 hero 换 `wk-hero-slim`（单列、只留标题与一句说明）之后的实测值。
 
 **方法论**：一个维度修完，要问「还有哪个维度没量过」。这一轮之前量过的是**横向**（scrollWidth）和**颜色**（对比度），没量过的是**纵向首屏**与**小视口**。缺陷类别清单因此多了两条判据：关键动作是否在首屏内、容器内的溢出是否把主按钮吃掉了。
+
+### 12.17 键盘可达性：从「有 a11y.js」到「键盘真能用」
+
+`app/a11y.js` 一直是完整实现：弹层焦点陷阱、`inert` 背景、ESC 关闭、`aria-live` 提示、路由切换改标题。**但它一条用例都没有。** 这不是「少写几条测试」，而是缺陷类别——一个模块只要没被测过，它就可以是死的，而 245 条用例会全绿。
+
+这一轮把「键盘走一遍」当作新的审查维度（前几轮量的是横向溢出、对比度、纵向首屏），做法是 CDP `Input.dispatchKeyEvent` 派发真实 Tab（合成 `KeyboardEvent` 不会触发浏览器的顺序导航），逐步记录 `document.activeElement`。三处缺陷立刻现形：
+
+**缺陷一：编辑器是键盘陷阱。** 编辑器把 `Tab` / `Shift+Tab` 都 `preventDefault` 掉做缩进——这本身是正当行为（所有代码编辑器都这样），但**没有任何键能把焦点移出去**。实测从 `.ed-input` 按下 Tab 后，`activeElement` 连续 20 次都是同一个 textarea。WCAG 2.1.2 明确禁止这种「进得去出不来」。
+
+修法：`Esc` 退出，落点由 `escapeTo` 指定（题目页 `#btnSubmit`、工坊 `#studioRunFinal`——都是「下一步动作」），没有配置则 `blur()`：
+
+```js
+if (key === 'Escape' || key === 'Esc') {
+  ev.preventDefault();
+  var exit = opts.escapeTo ? document.querySelector(String(opts.escapeTo)) : null;
+  if (exit && typeof exit.focus === 'function') exit.focus();
+  else ta.blur();
+  return;
+}
+```
+
+配套把 `.ed-help` 的初始文案改成 `Tab 缩进、Esc 退出编辑器`，并把它提成 `TSJ.EDITOR_HELP_IDLE`——原先「代码出错时会在这里说明行号与原因。」在 `editor.js`、`problem.js`、`studio.js` **三处各写一份**，改一处必然漂移。
+
+**缺陷二：跳转链接排在顶栏之后。** `「跳到主要内容」` 是第 4 个可聚焦元素（前面是 logo / 主题 / 菜单）。跳转链接的全部意义就是「第一个 Tab 就跳过导航」，排在第 4 位等于没跳。
+
+更深一层：**首屏渲染时 `route()` 会调用 `a11y.focusView()`**，把焦点交给 `#view`。`focusView` 是为路由切换准备的（读屏用户要感知「内容已更新」），但首次渲染时页面本来就在顶部，抢焦点会让顺序导航从页面中部开始——跳转链接被甩在身后。所以加了 `firstRoute` 判断：首屏不抢焦点。
+
+**缺陷三：弹层关闭后焦点不归位。** `closeModal` 一律 `focusView()`。键盘用户打开「清空本机进度」确认框、按 Esc 取消，焦点飞到页面顶部，得从头 Tab 一遍。修法是打开时记下 `document.activeElement`（**必须在设 `inert` 之前取**，`inert` 会先把 activeElement 打成 body），关闭时还回去；记不到才回退 `#view`。
+
+**一个测量陷阱：焦点环宽度不能立刻读。** 走查时读到 7 个元素的 `outline-width` 是 `1px`、`outline-offset` 是 `0.75px` / `1.21875px`、颜色是 accent 与底色的混合色。看起来像「焦点环不统一」，但全局 CSS 里只有 `2px solid var(--accent)` 一种声明。真相是 `.btn` 上有 `transition`：Tab 过去 40ms 内读到的是 `0 → 2px` 的**插值**。等 260ms 再读，全部是 `2px`。
+
+这与对比度审计里那次 1.09:1 的假阳性是同一类错误：**测量工具读到了过渡中间态，而不是稳定态**。所以 K04 里那句 `await sleep(260)` 不是「防 flake 的随机等待」，而是测量协议的一部分，注释里写明了理由。
+
+**新增 `tests/qa/a11y.test.js`（5 条）与三处注入验证：**
+
+| 用例 | 断言 | 注入验证 |
+|---|---|---|
+| K01 | 跳转链接是第一个可聚焦元素 + 首屏 `activeElement !== MAIN` + 第一次 Tab 落在它上面 | 把链接挪回 `<main>` 前 → 红 |
+| K02 | Tab 仍在编辑器内且插入 2 空格；Esc 后 `activeElement.id === 'btnSubmit'` | 删掉 Esc 分支 → 红 |
+| K03 | 弹层内焦点、`#view` 的 `inert` 与 `aria-hidden`、Tab 循环、Esc 关闭、焦点回触发按钮 | `closeModal` 改回 `focusView()` → 红 |
+| K04 | Tab 走 14 个元素，每个 `outline-width ≥ 2px` 且 `outline-style !== none` | （见上：等待过渡是测量协议的一部分） |
+| K05 | 4 条路由共 186 个可聚焦元素，`aria-label`/文本/`title`/`<label for>` 至少有一个 | — |
+
+K02 的第一段断言（「Tab 之后焦点仍在编辑器内」）是刻意的**反向保护**：如果哪天有人为了「修键盘陷阱」直接把 Tab 缩进删掉，这条会立刻红——**修可达性不能靠砍掉功能**。
+
+同时修正了 `features.test.js` 里两条把旧行为写死的断言：`T11 弹层` 原来断言 `activeId === 'view'`（即「焦点回页面顶部」），改成断言回到 `#btnClear`，并在打开弹层前先 `focus()` 触发按钮（真实点击会先聚焦，`element.click()` 不会）；另一条 `reset()` 后直接断言焦点在 `#view`，改成先真的切一次路由再断言——因为 `reset()` 内部是 `reload()`，那测的是首屏而不是路由切换。

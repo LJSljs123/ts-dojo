@@ -19,7 +19,7 @@
 双击 ts-dojo-standalone.html
 ```
 
-它把 CSS 与 48 个脚本全部内联成一个约 836KB 的 HTML，**不依赖任何相对路径**。
+它把 CSS 与 48 个脚本全部内联成一个约 840KB 的 HTML，**不依赖任何相对路径**。
 所以无论是双击打开、丢进 http 服务器、还是被塞进 iframe / `srcdoc` / 预览面板里，都能正常渲染。
 
 **方式 B：模块化版**
@@ -73,7 +73,7 @@ node tests/standalone-check.js      # 校验产物与源码一致、无外部引
 | 图表 | 数据预览（历史 / 测试区间 / 你的预测三色）；**hover 十字线 + tooltip**（高亮点带描边环）；**色板走 CSS 变量、深浅主题实时适配**（切主题即重绘）；**整洁刻度**网格、历史线渐变面积、预测线空心端点；v3 统一图表内核支持预测对比、区间扇形、残差、ACF/PACF、季节分解、指标对比 |
 | 编辑器 | 语法高亮、行号、Tab 缩进、括号自动配对、**括号匹配高亮**、**字号 12/13/14**、`Ctrl/Cmd+S` 存草稿、`Ctrl/Cmd+Enter` 运行；**>800 行自动降级**关闭实时高亮保证输入流畅 |
 | 主题 | system / light / dark，写入 `tsoj:theme`，跨刷新保留；**切换主题时全部画布即时重绘换色**（MutationObserver 联动 v1/v3 两套图表内核）；语义色不只靠颜色区分 |
-| 快捷键 | **Ctrl/Cmd + K** 全局命令面板（搜索/跳转/动作，↑↓ 选择 ↵ 跳转）；编辑器内 Ctrl/Cmd+Enter 运行、Ctrl/Cmd+S 存草稿 |
+| 快捷键 | **Ctrl/Cmd + K** 全局命令面板（搜索/跳转/动作，↑↓ 选择 ↵ 跳转）；编辑器内 Ctrl/Cmd+Enter 运行、Ctrl/Cmd+S 存草稿、**Esc 退出编辑器**（Tab 被缩进占用，没有 Esc 就是键盘陷阱） |
 | 模型工坊 | `#/studio` **自己搓一个模型跑完整实验流程**：写带训练逻辑的 predict → ① 验证集评估（train 拟合 / val 打分，可反复迭代）→ ② 最终评测（train+val 拟合 / test 打分，同代码评测次数如实记录防窥探）→ 报告（MSE vs 最优基线 + 预测对比图带 train/val/test 分界线）→ 实验记录留档/载入/导出；**支持上传自己的 CSV**（单列数值或「时间,数值」两列，逗号/分号/制表符自动嗅探，≥72 点，季节周期自动估 + 本地恢复）；**一键导出分享卡**（自包含 HTML，含预测对比图与实验参数）；沙箱与判题完全同源 |
 | 成就 | 8 个成就徽章（首 AC / 三连胜 / 入门毕业 / 工坊开张 / 诚实研究者 / 词典编纂者 / 方法旅行家 / 半分神话），全部由真实事件推导，解锁即 toast 并落盘；工作台徽章墙可见已解锁/未解锁与条件 |
 | 窄屏 | ≤640px 自动切换**卡片式列表**（标题正常换行，不再挤成一字一行）、题目页上下堆叠、触控目标 ≥40px、筛选默认折叠 |
@@ -138,7 +138,7 @@ ts-dojo/
 │   ├── charts/                # v3 图表内核：core / series / diagnostics
 │   └── lab/                   # v3 实验室引擎：config / adapters / stats / runner
 ├── tests/
-│   ├── qa/                    # node --test tests/qa/*.test.js（240 条）
+│   ├── qa/                    # node --test tests/qa/*.test.js（245 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
 │   ├── starter-check.js       # 18 题模板原样提交必须全 WA
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
@@ -566,7 +566,7 @@ node tests/standalone-check.js  # 单文件版是否与源码同步、是否残�
 node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
 ```
 
-**测试规模：240 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
+**测试规模：245 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
 找不到浏览器时自动 skip，并在输出里注明「未验证」，不假装通过）。
 浏览器用例自带**全局文件锁**：多个测试文件并发时只会排队、不会同时 spawn 多个 Chromium，
 因此 `node --test tests/qa/*.test.js` 直接并发跑也是稳的。
@@ -590,6 +590,7 @@ node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，�
 | `docs-numbers` | README 数字与源码一致：题数 / 方法数 / 分层 / 可练 / 数据集 / 课程 / 术语 / 脚本 / 用例数 / 单文件体积 |
 | `assets-version` | 发布级：`index.html` 每处 `?v=` 都等于资源内容哈希（防旧缓存）、引用不 404、`assets/` 下无孤儿文件 |
 | `contrast` | 主题对比度：深色 / 浅色下逐路由审计可见文字，对比度 < 3:1 即失败（挡「深色粉彩色被搬到浅底上」这类回归） |
+| `a11y` | 键盘可达性：跳转链接是第一个可聚焦元素、编辑器 Tab 缩进但 Esc 能退出（键盘陷阱）、弹层焦点陷阱 + Esc + 焦点归还触发按钮、焦点环 ≥2px、可聚焦元素都有可读名字 |
 
 `selftest.js` 覆盖内容：
 

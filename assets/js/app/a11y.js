@@ -25,6 +25,7 @@
   var isOpen = false;
   var onKeyDownBound = null;
   var closeCallback = null;
+  var returnFocus = null;
   var toastTimer = 0;
 
   /** 取弹层容器。 */
@@ -92,7 +93,7 @@
     }
   }
 
-  /** 关闭弹层并把焦点交还 #view。 */
+  /** 关闭弹层并把焦点交还触发元素（无触发元素时回退到 #view）。 */
   function closeModal() {
     var ov = getOverlay();
     if (!ov || !isOpen) return;
@@ -105,11 +106,15 @@
       onKeyDownBound = null;
     }
     setBackgroundInert(false);
-    var view = document.getElementById('view');
-    if (view) {
-      if (!view.hasAttribute('tabindex')) view.setAttribute('tabindex', '-1');
-      try { view.focus(); } catch (e) { /* ignore */ }
+    // 焦点必须回到「打开弹层的那个按钮」，而不是页面顶部：
+    // 一律回 #view 会让键盘用户按完 Esc 就丢了位置，得从头 Tab 一遍。
+    var back = returnFocus;
+    returnFocus = null;
+    if (!back || !document.contains(back) || typeof back.focus !== 'function') back = null;
+    if (back) {
+      try { back.focus(); } catch (e) { back = null; }
     }
+    if (!back) focusView();
     var cb = closeCallback;
     closeCallback = null;
     if (typeof cb === 'function') cb();
@@ -127,6 +132,11 @@
 
     // 若已有弹层，先收掉（保证同时只有一个 dialog）
     if (isOpen) closeModal();
+
+    // 记下触发者：关闭时把焦点还回去。必须在设 inert 之前取，
+    // inert 会先把 activeElement 打成 body。
+    var active = document.activeElement;
+    returnFocus = active && active !== document.body && active !== document.documentElement ? active : null;
 
     ov.innerHTML = String(options.html == null ? '' : options.html);
     ov.setAttribute('role', 'dialog');

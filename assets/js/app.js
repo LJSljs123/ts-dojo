@@ -41,6 +41,9 @@
   /** 提交记录 id 的会话内序号（不引入随机数：数据集与判题都要求可复现） */
   var subSeq = 0;
 
+  /** 是否还在首次渲染（首次渲染不把焦点交给 #view，见 route() 末尾） */
+  var firstRoute = true;
+
   /* ---------- 1. 路由 ---------- */
   /** 解析 hash 并渲染对应视图。 */
   function route() {
@@ -124,7 +127,11 @@
 
     store.updateScoreChip();
     global.scrollTo(0, 0);
-    a11y.focusView();
+    // 首屏不抢焦点：focusView 是为了让读屏用户知道「内容已更新」，
+    // 但首次渲染时页面本来就在最上面，抢焦点会让顺序导航从 #view 开始，
+    // 于是「跳到主要内容」这个第一个可聚焦元素被甩在身后，等于没有跳转链接。
+    if (!firstRoute) a11y.focusView();
+    firstRoute = false;
   }
 
   /* ---------- 2. 判题 ---------- */

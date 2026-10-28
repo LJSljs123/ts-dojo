@@ -2999,6 +2999,11 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 </head>
 <body>
 
+<!-- ============ 跳转链接 ============
+     必须是 body 的第一个可聚焦元素：放在顶栏之后的话，键盘用户要先 Tab 过
+     logo / 主题 / 菜单 三下才轮到它，「跳过导航」等于没跳。 -->
+<a class="ds-skip-link" href="#view">跳到主要内容</a>
+
 <!-- ============ 顶部固定栏 ============ -->
 <header class="topbar wk-topbar">
   <a class="brand wk-brand" href="#/" aria-label="时序竞技场 TSOJ 工作台">
@@ -3049,7 +3054,6 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 
 <!-- ============ 视图容器 ============
      tabindex="-1"：路由切换后把焦点交给 #view，读屏用户能感知「内容已更新」 -->
-<a class="ds-skip-link" href="#view">跳到主要内容</a>
 <main id="view" class="view wk-main" role="main" tabindex="-1"></main>
 
 <!-- ============ 引导 / 弹层 ============
@@ -11330,17 +11334,27 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
  *   - 语法高亮（注释 / 字符串 / 数字 / 关键字 / 内置函数），转义 HTML 防 XSS
  *   - Tab 缩进 2 空格、Shift+Tab 反缩进、Enter 自动缩进、括号自动配对
  *   - Ctrl/Cmd + Enter 触发运行；Ctrl/Cmd + S 保存草稿（不弹浏览器保存框）
+ *   - Esc 退出编辑器并把焦点交给 escapeTo 指定的按钮（Tab 被缩进占用，必须留出口）
  *   - 括号匹配高亮（光标处的 ()[]{} 与它的配对项同时加 .ed-match）
  *   - markError(line) 标注错误行，并同步 aria-invalid / aria-describedby 说明
  *   - 字号 12 / 13 / 14 可切换（行高与 padding 一律运行时 getComputedStyle 读取，避免双写错位）
  *   - 超过 800 行自动降级：关闭实时语法高亮，只保留行号与纯文本，保证输入不卡
  *
- * 挂载点：window.TSJ.createEditor(container, { value, onChange, onRun, onSave, fontSize, errorHelpId })
+ * 挂载点：window.TSJ.createEditor(container, { value, onChange, onRun, onSave, fontSize, errorHelpId, escapeTo })
  */
 (function (global) {
   'use strict';
 
   var TSJ = global.TSJ || (global.TSJ = {});
+
+  /**
+   * 编辑器空闲时的帮助文案。
+   *
+   * 单独导出而不是在调用方各写一份：题目页与模型工坊都要渲染同一句话，
+   * 三处硬编码必然漂移。`clearError` 也复用它，保证「报错 → 清除」后
+   * 文案回到同一个初始状态。
+   */
+  var HELP_IDLE = '代码出错时会在这里说明行号与原因 · Tab 缩进、Esc 退出编辑器';
 
   /* ------------------------------------------------------------------ *
    * 语法高亮
@@ -11949,6 +11963,18 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
         return;
       }
 
+      // Esc：退出编辑器。
+      // Tab / Shift+Tab 都被缩进占用（这是编辑器的正当行为），于是键盘用户
+      // 一旦 Tab 进来就没有任何键能出去 —— WCAG 2.1.2「键盘陷阱」明确禁止。
+      // 出口交给 escapeTo 指定的元素（通常是「提交判题」），没有就单纯 blur。
+      if (key === 'Escape' || key === 'Esc') {
+        ev.preventDefault();
+        var exit = opts.escapeTo ? document.querySelector(String(opts.escapeTo)) : null;
+        if (exit && typeof exit.focus === 'function') exit.focus();
+        else ta.blur();
+        return;
+      }
+
       if (key === 'Enter') {
         handleEnter(ev);
         schedulePaint();
@@ -12010,7 +12036,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     /** 清除错误行标注 */
     function clearError() {
       ta.removeAttribute('aria-invalid');
-      setErrorHelp('代码出错时会在这里说明行号与原因。');
+      setErrorHelp(HELP_IDLE);
       if (!errorLine) return;
       errorLine = 0;
       paintGutter();
@@ -12068,6 +12094,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   }
 
   TSJ.createEditor = createEditor;
+  TSJ.EDITOR_HELP_IDLE = HELP_IDLE;
   TSJ.highlightCode = highlightCode;
   TSJ.escapeHtml = escapeHtml;
 
@@ -16087,6 +16114,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   var isOpen = false;
   var onKeyDownBound = null;
   var closeCallback = null;
+  var returnFocus = null;
   var toastTimer = 0;
 
   /** 取弹层容器。 */
@@ -16154,7 +16182,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     }
   }
 
-  /** 关闭弹层并把焦点交还 #view。 */
+  /** 关闭弹层并把焦点交还触发元素（无触发元素时回退到 #view）。 */
   function closeModal() {
     var ov = getOverlay();
     if (!ov || !isOpen) return;
@@ -16167,11 +16195,15 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       onKeyDownBound = null;
     }
     setBackgroundInert(false);
-    var view = document.getElementById('view');
-    if (view) {
-      if (!view.hasAttribute('tabindex')) view.setAttribute('tabindex', '-1');
-      try { view.focus(); } catch (e) { /* ignore */ }
+    // 焦点必须回到「打开弹层的那个按钮」，而不是页面顶部：
+    // 一律回 #view 会让键盘用户按完 Esc 就丢了位置，得从头 Tab 一遍。
+    var back = returnFocus;
+    returnFocus = null;
+    if (!back || !document.contains(back) || typeof back.focus !== 'function') back = null;
+    if (back) {
+      try { back.focus(); } catch (e) { back = null; }
     }
+    if (!back) focusView();
     var cb = closeCallback;
     closeCallback = null;
     if (typeof cb === 'function') cb();
@@ -16189,6 +16221,11 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 
     // 若已有弹层，先收掉（保证同时只有一个 dialog）
     if (isOpen) closeModal();
+
+    // 记下触发者：关闭时把焦点还回去。必须在设 inert 之前取，
+    // inert 会先把 activeElement 打成 body。
+    var active = document.activeElement;
+    returnFocus = active && active !== document.body && active !== document.documentElement ? active : null;
 
     ov.innerHTML = String(options.html == null ? '' : options.html);
     ov.setAttribute('role', 'dialog');
@@ -16899,6 +16936,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       value: code,
       fontSize: store.state.edFont,
       errorHelpId: 'edErrorHelp',
+      // Tab 被缩进占用，Esc 是键盘用户离开编辑器的唯一出口 → 焦点交给「提交判题」
+      escapeTo: '#btnSubmit',
       onChange: core.debounce(function (val) {
         store.state.drafts[p.id] = val;
         store.saveDrafts();
@@ -17065,7 +17104,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     html.push('      <button type="button" class="btn" id="btnRun">运行</button>');
     html.push('      <button type="button" class="btn btn-primary" id="btnSubmit">提交判题</button>\n    </div>');
     html.push('  </div>\n  <div class="editor-host" id="editorHost"></div>');
-    html.push('  <p class="ed-help" id="edErrorHelp">代码出错时会在这里说明行号与原因。</p>');
+    html.push('  <p class="ed-help" id="edErrorHelp">' + TSJ.escapeHtml(TSJ.EDITOR_HELP_IDLE) + '</p>');
     html.push('  <div class="result-panel" id="resultPanel" aria-live="polite" aria-label="判题结果"></div>\n</section>');
 
     html.push('</div>');
@@ -18500,7 +18539,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       '    <button type="button" class="btn" id="studioRunVal">① 验证集评估</button>' +
       '    <button type="button" class="btn btn-primary" id="studioRunFinal">② 最终评测</button></div></div>',
       '  <div class="editor-host" id="studioEditorHost"></div>',
-      '  <p class="ed-help" id="studioEdHelp">代码出错时会在这里说明行号与原因。</p>',
+      '  <p class="ed-help" id="studioEdHelp">' + TSJ.escapeHtml(TSJ.EDITOR_HELP_IDLE) + '</p>',
       '</section>',
       '<div class="splitter" id="studioSplitter" role="separator" aria-orientation="vertical" aria-label="调整左右分栏宽度" tabindex="-1"></div>',
       '<section class="pane pane-right">',
@@ -18520,6 +18559,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       value: ctx.code,
       fontSize: store.state.edFont,
       errorHelpId: 'studioEdHelp',
+      escapeTo: '#studioRunFinal',
       onChange: function (val) { ctx.code = val; core.writeJSON(core.STORE.studioDraft, val); },
       onRun: function () { runPhase('val'); },
       onSave: function () { core.writeJSON(core.STORE.studioDraft, ctx.code); a11y.toast('草稿已保存', 'ok'); }
@@ -20483,6 +20523,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   /** 提交记录 id 的会话内序号（不引入随机数：数据集与判题都要求可复现） */
   var subSeq = 0;
 
+  /** 是否还在首次渲染（首次渲染不把焦点交给 #view，见 route() 末尾） */
+  var firstRoute = true;
+
   /* ---------- 1. 路由 ---------- */
   /** 解析 hash 并渲染对应视图。 */
   function route() {
@@ -20566,7 +20609,11 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 
     store.updateScoreChip();
     global.scrollTo(0, 0);
-    a11y.focusView();
+    // 首屏不抢焦点：focusView 是为了让读屏用户知道「内容已更新」，
+    // 但首次渲染时页面本来就在最上面，抢焦点会让顺序导航从 #view 开始，
+    // 于是「跳到主要内容」这个第一个可聚焦元素被甩在身后，等于没有跳转链接。
+    if (!firstRoute) a11y.focusView();
+    firstRoute = false;
   }
 
   /* ---------- 2. 判题 ---------- */
