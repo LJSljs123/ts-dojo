@@ -211,9 +211,48 @@
     try { view.focus(); } catch (e) { /* ignore */ }
   }
 
+  /**
+   * 危险操作确认弹层（「清空本机进度」「清空实验记录」共用）。
+   *
+   * 抽出来的理由：两处原本各写一份几乎一样的 modal HTML，区别只在文案和
+   * 确认后的回调。危险操作的口径必须全站一致——用户不会记得「这个清空有
+   * 确认、那个没有」。id 前缀可传，是为了不破坏既有的 `#clearCancel` 选择器。
+   *
+   * @param {Object} o { title, body, hint, confirmText, idPrefix, onConfirm }
+   * @returns {Object} openModal 的返回值 { close, root }
+   */
+  function confirmDanger(o) {
+    var opts = o || {};
+    var prefix = String(opts.idPrefix || 'danger');
+    var html = [
+      '<div class="modal">',
+      '  <h2>' + core.esc(opts.title || '确认操作？') + '</h2>',
+      '  <p>' + core.esc(opts.body || '') + '</p>',
+      opts.hint ? '  <p>' + core.esc(opts.hint) + '</p>' : '',
+      '  <div class="modal-actions">',
+      '    <button type="button" class="btn" id="' + prefix + 'Cancel">取消</button>',
+      '    <button type="button" class="btn btn-danger" id="' + prefix + 'Confirm">' +
+        core.esc(opts.confirmText || '确认') + '</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    var handle = openModal({ html: html, label: opts.title || '确认操作', initialFocus: '#' + prefix + 'Cancel' });
+    var cancel = document.getElementById(prefix + 'Cancel');
+    var confirm = document.getElementById(prefix + 'Confirm');
+    if (cancel) cancel.addEventListener('click', function () { closeModal(); });
+    if (confirm) {
+      confirm.addEventListener('click', function () {
+        closeModal();
+        if (typeof opts.onConfirm === 'function') opts.onConfirm();
+      });
+    }
+    return handle;
+  }
+
   TSJ.appA11y = {
     openModal: openModal,
     closeModal: closeModal,
+    confirmDanger: confirmDanger,
     modalOpen: modalOpen,
     toast: toast,
     setTitle: setTitle,

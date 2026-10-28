@@ -130,30 +130,19 @@
     }
     if (btnClear) {
       btnClear.addEventListener('click', function () {
-        var html = [
-          '<div class="modal">',
-          '  <h2>清空本机进度？</h2>',
-          '  <p>将删除本机所有 TSOJ 数据：各题最高分、提交记录、代码草稿、引导标记。此操作不可撤销。</p>',
-          '  <p>建议先「导出进度」留一份备份。</p>',
-          '  <div class="modal-actions">',
-          '    <button type="button" class="btn" id="clearCancel">取消</button>',
-          '    <button type="button" class="btn btn-danger" id="clearConfirm">确认清空</button>',
-          '  </div>',
-          '</div>'
-        ].join('\n');
-        a11y.openModal({ html: html, label: '清空本机进度', initialFocus: '#clearCancel' });
-        var cancel = $('#clearCancel');
-        var confirm = $('#clearConfirm');
-        if (cancel) cancel.addEventListener('click', function () { a11y.closeModal(); });
-        if (confirm) {
-          confirm.addEventListener('click', function () {
+        a11y.confirmDanger({
+          title: '清空本机进度？',
+          body: '将删除本机所有 TSOJ 数据：各题最高分、提交记录、代码草稿、引导标记。此操作不可撤销。',
+          hint: '建议先「导出进度」留一份备份。',
+          confirmText: '确认清空',
+          idPrefix: 'clear',
+          onConfirm: function () {
             var keys = storage.clearAll();
-            a11y.closeModal();
             a11y.toast('已清空 ' + keys.length + ' 项本地数据', 'ok');
             store.updateScoreChip();
             doRefresh();
-          });
-        }
+          }
+        });
       });
     }
   }

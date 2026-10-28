@@ -77,13 +77,21 @@
   }
 
   /** 底部操作区：有题 → 去练；无题但可跑 → 暂无对应题目；沙箱跑不了 → 明说。 */
+  /**
+   * 展开区的动作行。
+   *
+   * 「查看详情」这条链接是点击走查补上的：`#/methods/:id` 详情页一直存在
+   * （术语表的「去看方法卡」和题目页的 rel-chip 都会链过去），但**方法库
+   * 自己的 48 张卡没有入口**——用户读完核心思想想去完整页，只能绕道术语表。
+   */
   function actionHtml(m) {
+    var detail = '<a class="btn btn-ghost mc-detail" href="#/methods/' + esc(m.id) + '">查看详情</a>';
     if (m.practice) {
       return '<a class="btn btn-primary mc-practice" href="#/problem/' + esc(m.practice) +
-        '">去练这道题</a>\n      ' + srcHtml(m);
+        '">去练这道题</a>\n      ' + detail + '\n      ' + srcHtml(m);
     }
     var note = (m.runnable === false) ? '沙箱跑不了，仅供选型参考' : '暂无对应题目';
-    return '<span class="mc-note">' + note + '</span>\n      ' + srcHtml(m);
+    return '<span class="mc-note">' + note + '</span>\n      ' + detail + '\n      ' + srcHtml(m);
   }
 
   /** 展开区：左「核心思想 + 关键式子」，右「适用 + 局限」，窄屏由 CSS 堆叠。 */

@@ -182,7 +182,22 @@
       a.click();
       global.URL.revokeObjectURL(a.href);
     });
-    $('studioClear').addEventListener('click', function () { storage.clear(); paintRecords(); a11y.toast('已清空实验记录', 'ok'); });
+    // 清空记录必须先确认：这些记录是跑了几分钟的结果，清掉不可恢复。
+    // 原来是一键直接清（同一站的「清空本机进度」却有确认），口径不一致。
+    $('studioClear').addEventListener('click', function () {
+      a11y.confirmDanger({
+        title: '清空实验记录？',
+        body: '将删除本机保存的全部工坊实验记录（验证集与最终评测）。此操作不可撤销。',
+        hint: '建议先「导出记录」留一份备份。',
+        confirmText: '确认清空',
+        idPrefix: 'studioClear',
+        onConfirm: function () {
+          storage.clear();
+          paintRecords();
+          a11y.toast('已清空实验记录', 'ok');
+        }
+      });
+    });
 
     function paintSplits() {
       var d = findDataset($('studioDataset').value);

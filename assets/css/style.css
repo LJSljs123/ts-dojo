@@ -1368,7 +1368,7 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
   margin-top: 13px;
 }
 .mc-note { font-size: 12px; color: var(--muted); }
-.mc-practice, .mc-src { flex: 0 0 auto; }
+.mc-practice, .mc-src, .mc-detail { flex: 0 0 auto; }
 
 /* 窄屏：标题/徽标各占一行，展开区两栏改堆叠（本块必须在基础规则之后） */
 @media (max-width: 640px) {

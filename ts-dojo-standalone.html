@@ -1574,7 +1574,7 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
   margin-top: 13px;
 }
 .mc-note { font-size: 12px; color: var(--muted); }
-.mc-practice, .mc-src { flex: 0 0 auto; }
+.mc-practice, .mc-src, .mc-detail { flex: 0 0 auto; }
 
 /* 窄屏：标题/徽标各占一行，展开区两栏改堆叠（本块必须在基础规则之后） */
 @media (max-width: 640px) {
@@ -16300,9 +16300,48 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     try { view.focus(); } catch (e) { /* ignore */ }
   }
 
+  /**
+   * 危险操作确认弹层（「清空本机进度」「清空实验记录」共用）。
+   *
+   * 抽出来的理由：两处原本各写一份几乎一样的 modal HTML，区别只在文案和
+   * 确认后的回调。危险操作的口径必须全站一致——用户不会记得「这个清空有
+   * 确认、那个没有」。id 前缀可传，是为了不破坏既有的 `#clearCancel` 选择器。
+   *
+   * @param {Object} o { title, body, hint, confirmText, idPrefix, onConfirm }
+   * @returns {Object} openModal 的返回值 { close, root }
+   */
+  function confirmDanger(o) {
+    var opts = o || {};
+    var prefix = String(opts.idPrefix || 'danger');
+    var html = [
+      '<div class="modal">',
+      '  <h2>' + core.esc(opts.title || '确认操作？') + '</h2>',
+      '  <p>' + core.esc(opts.body || '') + '</p>',
+      opts.hint ? '  <p>' + core.esc(opts.hint) + '</p>' : '',
+      '  <div class="modal-actions">',
+      '    <button type="button" class="btn" id="' + prefix + 'Cancel">取消</button>',
+      '    <button type="button" class="btn btn-danger" id="' + prefix + 'Confirm">' +
+        core.esc(opts.confirmText || '确认') + '</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    var handle = openModal({ html: html, label: opts.title || '确认操作', initialFocus: '#' + prefix + 'Cancel' });
+    var cancel = document.getElementById(prefix + 'Cancel');
+    var confirm = document.getElementById(prefix + 'Confirm');
+    if (cancel) cancel.addEventListener('click', function () { closeModal(); });
+    if (confirm) {
+      confirm.addEventListener('click', function () {
+        closeModal();
+        if (typeof opts.onConfirm === 'function') opts.onConfirm();
+      });
+    }
+    return handle;
+  }
+
   TSJ.appA11y = {
     openModal: openModal,
     closeModal: closeModal,
+    confirmDanger: confirmDanger,
     modalOpen: modalOpen,
     toast: toast,
     setTitle: setTitle,
@@ -17333,30 +17372,19 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     }
     if (btnClear) {
       btnClear.addEventListener('click', function () {
-        var html = [
-          '<div class="modal">',
-          '  <h2>清空本机进度？</h2>',
-          '  <p>将删除本机所有 TSOJ 数据：各题最高分、提交记录、代码草稿、引导标记。此操作不可撤销。</p>',
-          '  <p>建议先「导出进度」留一份备份。</p>',
-          '  <div class="modal-actions">',
-          '    <button type="button" class="btn" id="clearCancel">取消</button>',
-          '    <button type="button" class="btn btn-danger" id="clearConfirm">确认清空</button>',
-          '  </div>',
-          '</div>'
-        ].join('\n');
-        a11y.openModal({ html: html, label: '清空本机进度', initialFocus: '#clearCancel' });
-        var cancel = $('#clearCancel');
-        var confirm = $('#clearConfirm');
-        if (cancel) cancel.addEventListener('click', function () { a11y.closeModal(); });
-        if (confirm) {
-          confirm.addEventListener('click', function () {
+        a11y.confirmDanger({
+          title: '清空本机进度？',
+          body: '将删除本机所有 TSOJ 数据：各题最高分、提交记录、代码草稿、引导标记。此操作不可撤销。',
+          hint: '建议先「导出进度」留一份备份。',
+          confirmText: '确认清空',
+          idPrefix: 'clear',
+          onConfirm: function () {
             var keys = storage.clearAll();
-            a11y.closeModal();
             a11y.toast('已清空 ' + keys.length + ' 项本地数据', 'ok');
             store.updateScoreChip();
             doRefresh();
-          });
-        }
+          }
+        });
       });
     }
   }
@@ -18601,7 +18629,22 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       a.click();
       global.URL.revokeObjectURL(a.href);
     });
-    $('studioClear').addEventListener('click', function () { storage.clear(); paintRecords(); a11y.toast('已清空实验记录', 'ok'); });
+    // 清空记录必须先确认：这些记录是跑了几分钟的结果，清掉不可恢复。
+    // 原来是一键直接清（同一站的「清空本机进度」却有确认），口径不一致。
+    $('studioClear').addEventListener('click', function () {
+      a11y.confirmDanger({
+        title: '清空实验记录？',
+        body: '将删除本机保存的全部工坊实验记录（验证集与最终评测）。此操作不可撤销。',
+        hint: '建议先「导出记录」留一份备份。',
+        confirmText: '确认清空',
+        idPrefix: 'studioClear',
+        onConfirm: function () {
+          storage.clear();
+          paintRecords();
+          a11y.toast('已清空实验记录', 'ok');
+        }
+      });
+    });
 
     function paintSplits() {
       var d = findDataset($('studioDataset').value);
@@ -19774,13 +19817,21 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   }
 
   /** 底部操作区：有题 → 去练；无题但可跑 → 暂无对应题目；沙箱跑不了 → 明说。 */
+  /**
+   * 展开区的动作行。
+   *
+   * 「查看详情」这条链接是点击走查补上的：`#/methods/:id` 详情页一直存在
+   * （术语表的「去看方法卡」和题目页的 rel-chip 都会链过去），但**方法库
+   * 自己的 48 张卡没有入口**——用户读完核心思想想去完整页，只能绕道术语表。
+   */
   function actionHtml(m) {
+    var detail = '<a class="btn btn-ghost mc-detail" href="#/methods/' + esc(m.id) + '">查看详情</a>';
     if (m.practice) {
       return '<a class="btn btn-primary mc-practice" href="#/problem/' + esc(m.practice) +
-        '">去练这道题</a>\n      ' + srcHtml(m);
+        '">去练这道题</a>\n      ' + detail + '\n      ' + srcHtml(m);
     }
     var note = (m.runnable === false) ? '沙箱跑不了，仅供选型参考' : '暂无对应题目';
-    return '<span class="mc-note">' + note + '</span>\n      ' + srcHtml(m);
+    return '<span class="mc-note">' + note + '</span>\n      ' + detail + '\n      ' + srcHtml(m);
   }
 
   /** 展开区：左「核心思想 + 关键式子」，右「适用 + 局限」，窄屏由 CSS 堆叠。 */
