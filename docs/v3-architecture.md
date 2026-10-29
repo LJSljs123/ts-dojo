@@ -688,3 +688,46 @@ var STRAY = /^(undefined|NaN|null|Infinity|\[object Object\])$/;
 - **失败必须可见。** 这个缺陷最糟糕的地方不是坏，而是**坏得没声音**：没有异常、没有白屏，只是页面悄悄变回宿主页。排查花了整整一轮，因为所有 252 条用例都绿。
 
 `app.js` 现在是 **350 / 350 行**（上限），下一次改动必须先抽模块 —— 可维护性上限本身已经是下一个缺陷。
+
+### 12.20 非文件宿主：三种形态，三种故障
+
+上一轮（12.19）修的是「`srcdoc` 里点站内链接把整个应用卸载」。用户随后仍然报**「我点击没一个能用」**。这次不再猜，把宿主穷举了一遍。
+
+**先把「宿主」当成一个维度列全。** 预览面板不打开文件，而是把 HTML 塞进 `<iframe srcdoc>`，而且通常带 `sandbox`。这个属性有四种组合，行为完全不同：
+
+| sandbox 属性 | 脚本 | 同源 | 实际表现 |
+|---|---|---|---|
+| （无） | 跑 | 是 | 正常 |
+| `allow-scripts` | 跑 | 否 | 正常（跨源，读不到 DOM，只能 `postMessage` 桥） |
+| `allow-scripts allow-same-origin` | 跑 | 是 | 正常 |
+| 空 / 不含 `allow-scripts` | **不跑** | 否 | **只剩顶栏，内容区全空，点哪都没反应** |
+
+**最后一格就是用户看到的东西。** 实测截图：顶栏有样式、导航会高亮、主题按钮在、内容区一片黑 —— 因为脚本根本没执行，`#view` 永远是空的，任何点击都不可能有反应。这不是「链接坏了」，是**应用没起来**，但页面看着像活的。
+
+代码层面救不了被拦掉的脚本，能做的只有一件事：**把原因说出来**。而这里恰好暴露了一个真缺陷 —— 兜底文案其实早就写了，但它放在 `<main>` 之后：
+
+```css
+.view { min-height: calc(100vh - var(--topbar-h)); }   /* 把后面所有流内容顶到首屏外 */
+```
+
+于是文案在 `top=820`、视口高 800 —— **有兜底，但用户看不见**。改成 fixed 卡片后落在 `top=96`，一句话说清「内容区空、导航点不动」的原因和三条出路（下载文件、用浏览器打开、预览面板选「在浏览器中打开」）。
+
+**顺带修掉的第二个缺陷：启动自检把运行期错误升级成全屏遮罩。**
+
+自检的 `window.addEventListener('error', …, true)` 从建站起就无条件调 `panel()`，而 `panel()` 是 `position:fixed;inset:0;z-index:99999` 的全屏层。也就是说：**任何一个按钮抛出任何一个错，整站都会被一块黑底面板盖住，且面板本身吞掉所有点击** —— 一个局部错误被放大成「整站点点不动」，和用户描述一模一样。现在只有「还没渲染出任何内容」才算启动失败；已经渲染过之后再出错只 `console.error`，页面照常可用。面板也补了关闭按钮。
+
+**第三个改动：路由与地址栏解耦。** 把渲染逻辑抽成 `app/router.js`，入口从「读 `location.hash` 再渲染」改成 `render(parts)` / `navigate(href)`：**先渲染，地址栏尽力同步**。理由不是这次实测到的（`sandbox="allow-scripts"` 里 `location.hash` 赋值其实是生效的，我一开始判断错了），而是**可用性优先级**：地址栏同步失败只影响前进/后退，渲染失败则整站不可用。顺带把 `app.js` 从 350/350 行压到 **265 行**。
+
+**这轮最该记住的是探针自己造的假缺陷。** 排查中我写了一个宿主探针，用 `HOST.replace('__SRC__', esc(html))` 注入页面，结果页面报 `btn.setAttribute is not a function`，我一度以为找到了真 bug。真相是：`String.replace` 的**替换串**里 `$$` 是转义序列，会把 `function $$(sel, root)` 悄悄改成 `function $(sel, root)`，于是 `core.$` 变成了「返回数组的 `$$`」。一行注入，伪造出一个完整的假缺陷链（报错行号、堆栈、元素类型全都能对上）。
+
+**判据**：用 `String.replace` 注入代码时，替换串一律用函数式写法 `.replace(a, () => b)`；只要替换内容来自文件，就必须假设它含 `$`。
+
+**新增 `tests/qa/host-sandbox.test.js`（3 条）与三处注入验证：**
+
+| 用例 | 断言 | 注入验证 |
+|---|---|---|
+| H01 | `sandbox="allow-scripts"` 里应用能启动（`#view` > 1000 字符、无异常），点「题库」`current()` 变成 `#/problems` | —（宿主覆盖，不针对单一改动） |
+| H02 | 启动 1.2s 后抛一个错：`#bootFail` 必须不存在，`#view` 内容还在 | 去掉 `booted \|\| appAlive()` 守卫 → 红 |
+| H03 | `setScriptExecutionDisabled` 后 `.boot-noscript` 存在且 `top ≥ 0 && bottom ≤ innerHeight` | 删掉 `.boot-noscript` 的 fixed 样式 → 红（`top=820` vs 视口 800） |
+
+H01 用的是 postMessage 桥：跨源 iframe 读不到 DOM，探针把 `appRouter.current()`、`#view` 长度、导航链接的 `getBoundingClientRect()` 定时 `postMessage` 回顶层，顶层再用 `Input.dispatchMouseEvent` 按真实坐标点。**跨源断言必须靠坐标 + 状态回传，不能靠 `querySelector`。**

@@ -59,25 +59,41 @@ function pidAlive(pid) {
  * 正常路径下 `close()` 会删掉自己的 profile，但测试进程被 Ctrl-C / 超时杀掉时删不到，
  * 于是一次次积累（实测积到 348 个）。只在拿锁时扫一次，且只删 1 小时前的 ——
  * 阈值远大于任何一次用例的时长，不会误删并发跑的其它进程正在用的目录。
+ *
+ * **必须异步、不阻塞启动**：这里踩过一次大坑 —— 同步 `rmSync` 删 71 个 profile（合计 2.4GB、
+ * 几十万个小文件）在 Windows 上要十几分钟，而它挂在「拿锁」路径上，于是下一个测试文件
+ * 的 launch 直接卡死，整轮全量从 5 分钟变成 15 分钟并被超时杀掉，报出来的是
+ * 「host-sandbox 用例失败」—— 看起来像用例的问题，其实是清理把进程拖住了。
  */
+let swept = false;
 function sweepStaleProfiles() {
-  const cutoff = Date.now() - 60 * 60 * 1000;
-  let names;
-  try {
-    names = fs.readdirSync(os.tmpdir());
-  } catch (e) {
-    return;
-  }
-  for (const name of names) {
-    if (name.indexOf('tsoj-cdp-') !== 0) continue;
-    const dir = path.join(os.tmpdir(), name);
+  if (swept) return;
+  swept = true;
+  setImmediate(function () {
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    let names;
     try {
-      if (fs.statSync(dir).mtimeMs > cutoff) continue;
-      fs.rmSync(dir, { recursive: true, force: true });
+      names = fs.readdirSync(os.tmpdir());
     } catch (e) {
-      /* 正在被占用 / 权限不足：下次再说 */
+      return;
     }
-  }
+    const stale = names
+      .filter((name) => name.indexOf('tsoj-cdp-') === 0)
+      .map((name) => path.join(os.tmpdir(), name))
+      .filter((dir) => {
+        try { return fs.statSync(dir).mtimeMs <= cutoff; } catch (e) { return false; }
+      })
+      .slice(0, 40);   // 单次上限：别为了清垃圾把磁盘 I/O 占满
+    (async function () {
+      for (const dir of stale) {
+        try {
+          await fs.promises.rm(dir, { recursive: true, force: true });
+        } catch (e) {
+          /* 正在被占用 / 权限不足：下次再说 */
+        }
+      }
+    })();
+  });
 }
 
 /** 获取浏览器锁；同进程重入只加计数。超时返回 false。 */
@@ -362,7 +378,8 @@ async function launchInner(url, opts) {
       }
       await sleep(80);
     }
-    throw new Error('页面在 ' + (timeout || 15000) + 'ms 内未就绪（TSJ.findProblem 不可用）' + (last ? '：' + last : ''));
+    throw new Error('页面在 ' + (timeout || 15000) + 'ms 内未就绪（判据未满足：' +
+      (expr || READY_EXPR) + '）' + (last ? '：' + last : ''));
   }
 
   /**

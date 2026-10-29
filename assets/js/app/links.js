@@ -59,15 +59,17 @@
     var href = (a.getAttribute('href') || '').trim();
     if (href.charAt(0) !== '#') return false;
 
-    // 路由链接：改成赋值 location.hash，避免在 srcdoc 里被解析成父页面 URL
+    // 路由链接：交给 router.navigate —— 它**先渲染再同步地址栏**。
+    // 不能只写 `location.hash = href`：在不透明源（sandbox 无 allow-same-origin）里
+    // 这句既不抛错也不生效，于是没有 hashchange、没有渲染，表现就是「点了没反应」。
     if (href.indexOf('#/') === 0 || href === '#') {
       ev.preventDefault();
       if (href === '#') { global.scrollTo(0, 0); return true; }
-      if (global.location.hash === href) {
-        // 已在该路由：不重复渲染（与原生片段导航的表现一致：什么都不发生）
-        return true;
+      if (TSJ.appRouter && typeof TSJ.appRouter.navigate === 'function') {
+        TSJ.appRouter.navigate(href);
+      } else if (global.location.hash !== href) {
+        global.location.hash = href;
       }
-      global.location.hash = href;   // hashchange → app.route()
       return true;
     }
 

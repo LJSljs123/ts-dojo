@@ -41,98 +41,13 @@
   /** 提交记录 id 的会话内序号（不引入随机数：数据集与判题都要求可复现） */
   var subSeq = 0;
 
-  /** 是否还在首次渲染（首次渲染不把焦点交给 #view，见 route() 末尾） */
-  var firstRoute = true;
-
   /* ---------- 1. 路由 ---------- */
-  /** 解析 hash 并渲染对应视图。 */
-  function route() {
-    var hash = global.location.hash || '#/';
-    var path = hash.replace(/^#\/?/, '');
-    var parts = path.split('/').filter(function (s) { return s.length > 0; });
-    var view = parts[0] || 'dashboard';
-
-    // 路由级生命周期：新 Scope 建立前先销毁旧页面的监听 / 图表 / 定时器
-    var scope = lifecycle.createScope('route');
-    if (state.routeScope && typeof state.routeScope.destroy === 'function') state.routeScope.destroy();
-    state.routeScope = scope;
-
-    // 切换路由前销毁旧编辑器与旧图表 hover 句柄（否则 pointermove 监听会累积）
-    if (state.editor && typeof state.editor.destroy === 'function') state.editor.destroy();
-    state.editor = null;
-    if (state.chartHover && typeof state.chartHover.destroy === 'function') state.chartHover.destroy();
-    state.chartHover = null;
-    state.activeProblem = null;
-    state.lastResult = null;
-
-    // 作废旧判题会话：令牌自增让在途回调全部失配（整段丢弃），并立刻 terminate 旧 Worker。
-    // 注意：这里**不**重置任何「忙」布尔量 —— 忙闲由 token 判定，重置布尔量正是旧竞态的根源。
-    state.judgeToken++;
-    if (state.session && typeof state.session.abort === 'function') state.session.abort();
-    state.session = null;
-    state.busyToken = -1;
-
-    // 路由切换时如果有弹层打开，先关掉（避免弹层浮在新页面上）
-    if (a11y.modalOpen()) a11y.closeModal();
-    document.body.classList.remove('dragging');   // 分栏拖拽中途切路由：DOM 已换、pointerup 不再触发，摘掉防光标困住
-
-    if (view === 'problem' && parts[1]) {
-      var p = TSJ.findProblem(decodeURIComponent(parts[1]));
-      store.setActiveNav('problems');
-      problem.renderProblem(parts[1], scope);
-      a11y.setTitle(p ? p.title : '题目不存在');
-    } else if (view === 'submission' && parts[1]) {
-      store.setActiveNav('submissions');
-      pages.renderSubmissionDetail(decodeURIComponent(parts[1]));
-      a11y.setTitle('提交详情');
-    } else if (view === 'submissions') {
-      store.setActiveNav('submissions');
-      pages.renderSubmissions();
-      a11y.setTitle('提交记录');
-    } else if (view === 'ranking' || view === 'path') {
-      store.setActiveNav(view);
-      if (view === 'ranking') { boards.renderRanking(); a11y.setTitle('排行榜'); }
-      else { boards.renderPath(); a11y.setTitle('学习路径'); }
-    } else if (view === 'methods' && parts[1]) {
-      store.setActiveNav('methods');
-      methodDetail.render(decodeURIComponent(parts[1]), scope);
-    } else if (view === 'methods') {
-      store.setActiveNav('methods');
-      library.renderMethods();
-      a11y.setTitle('方法库');
-    } else if (view === 'glossary') {
-      store.setActiveNav('glossary');
-      glossary.renderGlossary();
-      a11y.setTitle('术语表');
-    } else if (view === 'learn' && parts[1]) {
-      store.setActiveNav('learn');
-      learn.renderModule(decodeURIComponent(parts[1]), scope);
-    } else if (view === 'learn') {
-      store.setActiveNav('learn');
-      learn.renderMap(scope);
-    } else if (view === 'lab') {
-      store.setActiveNav('lab');
-      lab.render(scope);
-    } else if (view === 'studio') {
-      store.setActiveNav('studio');
-      studio.render(scope);
-    } else if (view === 'dashboard') {
-      store.setActiveNav('dashboard');
-      dashboard.render(scope);
-    } else {
-      store.setActiveNav('problems');
-      views.renderProblemList();
-      a11y.setTitle('题库');
-    }
-
-    store.updateScoreChip();
-    global.scrollTo(0, 0);
-    // 首屏不抢焦点：focusView 是为了让读屏用户知道「内容已更新」，
-    // 但首次渲染时页面本来就在最上面，抢焦点会让顺序导航从 #view 开始，
-    // 于是「跳到主要内容」这个第一个可聚焦元素被甩在身后，等于没有跳转链接。
-    if (!firstRoute) a11y.focusView();
-    firstRoute = false;
-  }
+  /**
+   * 路由已抽到 app/router.js。渲染的输入是**显式路径**，不再回头读 location.hash：
+   * sandbox 宿主（不透明源）里 hash 赋值既不抛错也不生效，靠 hashchange 驱动的路由
+   * 会整条断掉 —— 表现就是「点哪个都没反应」。详见 router.js 头部注释。
+   */
+  var route = TSJ.appRouter.route;
 
   /* ---------- 2. 判题 ---------- */
   /** 判断某个判题会话是否已经过期（被新提交或路由切换作废）。 */

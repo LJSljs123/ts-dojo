@@ -151,6 +151,7 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/app/boards.js',
     'assets/js/app/cmdk.js',
     'assets/js/app/links.js',
+    'assets/js/app/router.js',
     'assets/js/app.js',
   ]);
   // 每个文件必须真实存在

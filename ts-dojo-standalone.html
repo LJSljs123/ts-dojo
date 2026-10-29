@@ -1928,6 +1928,45 @@ table.ptable tbody tr.srow:focus-visible { outline: 2px solid var(--accent); out
    把 tb-left 的基准改成 0，它就会和按钮共处一行，超出部分用省略号收掉。 */
 .studio-layout .tb-left { flex: 1 1 0; }
 
+/* =========================================================================
+   脚本被拦时的兜底卡片（<noscript>）
+   —— 预览面板用 <iframe sandbox> 承载时脚本会被拦掉，此时页面只剩顶栏，
+      内容区全空、点哪都没反应。这张卡片必须 fixed 并落在首屏内，
+      否则会被 <main> 的 min-height:100vh 顶到屏幕外，用户仍然什么都看不到。
+   ========================================================================= */
+.boot-noscript {
+  position: fixed;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99998;
+  width: min(640px, calc(100vw - 32px));
+  padding: 20px 22px;
+  border-radius: 12px;
+  border: 1px solid var(--v3-line, #2a323d);
+  background: var(--v3-panel, #161b22);
+  color: var(--v3-fg, #e6edf3);
+  font: 14px/1.75 system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.45);
+}
+
+.boot-noscript h2 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--v3-danger, #ff9b9b);
+}
+
+.boot-noscript p { margin: 0 0 8px; }
+.boot-noscript p:last-child { margin-bottom: 0; }
+.boot-noscript code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.18);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.94em;
+}
+
 </style>
 <style>
 /* =========================================================================
@@ -2933,6 +2972,12 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 (function () {
   'use strict';
   var ERRORS = [];
+  /** 应用是否已经渲染出内容。渲染过之后就不能再拿遮罩盖页面（见下面的 error 监听）。 */
+  var booted = false;
+  function appAlive() {
+    var v = document.getElementById('view');
+    return !!(v && v.innerHTML.replace(/\s+/g, '').length > 0);
+  }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
@@ -2958,8 +3003,18 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       '<ol style="margin:0;padding-left:20px;color:#c9d4e0">' +
       '<li>脚本被安全策略或广告拦截插件拦了 —— 换 Edge / Chrome 直接打开 index.html</li>' +
       '<li>通过 http 打开时服务器没正确返回 assets 目录 —— 检查 40 个 js 是否都是 200</li>' +
-      '<li>拿到的是旧缓存 —— 按 Ctrl+F5 强制刷新</li></ol>';
+      '<li>拿到的是旧缓存 —— 按 Ctrl+F5 强制刷新</li></ol>' +
+      '<p style="margin:18px 0 0"><button type="button" id="bootFailClose" ' +
+      'style="font:inherit;padding:6px 14px;border-radius:6px;border:1px solid #3d4652;background:#1b222b;color:#c9d4e0;cursor:pointer">' +
+      '关闭提示，继续尝试使用</button></p>';
     document.body.appendChild(box);
+    // 必须能关掉：遮罩是 position:fixed 全屏、z-index 极高，关不掉就等于「整站点不动」
+    var close = document.getElementById('bootFailClose');
+    if (close) {
+      close.addEventListener('click', function () {
+        if (box.parentNode) box.parentNode.removeChild(box);
+      });
+    }
   }
   window.addEventListener('error', function (e) {
     var msg;
@@ -2970,6 +3025,14 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       if (e && e.lineno) msg += '（第 ' + e.lineno + ' 行）';
     }
     ERRORS.push(msg);
+    // 关键：只有「还没渲染出任何内容」才算启动失败。
+    // 已经渲染过之后再出错属于运行期错误，绝不能拿全屏遮罩盖住页面 ——
+    // 那会把「某个按钮抛了个错」放大成「整个站点点不动」，且遮罩本身吞掉所有点击。
+    if (booted || appAlive()) {
+      booted = true;
+      if (window.console && window.console.error) window.console.error('[TSOJ] 运行期错误：' + msg);
+      return;
+    }
     panel('启动失败', msg);
   }, true);
   window.addEventListener('unhandledrejection', function (e) {
@@ -2986,10 +3049,11 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     var tries = 0;
     var timer = setInterval(function () {
       var v = document.getElementById('view');
-      if (v && v.innerHTML.replace(/\s+/g, '').length > 0) { clearInterval(timer); return; }
+      if (v && v.innerHTML.replace(/\s+/g, '').length > 0) { booted = true; clearInterval(timer); return; }
       tries++;
       if (tries < 16) return;
       clearInterval(timer);
+      if (appAlive()) { booted = true; return; }
       panel('启动失败', '脚本已加载，但 8 秒内没有渲染出任何内容' +
         (ERRORS.length ? '：' + ERRORS[0] : '（无错误信息）'));
     }, 500);
@@ -3066,7 +3130,21 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 <!-- 经典 script 按顺序加载，全部挂到 window.TSJ 命名空间
      应用层顺序固定：util → core → schema → store → storage → ui → a11y → views → problem → pages → library → boards → app.js
      （app.js 必须最后，末尾同步 init()） -->
-<noscript><p style="padding:24px;color:#ff9b9b;font:14px system-ui">本页面需要 JavaScript：请在浏览器设置中启用后刷新。</p></noscript>
+<!-- 脚本没跑起来时的兜底。
+     必须做成 fixed 卡片：`<main>` 有 min-height:calc(100vh - 顶栏)，放在它后面的普通流内容
+     会被顶到首屏之外 —— 用户看到的只是「顶栏正常、内容区全空、点哪都没反应」。
+     触发场景：预览面板把 HTML 塞进 <iframe sandbox>（默认拦脚本）、浏览器禁用 JS。
+     注意：这段只在脚本被禁用时渲染，不影响正常布局。 -->
+<noscript>
+  <div class="boot-noscript">
+    <h2>这个页面需要 JavaScript，但它没有运行</h2>
+    <p>内容区是空的、导航点不动，原因就在这里 —— 不是链接坏了。</p>
+    <p><b>最常见的原因</b>：预览面板把页面放进了带 <code>sandbox</code> 的 iframe，默认会拦掉脚本；
+    其次是浏览器或插件禁用了 JavaScript。</p>
+    <p><b>怎么用</b>：把 <code>ts-dojo-standalone.html</code> 下载到本机，双击用 Edge / Chrome 打开；
+    或在预览面板里选「在浏览器中打开」。</p>
+  </div>
+</noscript>
 <script>
 /**
  * datasets.js —— 教学用合成时间序列数据集
@@ -20594,15 +20672,17 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     var href = (a.getAttribute('href') || '').trim();
     if (href.charAt(0) !== '#') return false;
 
-    // 路由链接：改成赋值 location.hash，避免在 srcdoc 里被解析成父页面 URL
+    // 路由链接：交给 router.navigate —— 它**先渲染再同步地址栏**。
+    // 不能只写 `location.hash = href`：在不透明源（sandbox 无 allow-same-origin）里
+    // 这句既不抛错也不生效，于是没有 hashchange、没有渲染，表现就是「点了没反应」。
     if (href.indexOf('#/') === 0 || href === '#') {
       ev.preventDefault();
       if (href === '#') { global.scrollTo(0, 0); return true; }
-      if (global.location.hash === href) {
-        // 已在该路由：不重复渲染（与原生片段导航的表现一致：什么都不发生）
-        return true;
+      if (TSJ.appRouter && typeof TSJ.appRouter.navigate === 'function') {
+        TSJ.appRouter.navigate(href);
+      } else if (global.location.hash !== href) {
+        global.location.hash = href;
       }
-      global.location.hash = href;   // hashchange → app.route()
       return true;
     }
 
@@ -20630,57 +20710,81 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 </script>
 <script>
 /**
- * assets/js/app.js —— 应用外壳：路由、判题会话、启动装配
+ * assets/js/app/router.js —— 路由：按「显式路径」渲染，地址栏只是尽力同步
  *
- * 加载顺序（经典 script）：core → store → storage → ui → a11y → views → pages → app.js。
- * 本文件必须是**最后一个**脚本，且末尾同步调用 init()：靠「脚本位于 body 末尾」保证 DOM 已就绪，
- * 不监听任何页面加载事件。
+ * 为什么要把渲染和 hash 解耦（这是真缺陷，不是洁癖）：
  *
- * 路由表：
- *   #/problems            题库（搜索 / 标签 / 难度）
- *   #/methods             方法库（47 条方法卡片，按 5 个层次检索）
- *   #/method/:id          方法详情（直觉 / 公式 / 假设 / 反例 / 引用）
- *   #/glossary            术语表（新手术语速查）
- *   #/learn[/:id]         课程地图与模块页（9 模块）
- *   #/lab                 可视化实验室（受控回测）
- *   #/studio              模型工坊（自己搓模型跑完整实验）
- *   #/problem/:id         题目页（题面 + 编辑器）
- *   #/submission/<id>     提交详情（代码快照 + 逐测试点）
- *   #/submissions         提交记录（含导出 / 导入 / 清空）
- *   #/ranking             排行榜
- *   #/path                学习路径
+ *   应用用 hash 做路由。传统写法是「改 hash → 监听 hashchange → 读 hash 渲染」，
+ *   渲染的**唯一输入**是 `location.hash`。这条链在一种宿主里会整条断掉：
+ *
+ *     <iframe sandbox="allow-scripts">   ← 不透明源，预览面板常用
+ *
+ *   实测：点顶栏「题库」，`location.hash` 赋值既不抛错也不生效（地址栏停在
+ *   `about:srcdoc#/`），于是没有 hashchange、没有渲染 —— 用户看到的是
+ *   **「点了没一个能用」**。而主题按钮（纯 DOM 操作、不碰地址栏）在同一宿主里
+ *   工作正常，这个对比直接指出问题在路由链路上。
+ *
+ *   所以这里把两件事拆开：
+ *     - `render(parts)`  渲染的唯一入口，输入是**路径数组**，不读地址栏；
+ *     - `navigate(href)` 先尽量同步地址栏（try/catch 包住），再直接渲染。
+ *   地址栏同步失败时，前进/后退与刷新会不准 —— 但**页面能用**。可用性优先于
+ *   地址栏一致性，这个取舍是刻意的。
+ *
+ * 去重：`navigate` 记录 `currentPath`，点当前所在页的导航项直接返回，不重渲染
+ * （重渲染会重建编辑器、丢掉未提交的代码）。
+ *
+ * 另：`hashchange` 仍保留为入口，浏览器前进/后退、手改地址、其它脚本改 hash
+ * 都要能走通。
  */
 (function (global) {
   'use strict';
 
   var TSJ = global.TSJ || (global.TSJ = {});
-  var core = TSJ.appCore, store = TSJ.appStore, storage = TSJ.appStorage;
-  var ui = TSJ.appUi, a11y = TSJ.appA11y, views = TSJ.appViews, judge = TSJ.judge;
-  var problem = TSJ.appProblem, pages = TSJ.appPages, library = TSJ.appLibrary;
-  var boards = TSJ.appBoards, glossary = TSJ.appGlossary, theme = TSJ.appTheme;
-  var lifecycle = TSJ.appLifecycle, dashboard = TSJ.appDashboard;
-  var learn = TSJ.appLearn;
-  var methodDetail = TSJ.appMethodDetail;
-  var lab = TSJ.appLab;
-  var studio = TSJ.appStudio;
 
-  var $ = core.$;
-  var esc = core.esc;
-  var STORE = core.STORE;
-  var state = store.state;
+  /** 当前已渲染的路径（形如 `#/problems`），用于 navigate 去重。 */
+  var currentPath = null;
 
-  /** 提交记录 id 的会话内序号（不引入随机数：数据集与判题都要求可复现） */
-  var subSeq = 0;
+  /** navigate 自己改的 hash：随后的那次 hashchange 不必再渲染一遍。 */
+  var skipHash = null;
 
-  /** 是否还在首次渲染（首次渲染不把焦点交给 #view，见 route() 末尾） */
+  /** 是否还在首次渲染（首次渲染不把焦点交给 #view）。 */
   var firstRoute = true;
 
-  /* ---------- 1. 路由 ---------- */
-  /** 解析 hash 并渲染对应视图。 */
-  function route() {
-    var hash = global.location.hash || '#/';
-    var path = hash.replace(/^#\/?/, '');
-    var parts = path.split('/').filter(function (s) { return s.length > 0; });
+  /**
+   * 把 `#/problem/p1` / `problem/p1` / `#/` 解析成路径段数组。
+   *
+   * @param {string} href 地址或路径
+   * @returns {string[]} 路径段（已过滤空段）
+   */
+  function parse(href) {
+    return String(href || '')
+      .replace(/^#/, '')
+      .replace(/^\//, '')
+      .split('/')
+      .filter(function (s) { return s.length > 0; });
+  }
+
+  /** 路径段 → 规范地址（`#/` 或 `#/a/b`）。 */
+  function toHash(parts) {
+    return parts.length ? '#/' + parts.join('/') : '#/';
+  }
+
+  /**
+   * 按路径段渲染视图。**唯一**的渲染入口。
+   *
+   * @param {string[]} parts 路径段
+   */
+  function render(parts) {
+    var store = TSJ.appStore, a11y = TSJ.appA11y, lifecycle = TSJ.appLifecycle;
+    var state = store.state;
+    var problem = TSJ.appProblem, pages = TSJ.appPages, boards = TSJ.appBoards;
+    var library = TSJ.appLibrary, glossary = TSJ.appGlossary;
+    var learn = TSJ.appLearn, methodDetail = TSJ.appMethodDetail;
+    var lab = TSJ.appLab, studio = TSJ.appStudio, dashboard = TSJ.appDashboard;
+    var views = TSJ.appViews;
+
+    currentPath = toHash(parts);
+
     var view = parts[0] || 'dashboard';
 
     // 路由级生命周期：新 Scope 建立前先销毁旧页面的监听 / 图表 / 定时器
@@ -20764,6 +20868,108 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     if (!firstRoute) a11y.focusView();
     firstRoute = false;
   }
+
+  /**
+   * 按当前地址栏渲染（hashchange / 前进后退 / 外部改 hash 的入口）。
+   */
+  function route() {
+    var hash = global.location.hash || '#/';
+    // navigate 已经同步渲染过，这次 hashchange 是它自己触发的，跳过
+    if (skipHash !== null && hash === skipHash) {
+      skipHash = null;
+      return;
+    }
+    skipHash = null;
+    render(parse(hash));
+  }
+
+  /**
+   * 跳到某个地址。**先渲染，再尽力同步地址栏** —— 地址栏同步失败不影响页面可用。
+   *
+   * @param {string} href 形如 `#/problems`（也接受 `problems` / `#/`）
+   * @returns {boolean} 是否发生了渲染（同路由返回 false）
+   */
+  function navigate(href) {
+    var parts = parse(href);
+    var want = toHash(parts);
+    if (want === currentPath) return false;   // 已在该路由：不重渲染（会重建编辑器、丢草稿）
+
+    if (global.location.hash !== want) {
+      skipHash = want;
+      try {
+        global.location.hash = want;
+      } catch (e) {
+        // 不透明源（sandbox 无 allow-same-origin）里可能不允许改 hash。
+        // 此时地址栏不同步，但页面照常渲染 —— 可用性优先。
+        skipHash = null;
+      }
+    }
+    render(parts);
+    return true;
+  }
+
+  TSJ.appRouter = {
+    parse: parse,
+    render: render,
+    route: route,
+    navigate: navigate,
+    /** 当前路径（只读，供测试与调试） */
+    current: function () { return currentPath; }
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app.js —— 应用外壳：路由、判题会话、启动装配
+ *
+ * 加载顺序（经典 script）：core → store → storage → ui → a11y → views → pages → app.js。
+ * 本文件必须是**最后一个**脚本，且末尾同步调用 init()：靠「脚本位于 body 末尾」保证 DOM 已就绪，
+ * 不监听任何页面加载事件。
+ *
+ * 路由表：
+ *   #/problems            题库（搜索 / 标签 / 难度）
+ *   #/methods             方法库（47 条方法卡片，按 5 个层次检索）
+ *   #/method/:id          方法详情（直觉 / 公式 / 假设 / 反例 / 引用）
+ *   #/glossary            术语表（新手术语速查）
+ *   #/learn[/:id]         课程地图与模块页（9 模块）
+ *   #/lab                 可视化实验室（受控回测）
+ *   #/studio              模型工坊（自己搓模型跑完整实验）
+ *   #/problem/:id         题目页（题面 + 编辑器）
+ *   #/submission/<id>     提交详情（代码快照 + 逐测试点）
+ *   #/submissions         提交记录（含导出 / 导入 / 清空）
+ *   #/ranking             排行榜
+ *   #/path                学习路径
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore, store = TSJ.appStore, storage = TSJ.appStorage;
+  var ui = TSJ.appUi, a11y = TSJ.appA11y, views = TSJ.appViews, judge = TSJ.judge;
+  var problem = TSJ.appProblem, pages = TSJ.appPages, library = TSJ.appLibrary;
+  var boards = TSJ.appBoards, glossary = TSJ.appGlossary, theme = TSJ.appTheme;
+  var lifecycle = TSJ.appLifecycle, dashboard = TSJ.appDashboard;
+  var learn = TSJ.appLearn;
+  var methodDetail = TSJ.appMethodDetail;
+  var lab = TSJ.appLab;
+  var studio = TSJ.appStudio;
+
+  var $ = core.$;
+  var esc = core.esc;
+  var STORE = core.STORE;
+  var state = store.state;
+
+  /** 提交记录 id 的会话内序号（不引入随机数：数据集与判题都要求可复现） */
+  var subSeq = 0;
+
+  /* ---------- 1. 路由 ---------- */
+  /**
+   * 路由已抽到 app/router.js。渲染的输入是**显式路径**，不再回头读 location.hash：
+   * sandbox 宿主（不透明源）里 hash 赋值既不抛错也不生效，靠 hashchange 驱动的路由
+   * 会整条断掉 —— 表现就是「点哪个都没反应」。详见 router.js 头部注释。
+   */
+  var route = TSJ.appRouter.route;
 
   /* ---------- 2. 判题 ---------- */
   /** 判断某个判题会话是否已经过期（被新提交或路由切换作废）。 */
