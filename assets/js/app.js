@@ -303,6 +303,8 @@
     }
 
     global.addEventListener('hashchange', route);
+    // 站内链接的点击语义：srcdoc 宿主里 href="#/x" 会被解析成父页面 URL 导致整个应用被卸载
+    TSJ.appLinks.bind();
   }
 
   function doc() { return global.document; }

@@ -27,8 +27,16 @@ function guardScriptEnd(code) {
   return code.replace(/<\/script/gi, '<\\/script');
 }
 
-/** 读取并内联全部资源。 */
-function build() {
+/**
+ * 读取并内联全部资源，返回构建结果（不写盘）。
+ *
+ * 单独拆出来是给测试用的：`tests/qa/srcdoc.test.js` 需要「现算一份单文件版」
+ * 塞进 `<iframe srcdoc>` 复现预览面板环境。若测试读已提交的产物，跑的就是上一次
+ * 构建的旧代码 —— 改了源码却测试通过，正是要避免的那类假绿。
+ *
+ * @returns {{html: string, inlinedCss: number, inlinedJs: number, leftovers: string[]}}
+ */
+function buildHtml() {
   let html = fs.readFileSync(SRC, 'utf8');
   let inlinedCss = 0;
   let inlinedJs = 0;
@@ -54,16 +62,24 @@ function build() {
     .map((m) => m[1])
     .filter((u) => !u.startsWith('http') && u !== '');
 
-  fs.writeFileSync(OUT, html, 'utf8');
+  return { html, inlinedCss, inlinedJs, leftovers };
+}
+
+/** 构建并写盘。 */
+function build() {
+  const r = buildHtml();
+  fs.writeFileSync(OUT, r.html, 'utf8');
   const size = fs.statSync(OUT).size;
   console.log('已生成 ' + path.relative(ROOT, OUT));
-  console.log('  内联样式表 ' + inlinedCss + ' 个 · 内联脚本 ' + inlinedJs + ' 个');
+  console.log('  内联样式表 ' + r.inlinedCss + ' 个 · 内联脚本 ' + r.inlinedJs + ' 个');
   console.log('  体积 ' + (size / 1024).toFixed(1) + ' KB');
-  if (leftovers.length) {
-    console.log('  ⚠ 仍有外部引用（若为 <a href> 可忽略）：' + leftovers.join(', '));
+  if (r.leftovers.length) {
+    console.log('  ⚠ 仍有外部引用（若为 <a href> 可忽略）：' + r.leftovers.join(', '));
   } else {
     console.log('  ✓ 无任何外部资源引用');
   }
 }
 
-build();
+module.exports = { buildHtml, build };
+
+if (require.main === module) build();

@@ -53,9 +53,37 @@ function pidAlive(pid) {
   }
 }
 
+/**
+ * 顺手回收被强杀进程留下的浏览器配置目录。
+ *
+ * 正常路径下 `close()` 会删掉自己的 profile，但测试进程被 Ctrl-C / 超时杀掉时删不到，
+ * 于是一次次积累（实测积到 348 个）。只在拿锁时扫一次，且只删 1 小时前的 ——
+ * 阈值远大于任何一次用例的时长，不会误删并发跑的其它进程正在用的目录。
+ */
+function sweepStaleProfiles() {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  let names;
+  try {
+    names = fs.readdirSync(os.tmpdir());
+  } catch (e) {
+    return;
+  }
+  for (const name of names) {
+    if (name.indexOf('tsoj-cdp-') !== 0) continue;
+    const dir = path.join(os.tmpdir(), name);
+    try {
+      if (fs.statSync(dir).mtimeMs > cutoff) continue;
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch (e) {
+      /* 正在被占用 / 权限不足：下次再说 */
+    }
+  }
+}
+
 /** 获取浏览器锁；同进程重入只加计数。超时返回 false。 */
 async function acquireBrowserLock(timeout) {
   if (heldCount > 0) { heldCount++; return true; }
+  sweepStaleProfiles();
   const end = Date.now() + timeout;
   while (Date.now() < end) {
     try {
@@ -313,15 +341,17 @@ async function launchInner(url, opts) {
    *   - 只看 #view 非空会在 datasets/problems 尚未挂载时提前通过。
    *
    * @param {number} [timeout] 超时毫秒
+   * @param {string} [expr] 自定义就绪表达式（默认要求**顶层窗口**的 TSJ 与 #view；
+   *   当被测页面是「把应用塞进 <iframe srcdoc> 的宿主页」时，必须换成探进 iframe 的表达式）
    * @returns {Promise<boolean>} 就绪返回 true，超时抛错
    */
-  async function waitReady(timeout) {
+  async function waitReady(timeout, expr) {
     const end = Date.now() + (timeout || 15000);
     let last = '';
     while (Date.now() < end) {
       try {
         const r = await send('Runtime.evaluate', {
-          expression: READY_EXPR,
+          expression: expr || READY_EXPR,
           returnByValue: true,
           allowUnsafeEvalBlockedByCSP: true,
         });
@@ -345,7 +375,10 @@ async function launchInner(url, opts) {
   }
 
   // 启动即等待就绪：调用方不再需要 sleep(400) 之类的兜底
-  await waitReady(opts && opts.readyTimeout ? opts.readyTimeout : 15000);
+  await waitReady(
+    opts && opts.readyTimeout ? opts.readyTimeout : 15000,
+    opts && opts.readyExpr
+  );
 
   return {
     send,

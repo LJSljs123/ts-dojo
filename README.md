@@ -19,7 +19,7 @@
 双击 ts-dojo-standalone.html
 ```
 
-它把 CSS 与 48 个脚本全部内联成一个约 842KB 的 HTML，**不依赖任何相对路径**。
+它把 CSS 与 49 个脚本全部内联成一个约 847KB 的 HTML，**不依赖任何相对路径**。
 所以无论是双击打开、丢进 http 服务器、还是被塞进 iframe / `srcdoc` / 预览面板里，都能正常渲染。
 
 **方式 B：模块化版**
@@ -35,7 +35,7 @@ python -m http.server 8080
 # 然后访问 http://localhost:8080
 ```
 
-模块化版有 48 个 `<script src>` + 4 个样式表，**必须保证 assets 目录随行**。
+模块化版有 49 个 `<script src>` + 4 个样式表，**必须保证 assets 目录随行**。
 如果它白屏，页面会自己显示「启动失败」面板并给出原因（脚本被拦截 / 资源 404 / 旧缓存），不会再无声无息。
 
 浏览器要求：Chrome / Edge / Firefox / Safari 近三年版本（需要 `Worker`、`canvas`、`localStorage`、`Proxy`）。
@@ -90,7 +90,7 @@ ts-dojo/
 ├── index.html                 # 模块化入口（含 CSP + 启动自检 + script 加载顺序）
 ├── ts-dojo-standalone.html    # 单文件版（由 tools/build-standalone.js 生成，勿手改）
 ├── tools/
-│   ├── build-standalone.js    # 把 CSS / 48 个 js 内联成单文件
+│   ├── build-standalone.js    # 把 CSS / 49 个 js 内联成单文件
 │   ├── stamp-assets.js        # 给 index.html 的 ?v= 打内容哈希（防旧缓存）
 │   └── numbers.js             # 口径计算：题数 / 方法数 / 脚本数 / 用例数（README 数字的唯一来源）
 ├── assets/
@@ -138,7 +138,7 @@ ts-dojo/
 │   ├── charts/                # v3 图表内核：core / series / diagnostics
 │   └── lab/                   # v3 实验室引擎：config / adapters / stats / runner
 ├── tests/
-│   ├── qa/                    # node --test tests/qa/*.test.js（252 条）
+│   ├── qa/                    # node --test tests/qa/*.test.js（256 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
 │   ├── starter-check.js       # 18 题模板原样提交必须全 WA
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
@@ -566,7 +566,7 @@ node tests/standalone-check.js  # 单文件版是否与源码同步、是否残�
 node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
 ```
 
-**测试规模：252 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
+**测试规模：256 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
 找不到浏览器时自动 skip，并在输出里注明「未验证」，不假装通过）。
 浏览器用例自带**全局文件锁**：多个测试文件并发时只会排队、不会同时 spawn 多个 Chromium，
 因此 `node --test tests/qa/*.test.js` 直接并发跑也是稳的。
@@ -592,6 +592,7 @@ node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，�
 | `contrast` | 主题对比度：深色 / 浅色下逐路由审计可见文字，对比度 < 3:1 即失败（挡「深色粉彩色被搬到浅底上」这类回归） |
 | `a11y` | 键盘可达性：跳转链接是第一个可聚焦元素、编辑器 Tab 缩进但 Esc 能退出（键盘陷阱）、弹层焦点陷阱 + Esc + 焦点归还触发按钮、焦点环 ≥2px、可聚焦元素都有可读名字 |
 | `clickthrough` | 前端功能点击走查：13 路由冒烟 + 约 90 个控件（主题/抽屉/命令面板、题库筛选、编辑器与判题、方法库/课程/术语表、实验室/工坊、提交记录）逐一点击，验「有反应、不报错、不残留占位符」 |
+| `srcdoc` | srcdoc 宿主（预览面板 / 文档阅读器）：现场构建单文件版塞进 `<iframe srcdoc>`，断言点站内链接后应用仍在（`href="#/x"` 在 srcdoc 里会被解析成父页面 URL 而卸载应用）、`#view` 跳转链接只移焦点不改路由 |
 
 `selftest.js` 覆盖内容：
 

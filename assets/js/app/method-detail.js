@@ -36,7 +36,9 @@
     var m = TSJ.methodsById(id);
     var host = document.getElementById('view');
     if (!m) {
-      if (global.location && global.location.replace) global.location.replace('#/methods');
+      // 用 hash 赋值而不是 location.replace('#/methods')：
+      // replace 会按 base URL 解析片段，在 srcdoc / 不透明源里等于导航到宿主页（应用被卸载）
+      if (global.location) global.location.hash = '#/methods';
       host.innerHTML = '<div class="ds-empty"><strong>方法不存在</strong><span>已返回方法库。</span><a class="ds-btn" href="#/methods">返回方法库</a></div>';
       TSJ.appA11y.setTitle('方法不存在');
       return;
