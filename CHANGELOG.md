@@ -517,3 +517,17 @@ H01 `sandbox="allow-scripts"` 里点导航真的换页（跨源 → postMessage 
 - **内容闭环**：backtest.practice p7→p9；工坊页头注明单变量范围。
 - **测试**：新增 backup.test.js（3 条：extras 八键往返 / 合并策略 / 篡改拒绝 + v1 兼容）与 demo 预设端到端 1 条；metrics 集合断言 6 指标；features schema 断言 2。
 - **验证**：263 条全绿 0 skip；四件套全过；`tools/numbers.js` README 口径一致；app 层全部文件 ≤350 行（lab.js 344 / storage.js 291 / storage-extras 104）。
+
+## v3.9.1：全面细节审计——崩溃候选与解析器边界
+
+逐文件细读 v3.7-v3.9 新改动 + 全仓静态扫描，修复三类问题：
+
+- **崩溃候选（P1）**：router 5 处未捕获的 `decodeURIComponent` —— 畸形转义 hash（如 `#/problem/%ZZ`）
+  抛 URIError，中断 route() 并触发「启动失败」遮罩。新增 `safeDecode`（解码失败退化为原文），
+  覆盖 query 与四个 `parts[1]` 调用点；浏览器回归锁定（畸形 hash 无遮罩、无异常、视图正常）。
+- **CSV 解析器边界（P2）**：① `.5` 型数字整列丢失（正则不接受省略整数位）→ 放宽；
+  ② 常数列被 `v < prev` 判成时间列 ——「值,时间」两列会取错数据列 → 改 `v <= prev`（常数列不是时间）；
+  新增 4 组边界用例（.5 列 / 值,时间 / 时间,值 / 两列都递增）。
+- **导入消毒（P2）**：备份 extras 里的 CSV `values` 可能被手改成垃圾（字符串/对象/超长）——
+  合并落盘前过滤有限数值并截到 5000 点，name/season 白名单化。
+- 验证：265 条全绿 0 skip；四件套全过；README 口径一致（tools/numbers.js）。

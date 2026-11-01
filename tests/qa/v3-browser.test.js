@@ -903,3 +903,23 @@ test('课程演示预设：#/lab?demo= 真正落到配置（v3.9 死链修复回
   assert.equal(s2.windowsDisabled, false, '滚动模式下窗口数不应禁用');
   assert.deepEqual(page.exceptions, [], '演示预设出现异常：' + JSON.stringify(page.exceptions));
 });
+
+test('路由健壮性：畸形转义 hash 不炸应用（safeDecode 回归）', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  // %ZZ 不是合法转义：decodeURIComponent 会抛 URIError，曾触发「启动失败」遮罩
+  await goto('#/problem/%ZZ');
+  const st = await page.evaluate(`JSON.stringify({
+    bootFail: !!document.getElementById('bootFail'),
+    viewLen: (document.getElementById('view')||{innerHTML:''}).innerHTML.length,
+    hash: location.hash
+  })`);
+  const s = JSON.parse(st);
+  assert.equal(s.bootFail, false, '畸形 hash 触发了启动失败遮罩');
+  assert.ok(s.viewLen > 0, '畸形 hash 后视图为空');
+  await goto('#/lab?demo=%ZZ');   // query 里的畸形转义同样不炸
+  const st2 = await page.evaluate(
+    '!!document.getElementById("labMethod") && !document.getElementById("bootFail")'
+  );
+  assert.equal(st2, true, 'query 畸形转义炸了实验室路由');
+  assert.deepEqual(page.exceptions, [], '畸形 hash 出现未捕获异常：' + JSON.stringify(page.exceptions));
+});

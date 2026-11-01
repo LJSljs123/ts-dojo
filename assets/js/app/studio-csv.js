@@ -29,7 +29,8 @@
     // 逗号小数：仅当整体形如 123,45 且不含分隔歧义时尝试
     if (/^-?\d+,\d+$/.test(s)) s = s.replace(',', '.');
     var n = Number(s);
-    return /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s) && isFinite(n) ? n : null;
+    // 允许 .5 / 5. 这类省略整数或小数位的写法（部分工具链的默认导出格式）
+    return /^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s) && isFinite(n) ? n : null;
   }
 
   /** 嗅探分隔符：分号 / 制表符优先（它们不可能是小数分隔符），都没有才用逗号。 */
@@ -120,7 +121,8 @@
     for (var k = start; k < lines.length && seen < 50; k++) {
       var v = parseCell(lines[k].split(sep)[col]);
       if (v === null) continue;
-      if (prev !== null && v < prev) return false;
+      // v <= prev：常数列不是时间索引（否则「值,时间」两列会取错数据列）
+      if (prev !== null && v <= prev) return false;
       prev = v;
       seen++;
     }

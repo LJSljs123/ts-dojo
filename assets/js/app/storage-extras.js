@@ -93,6 +93,12 @@
     });
     var csv = extras[core.STORE.studioCsv];
     if (core.isPlainObject(csv) && core.isArrayValue(csv.values)) {
+      // 消毒：导入的备份 values 可能被手改成垃圾——只留有限数值并截到 5000 点
+      csv = {
+        values: csv.values.filter(function (x) { return typeof x === 'number' && isFinite(x); }).slice(0, 5000),
+        name: typeof csv.name === 'string' ? csv.name.slice(0, 24) : '我的数据',
+        season: typeof csv.season === 'number' && csv.season > 1 ? Math.round(csv.season) : 1
+      };
       core.writeJSON(core.STORE.studioCsv, csv);
       if (TSJ.appStudioCsv) TSJ.appStudioCsv.restore();   // 重新注册进 TSJ.datasets（替换同名临时集）
       merged++;

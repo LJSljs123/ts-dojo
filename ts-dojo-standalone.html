@@ -18357,7 +18357,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     // 逗号小数：仅当整体形如 123,45 且不含分隔歧义时尝试
     if (/^-?\d+,\d+$/.test(s)) s = s.replace(',', '.');
     var n = Number(s);
-    return /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s) && isFinite(n) ? n : null;
+    // 允许 .5 / 5. 这类省略整数或小数位的写法（部分工具链的默认导出格式）
+    return /^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s) && isFinite(n) ? n : null;
   }
 
   /** 嗅探分隔符：分号 / 制表符优先（它们不可能是小数分隔符），都没有才用逗号。 */
@@ -18448,7 +18449,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     for (var k = start; k < lines.length && seen < 50; k++) {
       var v = parseCell(lines[k].split(sep)[col]);
       if (v === null) continue;
-      if (prev !== null && v < prev) return false;
+      // v <= prev：常数列不是时间索引（否则「值,时间」两列会取错数据列）
+      if (prev !== null && v <= prev) return false;
       prev = v;
       seen++;
     }
@@ -20621,6 +20623,12 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     });
     var csv = extras[core.STORE.studioCsv];
     if (core.isPlainObject(csv) && core.isArrayValue(csv.values)) {
+      // 消毒：导入的备份 values 可能被手改成垃圾——只留有限数值并截到 5000 点
+      csv = {
+        values: csv.values.filter(function (x) { return typeof x === 'number' && isFinite(x); }).slice(0, 5000),
+        name: typeof csv.name === 'string' ? csv.name.slice(0, 24) : '我的数据',
+        season: typeof csv.season === 'number' && csv.season > 1 ? Math.round(csv.season) : 1
+      };
       core.writeJSON(core.STORE.studioCsv, csv);
       if (TSJ.appStudioCsv) TSJ.appStudioCsv.restore();   // 重新注册进 TSJ.datasets（替换同名临时集）
       merged++;
@@ -20974,6 +20982,14 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       .filter(function (x) { return x.length > 0; });
   }
 
+  /**
+   * 解码失败不炸路由：畸形转义（#/problem/%）在 decodeURIComponent 下抛 URIError，
+   * 曾会让整条 route() 中断并触发「启动失败」遮罩。这里退化为原文。
+   */
+  function safeDecode(s) {
+    try { return decodeURIComponent(s); } catch (e) { return s; }
+  }
+
   /** 从 hash 里解析 query（#/lab?demo=x&y=1 → {demo:'x', y:'1'}；无 query 返回 {}）。 */
   function parseQuery(href) {
     var s = String(href || '');
@@ -20982,7 +20998,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     var out = {};
     s.slice(q + 1).split('&').forEach(function (kv) {
       var eq = kv.indexOf('=');
-      if (eq > 0) out[decodeURIComponent(kv.slice(0, eq))] = decodeURIComponent(kv.slice(eq + 1));
+      if (eq > 0) out[safeDecode(kv.slice(0, eq))] = safeDecode(kv.slice(eq + 1));
     });
     return out;
   }
@@ -21035,13 +21051,13 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     document.body.classList.remove('dragging');   // 分栏拖拽中途切路由：DOM 已换、pointerup 不再触发，摘掉防光标困住
 
     if (view === 'problem' && parts[1]) {
-      var p = TSJ.findProblem(decodeURIComponent(parts[1]));
+      var p = TSJ.findProblem(safeDecode(parts[1]));
       store.setActiveNav('problems');
       problem.renderProblem(parts[1], scope);
       a11y.setTitle(p ? p.title : '题目不存在');
     } else if (view === 'submission' && parts[1]) {
       store.setActiveNav('submissions');
-      pages.renderSubmissionDetail(decodeURIComponent(parts[1]));
+      pages.renderSubmissionDetail(safeDecode(parts[1]));
       a11y.setTitle('提交详情');
     } else if (view === 'submissions') {
       store.setActiveNav('submissions');
@@ -21053,7 +21069,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       else { boards.renderPath(); a11y.setTitle('学习路径'); }
     } else if (view === 'methods' && parts[1]) {
       store.setActiveNav('methods');
-      methodDetail.render(decodeURIComponent(parts[1]), scope);
+      methodDetail.render(safeDecode(parts[1]), scope);
     } else if (view === 'methods') {
       store.setActiveNav('methods');
       library.renderMethods();
@@ -21064,7 +21080,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       a11y.setTitle('术语表');
     } else if (view === 'learn' && parts[1]) {
       store.setActiveNav('learn');
-      learn.renderModule(decodeURIComponent(parts[1]), scope);
+      learn.renderModule(safeDecode(parts[1]), scope);
     } else if (view === 'learn') {
       store.setActiveNav('learn');
       learn.renderMap(scope);

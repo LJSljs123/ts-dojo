@@ -115,3 +115,28 @@ test('空文件：明确报错而不是抛异常', () => {
   assert.equal(r.ok, false);
   assert.match(r.error, /空/);
 });
+
+test('v3.9 边界：.5 型数字、常数列 + 时间列、两列都递增', () => {
+  // .5 型（省略整数位）：不应整列丢失
+  const dot = series(80, (i) => '.' + (i % 9 + 1));
+  const r1 = csv.parse(dot.join('\n'));
+  assert.equal(r1.ok, true, '.5 列应可解析：' + r1.error);
+  assert.equal(r1.values.length, 80);
+
+  // 值,时间（常数数据 + 递增索引）：应取首列的常数值，而不是把时间当数据
+  const vt = series(80, (i) => '7,' + i);
+  const r2 = csv.parse(vt.join('\n'));
+  assert.equal(r2.ok, true);
+  assert.deepEqual(r2.values, new Array(80).fill(7), '应取首列常数值');
+
+  // 时间,值（递增时间 + 常数数据）：应取末列
+  const tv = series(80, (i) => i + ',7');
+  const r3 = csv.parse(tv.join('\n'));
+  assert.equal(r3.ok, true);
+  assert.deepEqual(r3.values, new Array(80).fill(7), '应取末列常数值');
+
+  // 两列都递增（时间,增长数据）：维持取末列（最常见顺序）
+  const both = series(80, (i) => i + ',' + (i * 2 + 1));
+  const r4 = csv.parse(both.join('\n'));
+  assert.deepEqual(r4.values.slice(0, 3), [1, 3, 5], '都递增时取末列');
+});

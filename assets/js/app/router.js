@@ -57,6 +57,14 @@
       .filter(function (x) { return x.length > 0; });
   }
 
+  /**
+   * 解码失败不炸路由：畸形转义（#/problem/%）在 decodeURIComponent 下抛 URIError，
+   * 曾会让整条 route() 中断并触发「启动失败」遮罩。这里退化为原文。
+   */
+  function safeDecode(s) {
+    try { return decodeURIComponent(s); } catch (e) { return s; }
+  }
+
   /** 从 hash 里解析 query（#/lab?demo=x&y=1 → {demo:'x', y:'1'}；无 query 返回 {}）。 */
   function parseQuery(href) {
     var s = String(href || '');
@@ -65,7 +73,7 @@
     var out = {};
     s.slice(q + 1).split('&').forEach(function (kv) {
       var eq = kv.indexOf('=');
-      if (eq > 0) out[decodeURIComponent(kv.slice(0, eq))] = decodeURIComponent(kv.slice(eq + 1));
+      if (eq > 0) out[safeDecode(kv.slice(0, eq))] = safeDecode(kv.slice(eq + 1));
     });
     return out;
   }
@@ -118,13 +126,13 @@
     document.body.classList.remove('dragging');   // 分栏拖拽中途切路由：DOM 已换、pointerup 不再触发，摘掉防光标困住
 
     if (view === 'problem' && parts[1]) {
-      var p = TSJ.findProblem(decodeURIComponent(parts[1]));
+      var p = TSJ.findProblem(safeDecode(parts[1]));
       store.setActiveNav('problems');
       problem.renderProblem(parts[1], scope);
       a11y.setTitle(p ? p.title : '题目不存在');
     } else if (view === 'submission' && parts[1]) {
       store.setActiveNav('submissions');
-      pages.renderSubmissionDetail(decodeURIComponent(parts[1]));
+      pages.renderSubmissionDetail(safeDecode(parts[1]));
       a11y.setTitle('提交详情');
     } else if (view === 'submissions') {
       store.setActiveNav('submissions');
@@ -136,7 +144,7 @@
       else { boards.renderPath(); a11y.setTitle('学习路径'); }
     } else if (view === 'methods' && parts[1]) {
       store.setActiveNav('methods');
-      methodDetail.render(decodeURIComponent(parts[1]), scope);
+      methodDetail.render(safeDecode(parts[1]), scope);
     } else if (view === 'methods') {
       store.setActiveNav('methods');
       library.renderMethods();
@@ -147,7 +155,7 @@
       a11y.setTitle('术语表');
     } else if (view === 'learn' && parts[1]) {
       store.setActiveNav('learn');
-      learn.renderModule(decodeURIComponent(parts[1]), scope);
+      learn.renderModule(safeDecode(parts[1]), scope);
     } else if (view === 'learn') {
       store.setActiveNav('learn');
       learn.renderMap(scope);
