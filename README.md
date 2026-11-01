@@ -34,7 +34,7 @@ sliders, and a model studio with a strict train/val/test experiment protocol.
 双击 ts-dojo-standalone.html
 ```
 
-它把 CSS 与 53 个脚本全部内联成一个约 885KB 的 HTML，**不依赖任何相对路径**。
+它把 CSS 与 53 个脚本全部内联成一个约 890KB 的 HTML，**不依赖任何相对路径**。
 所以无论是双击打开、丢进 http 服务器、还是被塞进 iframe / `srcdoc` / 预览面板里，都能正常渲染。
 
 **方式 B：模块化版**

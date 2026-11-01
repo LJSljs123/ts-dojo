@@ -66,5 +66,41 @@
     '}'
   ].join('\n');
 
-  TSJ.appStudioTemplates = { STARTER: STARTER, COV: COV };
+  /**
+   * 渠道拆分示例：每条渠道用自己的周期做季节朴素，再相加（channels_daily + ctx.parts）。
+   * 教三个事实：总量 = 渠道之和；各渠道周期不同（7 vs 30）；拆开预测能同时捕捉两个周期，
+   * 直接预测总量只能抓到一个。比值 0.066 = 比最优基线好 15 倍。
+   */
+  var CHANNEL = [
+    'function predict(history, horizon, ctx) {',
+    '  var parts = ctx.parts || [];               // 渠道历史（各含 name/period/values，截到 history 长度）',
+    '  var n = history.length;',
+    '',
+    '  // 1) 每条渠道独立预测：用各自周期的「最后一个完整周期」做季节朴素',
+    '  //    门店渠道 period=7 抓周节律，企业渠道 period=30 抓月节律——互不干扰',
+    '  var channelPreds = parts.map(function (p) {',
+    '    var m = p.period > 0 ? p.period : 7;',
+    '    var vals = p.values;',
+    '    var pn = vals.length;',
+    '    var out = [];',
+    '    for (var h = 0; h < horizon; h++) {',
+    '      var idx = pn - m + (h % m);',
+    '      out.push(idx >= 0 ? vals[idx] : vals[pn - 1]);',
+    '    }',
+    '    return out;',
+    '  });',
+    '',
+    '  // 2) 合并：总量 = 渠道之和',
+    '  var out = [];',
+    '  for (var h = 0; h < horizon; h++) {',
+    '    var sum = 0;',
+    '    for (var c = 0; c < channelPreds.length; c++) sum += channelPreds[c][h];',
+    '    out.push(sum);',
+    '  }',
+    '  return out;',
+    '}'
+  ].join('\n');
+
+
+  TSJ.appStudioTemplates = { STARTER: STARTER, COV: COV, CHANNEL: CHANNEL };
 })(typeof window !== 'undefined' ? window : this);

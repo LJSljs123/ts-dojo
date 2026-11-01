@@ -84,8 +84,9 @@
       '  </div>',
       '  <div class="editor-toolbar"><div class="tb-left"><span class="file-chip">my-model.js</span>' +
       '    <span class="tb-hint">Ctrl/⌘+Enter 运行</span></div>',
-      '    <div class="tb-right"><button type="button" class="btn btn-ghost" id="studioTemplate">载入基础示例</button>' +
-'    <button type="button" class="btn btn-ghost" id="studioTemplateCov" title="用 ctx.promoDays 做促销感知预测">载入协变量示例</button>' +
+      '    <div class="tb-right"><button type="button" class="btn btn-ghost" id="studioTemplate">基础</button>' +
+'    <button type="button" class="btn btn-ghost" id="studioTemplateCov" title="用 ctx.promoDays 做促销感知预测">协变量</button>' +
+
       '    <button type="button" class="btn" id="studioRunVal">① 验证集评估</button>' +
       '    <button type="button" class="btn btn-primary" id="studioRunFinal">② 最终评测</button></div></div>',
       '  <div class="editor-host" id="studioEditorHost"></div>',
@@ -127,25 +128,32 @@
       var d = findDataset($('studioDataset').value) || {};
       var box = $('studioCov');
       if (!box) return;
-      box.innerHTML = TSJ.appStudioReport.covChecksHtml(d, ctx.cov);
+      var checksHtml = TSJ.appStudioReport.covChecksHtml(d, ctx.cov);
+      if (d.parts) checksHtml += ' <button type="button" class="btn btn-ghost btn-sm" id="studioTemplateChan">载入渠道示例</button>';
+      box.innerHTML = checksHtml;
       var a = $('studioCovPromo'), b = $('studioCovParts'), tplCov = $('studioTemplateCov');
       if (a) a.addEventListener('change', function () { ctx.cov.promo = this.checked; });
       if (b) b.addEventListener('change', function () { ctx.cov.parts = this.checked; });
       if (tplCov) tplCov.disabled = !d.promoDays;
+      var tplChan = $('studioTemplateChan');
+      if (tplChan) tplChan.disabled = !d.parts;
     }
     $('studioDataset').addEventListener('change', paintConfig);
     paintConfig();
-    $('studioTemplate').addEventListener('click', function () {
-      store.state.editor.setValue(TPL.STARTER);
-      ctx.code = TPL.STARTER;
-      core.writeJSON(core.STORE.studioDraft, TPL.STARTER);
-      a11y.toast('已载入基础示例（SES + 网格搜索 α）', 'ok');
-    });
-    $('studioTemplateCov').addEventListener('click', function () {
-      store.state.editor.setValue(TPL.COV);
-      ctx.code = TPL.COV;
-      core.writeJSON(core.STORE.studioDraft, TPL.COV);
-      a11y.toast('已载入协变量示例（促销提升系数 × 季节朴素）', 'ok');
+    function loadTpl(code, msg) {
+      store.state.editor.setValue(code);
+      ctx.code = code;
+      core.writeJSON(core.STORE.studioDraft, code);
+      a11y.toast(msg, 'ok');
+    }
+    $('studioTemplate').addEventListener('click', function () { loadTpl(TPL.STARTER, '已载入基础示例（SES + 网格搜索 α）'); });
+    $('studioTemplateCov').addEventListener('click', function () { loadTpl(TPL.COV, '已载入协变量示例（促销提升系数 × 季节朴素）'); });
+    var chanBtn = $('studioTemplateChan');   // 仅在有 parts 的数据集上渲染
+    if (chanBtn) chanBtn.addEventListener('click', function () {
+      ctx.cov.parts = true;
+      var cb = $('studioCovParts');
+      if (cb) cb.checked = true;
+      loadTpl(TPL.CHANNEL, '已载入渠道拆分示例（per-channel 季节朴素 → 相加）');
     });
     $('studioRunVal').addEventListener('click', function () { runPhase('val'); });
     $('studioRunFinal').addEventListener('click', function () { runPhase('final'); });
@@ -186,11 +194,7 @@
       });
     });
 
-    /** 配置区绘制：拆分协议条 + 协变量开关（数据集切换 / CSV 恢复后调用）。 */
-    function paintConfig() {
-      paintSplits();
-      paintCov();
-    }
+    function paintConfig() { paintSplits(); paintCov(); }
     function paintSplits() {
       var d = findDataset($('studioDataset').value);
       var box = $('studioSplits');
@@ -203,7 +207,6 @@
         '<p class="ds-card-sub">训练只看 train；验证集用于迭代；test 只在最终评测时解密。</p>';
     }
 
-    /** 记录与对比视图绘制委托给 app/studio-report.js；这里只绑「载入代码」。 */
     function paintRecords() {
       var list = storage.list();
       var el = $('studioExpCount');

@@ -51,7 +51,8 @@ check('产物与当前源码一致（未过期）', () => {
 
 check('无外部资源引用', () => {
   const html = fs.readFileSync(OUT, 'utf8');
-  const refs = [...html.matchAll(/<(?:script|link)[^>]*?(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
+  const refs = [...html.matchAll(/<(?:script|link)[^>]*?(?:src|href)="([^"]+)"/g)].map((m) => m[1])
+    .filter((r) => !r.startsWith('data:'));   // data: URI 是内联的，不算外部引用
   assert.deepEqual(refs, [], '仍有外部引用：' + refs.join(', '));
 });
 

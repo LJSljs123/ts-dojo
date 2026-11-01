@@ -750,3 +750,6 @@
 .gcard[data-cat="data"]::before, .gcard[data-cat="deep"]::before { background: var(--tier-foundation); }
 .gcard[data-cat="eval"], .gcard[data-cat="metrics"]::before { background: var(--tier-competition); }
 .gcard[data-cat="platform"]::before { background: var(--muted); }
+
+/* 工坊工具栏：允许模板按钮组换行（防三按钮挤压主按钮） */
+.editor-toolbar .tb-right { flex-wrap: wrap; justify-content: flex-end; }

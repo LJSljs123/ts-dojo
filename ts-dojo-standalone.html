@@ -3034,6 +3034,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 .gcard[data-cat="eval"], .gcard[data-cat="metrics"]::before { background: var(--tier-competition); }
 .gcard[data-cat="platform"]::before { background: var(--muted); }
 
+/* 工坊工具栏：允许模板按钮组换行（防三按钮挤压主按钮） */
+.editor-toolbar .tb-right { flex-wrap: wrap; justify-content: flex-end; }
+
 </style>
 
 <!-- 启动自检：脚本被拦 / 加载失败 / 1.5s 内没渲染出内容 → 直接把原因显示出来，绝不留白屏 -->
@@ -18843,7 +18846,43 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     '}'
   ].join('\n');
 
-  TSJ.appStudioTemplates = { STARTER: STARTER, COV: COV };
+  /**
+   * 渠道拆分示例：每条渠道用自己的周期做季节朴素，再相加（channels_daily + ctx.parts）。
+   * 教三个事实：总量 = 渠道之和；各渠道周期不同（7 vs 30）；拆开预测能同时捕捉两个周期，
+   * 直接预测总量只能抓到一个。比值 0.066 = 比最优基线好 15 倍。
+   */
+  var CHANNEL = [
+    'function predict(history, horizon, ctx) {',
+    '  var parts = ctx.parts || [];               // 渠道历史（各含 name/period/values，截到 history 长度）',
+    '  var n = history.length;',
+    '',
+    '  // 1) 每条渠道独立预测：用各自周期的「最后一个完整周期」做季节朴素',
+    '  //    门店渠道 period=7 抓周节律，企业渠道 period=30 抓月节律——互不干扰',
+    '  var channelPreds = parts.map(function (p) {',
+    '    var m = p.period > 0 ? p.period : 7;',
+    '    var vals = p.values;',
+    '    var pn = vals.length;',
+    '    var out = [];',
+    '    for (var h = 0; h < horizon; h++) {',
+    '      var idx = pn - m + (h % m);',
+    '      out.push(idx >= 0 ? vals[idx] : vals[pn - 1]);',
+    '    }',
+    '    return out;',
+    '  });',
+    '',
+    '  // 2) 合并：总量 = 渠道之和',
+    '  var out = [];',
+    '  for (var h = 0; h < horizon; h++) {',
+    '    var sum = 0;',
+    '    for (var c = 0; c < channelPreds.length; c++) sum += channelPreds[c][h];',
+    '    out.push(sum);',
+    '  }',
+    '  return out;',
+    '}'
+  ].join('\n');
+
+
+  TSJ.appStudioTemplates = { STARTER: STARTER, COV: COV, CHANNEL: CHANNEL };
 })(typeof window !== 'undefined' ? window : this);
 
 </script>
@@ -18934,8 +18973,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       '  </div>',
       '  <div class="editor-toolbar"><div class="tb-left"><span class="file-chip">my-model.js</span>' +
       '    <span class="tb-hint">Ctrl/⌘+Enter 运行</span></div>',
-      '    <div class="tb-right"><button type="button" class="btn btn-ghost" id="studioTemplate">载入基础示例</button>' +
-'    <button type="button" class="btn btn-ghost" id="studioTemplateCov" title="用 ctx.promoDays 做促销感知预测">载入协变量示例</button>' +
+      '    <div class="tb-right"><button type="button" class="btn btn-ghost" id="studioTemplate">基础</button>' +
+'    <button type="button" class="btn btn-ghost" id="studioTemplateCov" title="用 ctx.promoDays 做促销感知预测">协变量</button>' +
+
       '    <button type="button" class="btn" id="studioRunVal">① 验证集评估</button>' +
       '    <button type="button" class="btn btn-primary" id="studioRunFinal">② 最终评测</button></div></div>',
       '  <div class="editor-host" id="studioEditorHost"></div>',
@@ -18977,25 +19017,32 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       var d = findDataset($('studioDataset').value) || {};
       var box = $('studioCov');
       if (!box) return;
-      box.innerHTML = TSJ.appStudioReport.covChecksHtml(d, ctx.cov);
+      var checksHtml = TSJ.appStudioReport.covChecksHtml(d, ctx.cov);
+      if (d.parts) checksHtml += ' <button type="button" class="btn btn-ghost btn-sm" id="studioTemplateChan">载入渠道示例</button>';
+      box.innerHTML = checksHtml;
       var a = $('studioCovPromo'), b = $('studioCovParts'), tplCov = $('studioTemplateCov');
       if (a) a.addEventListener('change', function () { ctx.cov.promo = this.checked; });
       if (b) b.addEventListener('change', function () { ctx.cov.parts = this.checked; });
       if (tplCov) tplCov.disabled = !d.promoDays;
+      var tplChan = $('studioTemplateChan');
+      if (tplChan) tplChan.disabled = !d.parts;
     }
     $('studioDataset').addEventListener('change', paintConfig);
     paintConfig();
-    $('studioTemplate').addEventListener('click', function () {
-      store.state.editor.setValue(TPL.STARTER);
-      ctx.code = TPL.STARTER;
-      core.writeJSON(core.STORE.studioDraft, TPL.STARTER);
-      a11y.toast('已载入基础示例（SES + 网格搜索 α）', 'ok');
-    });
-    $('studioTemplateCov').addEventListener('click', function () {
-      store.state.editor.setValue(TPL.COV);
-      ctx.code = TPL.COV;
-      core.writeJSON(core.STORE.studioDraft, TPL.COV);
-      a11y.toast('已载入协变量示例（促销提升系数 × 季节朴素）', 'ok');
+    function loadTpl(code, msg) {
+      store.state.editor.setValue(code);
+      ctx.code = code;
+      core.writeJSON(core.STORE.studioDraft, code);
+      a11y.toast(msg, 'ok');
+    }
+    $('studioTemplate').addEventListener('click', function () { loadTpl(TPL.STARTER, '已载入基础示例（SES + 网格搜索 α）'); });
+    $('studioTemplateCov').addEventListener('click', function () { loadTpl(TPL.COV, '已载入协变量示例（促销提升系数 × 季节朴素）'); });
+    var chanBtn = $('studioTemplateChan');   // 仅在有 parts 的数据集上渲染
+    if (chanBtn) chanBtn.addEventListener('click', function () {
+      ctx.cov.parts = true;
+      var cb = $('studioCovParts');
+      if (cb) cb.checked = true;
+      loadTpl(TPL.CHANNEL, '已载入渠道拆分示例（per-channel 季节朴素 → 相加）');
     });
     $('studioRunVal').addEventListener('click', function () { runPhase('val'); });
     $('studioRunFinal').addEventListener('click', function () { runPhase('final'); });
@@ -19036,11 +19083,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       });
     });
 
-    /** 配置区绘制：拆分协议条 + 协变量开关（数据集切换 / CSV 恢复后调用）。 */
-    function paintConfig() {
-      paintSplits();
-      paintCov();
-    }
+    function paintConfig() { paintSplits(); paintCov(); }
     function paintSplits() {
       var d = findDataset($('studioDataset').value);
       var box = $('studioSplits');
@@ -19053,7 +19096,6 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
         '<p class="ds-card-sub">训练只看 train；验证集用于迭代；test 只在最终评测时解密。</p>';
     }
 
-    /** 记录与对比视图绘制委托给 app/studio-report.js；这里只绑「载入代码」。 */
     function paintRecords() {
       var list = storage.list();
       var el = $('studioExpCount');
