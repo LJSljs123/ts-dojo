@@ -143,11 +143,8 @@ ts-dojo/
 │   ├── starter-check.js       # 18 题模板原样提交必须全 WA
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
 │   └── standalone-check.js    # 单文件产物校验（是否过期 / 有无外部引用 / 是否被截断）
-├── docs/review-and-plan.md    # 架构审查报告与升级任务分解
-├── docs/library-spec.md       # v2.2 施工图（方法库 + 高阶新题）
-├── docs/v3-prd.md             # v3.0 产品需求与内容蓝图
-├── docs/v3-architecture.md    # v3.0 架构与施工设计
-├── docs/v3.2-changelog.md     # v3.2 → v3.7 逐版变更记录
+├── CHANGELOG.md               # v3.2 → v3.9 逐版变更记录
+├── docs/archive/              # 历史设计文档（v1 审查 / v2.2 施工图 / v3 PRD 与架构 / 接手审计）
 └── README.md
 ```
 
