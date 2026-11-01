@@ -682,3 +682,8 @@
   border-color: color-mix(in srgb, var(--v3-warn) 38%, transparent);
   font-weight: 600;
 }
+
+/* 工坊：协变量开关区 */
+.studio-cov { margin-top: var(--v3-space-3); }
+.studio-cov .ds-card-sub { display: block; margin-bottom: 6px; }
+.studio-cov .ds-badge { margin-right: 4px; cursor: pointer; }

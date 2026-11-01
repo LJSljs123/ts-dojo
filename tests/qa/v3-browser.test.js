@@ -923,3 +923,21 @@ test('路由健壮性：畸形转义 hash 不炸应用（safeDecode 回归）', 
   assert.equal(st2, true, 'query 畸形转义炸了实验室路由');
   assert.deepEqual(page.exceptions, [], '畸形 hash 出现未捕获异常：' + JSON.stringify(page.exceptions));
 });
+
+test('学习报告页：概览/难度段/泛化差距/建议（v3.11）', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  await goto('#/report');
+  const st = await page.evaluate(`JSON.stringify({
+    hero: (document.querySelector('#view .wk-hero h1')||{}).textContent,
+    diffBars: document.querySelectorAll('#view .wk-dbar').length,
+    genTable: !!document.querySelector('#view .ds-table'),
+    nextFeat: document.querySelectorAll('#view .wk-list-item').length,
+    title: document.title
+  })`);
+  const s = JSON.parse(st);
+  assert.match(s.hero || '', /薄弱点/, '报告页标题缺失：' + s.hero);
+  assert.ok(s.diffBars >= 8, '难度段+verdict 分布条数不足：' + s.diffBars);
+  assert.ok(s.nextFeat >= 1, '建议下一步缺失');
+  assert.match(s.title, /学习报告/, '页面标题未更新：' + s.title);
+  assert.deepEqual(page.exceptions, [], '学习报告出现异常：' + JSON.stringify(page.exceptions));
+});

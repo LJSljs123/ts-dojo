@@ -94,7 +94,7 @@
     var problem = TSJ.appProblem, pages = TSJ.appPages, boards = TSJ.appBoards;
     var library = TSJ.appLibrary, glossary = TSJ.appGlossary;
     var learn = TSJ.appLearn, methodDetail = TSJ.appMethodDetail;
-    var lab = TSJ.appLab, studio = TSJ.appStudio, dashboard = TSJ.appDashboard;
+    var lab = TSJ.appLab, studio = TSJ.appStudio, studio = TSJ.appStudio, dashboard = TSJ.appDashboard;
     var views = TSJ.appViews;
 
     currentPath = toHash(parts);
@@ -142,6 +142,9 @@
       store.setActiveNav(view);
       if (view === 'ranking') { boards.renderRanking(); a11y.setTitle('排行榜'); }
       else { boards.renderPath(); a11y.setTitle('学习路径'); }
+    } else if (view === 'report') {
+      store.setActiveNav('report');
+      TSJ.appReport.render(scope);
     } else if (view === 'methods' && parts[1]) {
       store.setActiveNav('methods');
       methodDetail.render(safeDecode(parts[1]), scope);

@@ -63,7 +63,7 @@ check('全部脚本内联，关键命名空间齐全', () => {
   ['TSJ.datasets', 'TSJ.problems', 'TSJ.methods', 'TSJ.judge', 'TSJ.createEditor', 'TSJ.drawSeries',
     'TSJ.glossary', 'TSJ.charts', 'TSJ.labConfig', 'TSJ.labRunner',
     'TSJ.appCore', 'TSJ.appStore', 'TSJ.appStorage', 'TSJ.appViews', 'TSJ.appProblemExtras', 'TSJ.appProblem',
-    'TSJ.appPages', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appLabLive', 'TSJ.appStudio', 'TSJ.appCmdk', 'TSJ.app'].forEach((ns) => {
+    'TSJ.appPages', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appLabLive', 'TSJ.appStudio', 'TSJ.appStudioTemplates', 'TSJ.appReport', 'TSJ.appCmdk', 'TSJ.app'].forEach((ns) => {
     assert.ok(html.indexOf(ns) >= 0, '缺少命名空间：' + ns);
   });
 });

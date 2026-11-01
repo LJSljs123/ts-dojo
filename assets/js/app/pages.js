@@ -108,7 +108,8 @@
     if (btnExport) {
       btnExport.addEventListener('click', function () {
         storage.exportProgress();
-        a11y.toast('已导出进度文件', 'ok');
+        if (backupNotifier) backupNotifier();
+        a11y.toast('已导出全量备份', 'ok');
       });
     }
     if (btnImport && fileInput) {
@@ -239,7 +240,15 @@
     view.innerHTML = html.join('\n');
   }
 
+  /**
+   * 成就通知注入点：pages.js 加载早于 achievements.js（避免静态反向依赖），
+   * achievements.js 装载后调用本 setter 注册 onBackupExport。
+   */
+  function setAchievementsNotifier(fn) { backupNotifier = typeof fn === 'function' ? fn : null; }
+  var backupNotifier = null;
+
   TSJ.appPages = {
+    setAchievementsNotifier: setAchievementsNotifier,
     bindRefresh: bindRefresh,
     verdictInfo: verdictInfo,
     renderSubmissions: renderSubmissions,

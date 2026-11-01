@@ -2,9 +2,8 @@
  * assets/js/app/studio.js —— 模型工坊 #/studio（v3.6）
  * 加载顺序：… app/studio-storage → app/studio.js → app/cmdk → app.js　挂载点：window.TSJ.appStudio
  *
- * 完整实验流程：自己写 predict（训练逻辑写在函数内，只允许用 history）
- *   ① 验证集评估：fit 在 train、打分在 val，可反复迭代；
- *   ② 最终评测：train+val 重新拟合、在 test 上打分——每代代码只评一次，次数如实记录。
+ * 完整实验流程：自己写 predict（训练逻辑写在函数内，只允许用 history）：
+ *   ① 验证集评估（可迭代）→ ② 最终评测（同代码 test 只评一次，次数如实记录）。
  * 沙箱与判题完全同源（judge.evaluate + Worker 超时 + 防泄漏拆分），零额外依赖。
  */
 (function (global) {
@@ -23,27 +22,7 @@
   var BASELINES = ['naive', 'seasonal_naive', 'mean', 'moving_average', 'linear_trend'];
   var METRIC = 'mse';
 
-  var STARTER = [
-    'function predict(history, horizon, ctx) {',
-    '  // 你的模型：在 history 上「训练」，再预测 horizon 步。',
-    '  // 示例：SES + 网格搜索 α（只用 history 内部做一步回测选参，绝不碰 val/test）',
-    '  var best = { a: 0.3, err: Infinity };',
-    '  for (var a = 0.05; a <= 0.95; a += 0.05) {',
-    '    var err = 0, level = history[0];',
-    '    for (var i = 1; i < history.length - 1; i++) {',
-    '      var oneStep = level;                    // 用 i 之前的状态预测 i',
-    '      level = a * history[i] + (1 - a) * level;',
-    '      err += Math.pow(history[i + 1] - oneStep, 2);',
-    '    }',
-    '    if (err < best.err) best = { a: a, err: err };',
-    '  }',
-    '  var level = history[0];                     // 用选好的 α 在全部 history 上重新平滑',
-    '  for (var j = 1; j < history.length; j++) level = best.a * history[j] + (1 - best.a) * level;',
-    '  var out = [];',
-    '  for (var h = 0; h < horizon; h++) out.push(level);',
-    '  return out;',
-    '}'
-  ].join('\n');
+  var TPL = TSJ.appStudioTemplates;
 
   /** 拆分协议：test = val = clamp(15%, 12, 48)，train 为剩余；train 不足 24 点时报错。 */
   function splitOf(n) {
@@ -56,42 +35,30 @@
   function hashOf(code) { return core.fnv1a(code).slice(0, 8); }
 
   /** 用合成 problem/dataset 走 judge.evaluate：沙箱、超时、基线全家桶免费获得。 */
-  function synthAndRun(values, horizon, code, session) {
+  function synthAndRun(srcDs, values, horizon, code, session, covExtra) {
     var ds = {
-      id: 'studio', name: '模型工坊', unit: '', freq: ctx0().freq, season: ctx0().season, desc: '', values: values
+      id: 'studio', name: '模型工坊', unit: '', freq: srcDs.freq, season: srcDs.season, desc: '', values: values
     };
     var problem = {
       id: 'studio', index: 0, title: '模型工坊', difficulty: '入门', tags: [],
       points: 100, passScore: 60, dataset: 'studio', mode: 'holdout',
       horizon: horizon, metric: METRIC, baselines: BASELINES, threshold: 0.95
     };
+    if (covExtra) problem.ctxExtra = covExtra;
     return TSJ.judge.evaluate({ problem: problem, dataset: ds, code: code, session: session });
-    /** 数据集元信息（频率/季节来自所选数据集）。 */
-    function ctx0() {
-      var d = TSJ.findDataset(stateDsId());
-      return { freq: d ? d.freq : 'M', season: d ? d.season : 12 };
-    }
   }
 
-  function stateDsId() { return doc.getElementById('studioDataset') ? doc.getElementById('studioDataset').value : 'airline'; }
-
-  function findDataset(id) {
-    var list = TSJ.datasets || [];
-    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
-    return null;
-  }
+  function findDataset(id) { return TSJ.findDataset(id); }   // 引擎层同名查找（datasets.js）
 
   /* ---------- 渲染 ---------- */
   function render(scope) {
-    var ctx = { code: loadDraft(), result: null, phase: null, busy: false, chart: null };
-    var ds = findDataset('airline');
+    var ctx = { code: loadDraft(), result: null, phase: null, busy: false, chart: null, cov: { promo: true, parts: true } };
 
-    function cleanup() {
+    if (scope && scope.own) scope.own({ destroy: function () {
       ctx.busy = false;
       if (ctx.chart && ctx.chart.destroy) ctx.chart.destroy();
       ctx.chart = null;
-    }
-    if (scope && scope.own) scope.own({ destroy: cleanup });
+    } });   // 图表与在途会话随路由销毁
 
     var host = doc.getElementById('view');
     host.innerHTML = [
@@ -108,6 +75,7 @@
         return '<option value="' + esc(d.id) + '"' + (d.id === 'airline' ? ' selected' : '') + '>' +
           esc(d.name) + '（' + d.values.length + ' 点 · ' + esc(d.freq) + '）</option>';
       }).join('') + '</select></label>',
+      '    <div class="studio-cov" id="studioCov"></div>',
       '    <div class="studio-csv-row">',
       '      <label class="ds-btn ds-btn-sm studio-csv-btn"><input type="file" id="studioCsvFile" accept=".csv,.txt,.tsv" style="display:none">📂 上传自己的 CSV</label>',
       '      <span class="ds-card-sub" id="studioCsvHint">单列数值或「时间,数值」两列；≥72 点</span>',
@@ -116,7 +84,8 @@
       '  </div>',
       '  <div class="editor-toolbar"><div class="tb-left"><span class="file-chip">my-model.js</span>' +
       '    <span class="tb-hint">Ctrl/⌘+Enter 运行</span></div>',
-      '    <div class="tb-right"><button type="button" class="btn btn-ghost" id="studioTemplate">载入示例模型</button>' +
+      '    <div class="tb-right"><button type="button" class="btn btn-ghost" id="studioTemplate">载入基础示例</button>' +
+'    <button type="button" class="btn btn-ghost" id="studioTemplateCov" title="用 ctx.promoDays 做促销感知预测">载入协变量示例</button>' +
       '    <button type="button" class="btn" id="studioRunVal">① 验证集评估</button>' +
       '    <button type="button" class="btn btn-primary" id="studioRunFinal">② 最终评测</button></div></div>',
       '  <div class="editor-host" id="studioEditorHost"></div>',
@@ -140,7 +109,7 @@
       value: ctx.code,
       fontSize: store.state.edFont,
       errorHelpId: 'studioEdHelp',
-      escapeTo: '#studioRunFinal',
+      escapeTo: '#studioRunFinal',   // ESC 优先退出编辑焦点而非关闭页面
       onChange: function (val) { ctx.code = val; core.writeJSON(core.STORE.studioDraft, val); },
       onRun: function () { runPhase('val'); },
       onSave: function () { core.writeJSON(core.STORE.studioDraft, ctx.code); a11y.toast('草稿已保存', 'ok'); }
@@ -149,16 +118,34 @@
     // 左右分栏可拖拽：与题目页同一份逻辑，只是 id 不同
     TSJ.appUi.bindSplitter(host, { layoutId: 'studioLayout', splitterId: 'studioSplitter' });
 
-    TSJ.appStudioCsv.setupPanel({ onDatasetChanged: paintSplits });
+    TSJ.appStudioCsv.setupPanel({ onDatasetChanged: paintConfig });
     paintSplits();
     paintRecords();
 
-    $('studioDataset').addEventListener('change', paintSplits);
+    /** 协变量开关区：html 由 studio-report.covChecksHtml 生成，这里只绑定勾选状态。 */
+    function paintCov() {
+      var d = findDataset($('studioDataset').value) || {};
+      var box = $('studioCov');
+      if (!box) return;
+      box.innerHTML = TSJ.appStudioReport.covChecksHtml(d, ctx.cov);
+      var a = $('studioCovPromo'), b = $('studioCovParts'), tplCov = $('studioTemplateCov');
+      if (a) a.addEventListener('change', function () { ctx.cov.promo = this.checked; });
+      if (b) b.addEventListener('change', function () { ctx.cov.parts = this.checked; });
+      if (tplCov) tplCov.disabled = !d.promoDays;
+    }
+    $('studioDataset').addEventListener('change', paintConfig);
+    paintConfig();
     $('studioTemplate').addEventListener('click', function () {
-      store.state.editor.setValue(STARTER);
-      ctx.code = STARTER;
-      core.writeJSON(core.STORE.studioDraft, STARTER);
-      a11y.toast('已载入示例模型（SES + 网格搜索 α）', 'ok');
+      store.state.editor.setValue(TPL.STARTER);
+      ctx.code = TPL.STARTER;
+      core.writeJSON(core.STORE.studioDraft, TPL.STARTER);
+      a11y.toast('已载入基础示例（SES + 网格搜索 α）', 'ok');
+    });
+    $('studioTemplateCov').addEventListener('click', function () {
+      store.state.editor.setValue(TPL.COV);
+      ctx.code = TPL.COV;
+      core.writeJSON(core.STORE.studioDraft, TPL.COV);
+      a11y.toast('已载入协变量示例（促销提升系数 × 季节朴素）', 'ok');
     });
     $('studioRunVal').addEventListener('click', function () { runPhase('val'); });
     $('studioRunFinal').addEventListener('click', function () { runPhase('final'); });
@@ -199,6 +186,11 @@
       });
     });
 
+    /** 配置区绘制：拆分协议条 + 协变量开关（数据集切换 / CSV 恢复后调用）。 */
+    function paintConfig() {
+      paintSplits();
+      paintCov();
+    }
     function paintSplits() {
       var d = findDataset($('studioDataset').value);
       var box = $('studioSplits');
@@ -211,18 +203,15 @@
         '<p class="ds-card-sub">训练只看 train；验证集用于迭代；test 只在最终评测时解密。</p>';
     }
 
+    /** 记录与对比视图绘制委托给 app/studio-report.js；这里只绑「载入代码」。 */
     function paintRecords() {
       var list = storage.list();
       var el = $('studioExpCount');
       if (el) el.textContent = '本地 ' + list.length + ' 条（上限 ' + storage.MAX + '）';
       var box = $('studioRecords');
       if (!box) return;
-      box.innerHTML = list.length ? '<div class="lab-history">' + list.map(function (r) {
-        return '<div class="lab-history-item"><span>' + (r.kind === 'final' ? '🏁' : '🔁') + ' ' +
-          esc(r.datasetId) + ' · ' + esc(r.kind === 'final' ? '最终' : '验证') + ' · MSE ' +
-          (r.kind === 'final' ? fmt(r.testMetrics.mse) : fmt(r.valMetrics.mse)) + ' · ' + esc(r.codeHash) + '</span>' +
-          '<span><button data-code="' + esc(r.codeHash) + '">载入代码</button></span></div>';
-      }).join('') + '</div>' : '<div class="ds-empty"><strong>还没有实验记录</strong><span>每代代码的 val/test 成绩都会留档。</span></div>';
+      var dsId = $('studioDataset') ? $('studioDataset').value : null;
+      box.innerHTML = TSJ.appStudioReport.recordsPanel(list, dsId);
       var btns = core.$$('[data-code]', box);
       for (var i = 0; i < btns.length; i++) {
         btns[i].addEventListener('click', function () {
@@ -239,8 +228,6 @@
         });
       }
     }
-
-    function fmt(v) { return (typeof v === 'number' && isFinite(v)) ? v.toFixed(2) : '—'; }
 
     /** 两阶段评测：val 在 train 上拟合、val 上打分；final 在 train+val 上拟合、test 上打分。 */
     function runPhase(kind) {
@@ -272,7 +259,22 @@
       var report = $('studioReport');
       if (report) report.innerHTML = '<div class="notice">正在运行（' + (kind === 'val' ? '验证集' : '最终评测') + '）…</div>';
 
-      synthAndRun(values, horizon, code, session).then(function (res) {
+      // 协变量注入：与 P17/P18 同一 judge 机制（problem.ctxExtra），注入与否由用户勾选。
+      // 注意闭包捕获真实数据集的日历/渠道——合成 ds 上没有这些字段。
+      var covExtra = null;
+      if (ctx.cov.promo && d.promoDays) {
+        var pd = d.promoDays;
+        covExtra = function () { return { promoDays: pd }; };
+      } else if (ctx.cov.parts && d.parts) {
+        var parts = d.parts;
+        covExtra = function (point) {
+          var end = point.history.length;
+          return { parts: parts.map(function (p) {
+            return { name: p.name, period: p.period, values: p.values.slice(0, end) };
+          }) };
+        };
+      }
+      synthAndRun(d, values, horizon, code, session, covExtra).then(function (res) {
         if (token !== store.state.judgeToken) return;   // 路由切换 / 新一轮：整段丢弃
         ctx.busy = false;
         setButtons(false);
@@ -292,6 +294,7 @@
         var rec = {
           schema: 1, id: String(Date.now()), at: Date.now(), kind: kind,
           datasetId: d.id, season: d.season, split: [sp.trainLen, sp.valLen, sp.testLen],
+          covariates: ((ctx.cov.promo && d.promoDays) ? 'promo' : '') + ((ctx.cov.parts && d.parts) ? 'parts' : '') || null,
           codeHash: hashOf(code), code: code,
           valMetrics: kind === 'val' ? { mse: TSJ.judge.metrics.mse(actual, pred) } : {},
           testMetrics: kind === 'final' ? { mse: TSJ.judge.metrics.mse(actual, pred) } : {},
@@ -326,14 +329,13 @@
     }
 
     function setButtons(busy) {
-      var a = $('studioRunVal');
-      var b = $('studioRunFinal');
+      var a = $('studioRunVal'), b = $('studioRunFinal');
       if (a) a.disabled = !!busy;
       if (b) b.disabled = !!busy;
     }
 
     function loadDraft() {
-      return core.readJSON(core.STORE.studioDraft, STARTER, function (v) { return typeof v === 'string' && v; });
+      return core.readJSON(core.STORE.studioDraft, TPL.STARTER, function (v) { return typeof v === 'string' && v; });
     }
 
     a11y.setTitle('模型工坊 · TSOJ');

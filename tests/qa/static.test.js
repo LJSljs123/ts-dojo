@@ -36,8 +36,8 @@ const LAB_FILES = LAB_NAMES.map((n) => path.join(JS_DIR, n + '.js'));
 const APP_NAMES = [
   'util', 'core', 'schema', 'store', 'storage', 'lifecycle', 'ui', 'a11y', 'theme',
   'views', 'problem', 'pages', 'lab-storage', 'lab-panels', 'lab-live',
-  'studio-storage', 'studio-report', 'studio-csv', 'studio', 'achievements',
-  'dashboard', 'learn', 'method-detail', 'lab', 'library', 'glossary', 'boards', 'storage-extras', 'cmdk'
+  'studio-storage', 'studio-report', 'studio-csv', 'studio-templates', 'studio', 'achievements',
+  'dashboard', 'learn', 'method-detail', 'lab', 'library', 'glossary', 'boards', 'report', 'storage-extras', 'cmdk'
 ];
 const APP_FILES = APP_NAMES.map((n) => path.join(JS_DIR, 'app', n + '.js'))
   .concat([path.join(JS_DIR, 'app.js')]);
@@ -140,6 +140,7 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/app/studio-storage.js',
     'assets/js/app/studio-report.js',
     'assets/js/app/studio-csv.js',
+    'assets/js/app/studio-templates.js',
     'assets/js/app/studio.js',
     'assets/js/app/achievements.js',
     'assets/js/app/dashboard.js',
@@ -149,6 +150,7 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/app/library.js',
     'assets/js/app/glossary.js',
     'assets/js/app/boards.js',
+    'assets/js/app/report.js',
     'assets/js/app/storage-extras.js',
     'assets/js/app/cmdk.js',
     'assets/js/app/links.js',
@@ -177,9 +179,9 @@ test('依赖方向：引擎层不得引用 app 层；app 层只能引用**更早
     'TSJ.appUtil', 'TSJ.appCore', 'TSJ.appSchema', 'TSJ.appStore', 'TSJ.appStorage',
     'TSJ.appLifecycle', 'TSJ.appUi', 'TSJ.appA11y', 'TSJ.appTheme', 'TSJ.appViews',
     'TSJ.appProblem', 'TSJ.appPages', 'TSJ.appLabStorage', 'TSJ.appLabPanels',
-    'TSJ.appStudioStorage', 'TSJ.appStudioReport', 'TSJ.appStudioCsv', 'TSJ.appStudio',
+    'TSJ.appStudioStorage', 'TSJ.appStudioReport', 'TSJ.appStudioCsv', 'TSJ.appStudioTemplates', 'TSJ.appStudio',
     'TSJ.appAchievements', 'TSJ.appDashboard', 'TSJ.appLearn', 'TSJ.appMethodDetail',
-    'TSJ.appLab', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appStorageExtras', 'TSJ.appCmdk', 'TSJ.app',
+    'TSJ.appLab', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appReport', 'TSJ.appStorageExtras', 'TSJ.appCmdk', 'TSJ.app',
   ];
   APP_FILES.forEach((file, idx) => {
     const src = read(file);

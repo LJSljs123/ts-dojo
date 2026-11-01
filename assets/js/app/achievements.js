@@ -24,7 +24,11 @@
     { id: 'honest-researcher', icon: '🧭', name: '诚实研究者', desc: '工坊最终评测：同一份代码对 test 只评了一次就定稿。' },
     { id: 'glossary-reader', icon: '📖', name: '词典编纂者', desc: '在术语表里累计搜索/查阅 20 次。' },
     { id: 'method-explorer', icon: '🗺️', name: '方法旅行家', desc: '查看过 15 个不同的方法详情页。' },
-    { id: 'half-score', icon: '💎', name: '半分神话', desc: '任意一题拿到误差比 ≤ 0.5 的满分。' }
+    { id: 'half-score', icon: '💎', name: '半分神话', desc: '任意一题拿到误差比 ≤ 0.5 的满分。' },
+    { id: 'promo-aware', icon: '📣', name: '促销感知', desc: '通过 P17：把已知促销日历真正用进模型。' },
+    { id: 'channel-master', icon: '🔀', name: '渠道拆解', desc: '通过 P18：把混合渠道拆开各自预测再合并。' },
+    { id: 'val-streak', icon: '📈', name: '三轮迭代', desc: '工坊同一数据集上连续三代验证集 MSE 下降。' },
+    { id: 'archivist', icon: '🗄️', name: '档案管理员', desc: '第一次导出全量备份文件。' }
   ];
 
   var unlocked = null;   // { [id]: at }
@@ -69,6 +73,8 @@
     if (!result) return;
     if (result.passed) {
       unlock('first-ac');
+      if (problem.id === 'p17-promo-covariate') unlock('promo-aware');
+      if (problem.id === 'p18-channel-mix') unlock('channel-master');
       // 半分神话：整题满分（误差比 ≤ 0.5 → 100 分），不是某个测试点满分
       if (result.score === 100) unlock('half-score');
       // 连胜：按题号检查连续通过（宽松定义：已通过的题里存在连续 3 个 index）
@@ -112,8 +118,22 @@
       var mine = record.valMetrics && record.valMetrics.mse;
       var base = bestOf(record.baselinesVal);
       if (typeof mine === 'number' && typeof base === 'number' && mine < base) unlock('studio-beats-base');
+      // 三轮迭代：同一数据集最近 3 条 val 记录 MSE 严格递减（含本次）
+      var seq = TSJ.appStudioStorage.list()
+        .filter(function (r) { return r.kind === 'val' && r.datasetId === record.datasetId && isFinite(r.valMetrics.mse); })
+        .sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+      if (seq.length >= 3) {
+        var n3 = seq.length;
+        if (seq[n3 - 1].valMetrics.mse < seq[n3 - 2].valMetrics.mse &&
+            seq[n3 - 2].valMetrics.mse < seq[n3 - 3].valMetrics.mse) unlock('val-streak');
+      }
     }
     if (record.kind === 'final' && record.testRuns === 1) unlock('honest-researcher');
+  }
+
+  /** 导出全量备份后调用（pages.js 导出按钮）。 */
+  function onBackupExport() {
+    unlock('archivist');
   }
 
   /** 方法详情页浏览（method-detail 渲染时调用）。 */
@@ -155,9 +175,15 @@
     return n;
   }
 
+  // 自注册到 pages（其加载早于本文件，通过注入点解除静态依赖）
+  if (TSJ.appPages && typeof TSJ.appPages.setAchievementsNotifier === 'function') {
+    TSJ.appPages.setAchievementsNotifier(onBackupExport);
+  }
+
   TSJ.appAchievements = {
     DEFS: DEFS,
     onJudgeResult: onJudgeResult,
+    onBackupExport: onBackupExport,
     onStudioRun: onStudioRun,
     onMethodView: onMethodView,
     onGlossaryLook: onGlossaryLook,

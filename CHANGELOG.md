@@ -539,3 +539,12 @@ H01 `sandbox="allow-scripts"` 里点导航真的换页（跨源 → postMessage 
 - **社区化**：CONTRIBUTING.md（四条铁律 / 开发循环八命令 / 加题八步标定流程 / 代码风格 / 提交规范）；issue 模板（bug 表单 / 新题提案表单 / 功能建议）。
 - **备份带 appVersion**：bundle 记录 `core.VERSION`（新增中央版本常量 + `compareVersion` 助手）；导入时透传，备份比当前程序新则 toast 警告；lab runner 陈旧 appVersion 同步。
 - 验证：265 条全绿 0 skip；四件套全过；numbers 口径一致。
+
+## v3.11：阶段二——能力闭环
+
+- **工坊协变量支持**：数据集具备 promoDays / parts 时出现注入开关（与 P17/P18 同一 judge ctxExtra 机制）；「载入协变量示例」按钮给出促销提升系数 × 季节朴素的完整示范（COV 模板实跑验证 14 步全有限）；实验记录带 covariates 标记。studio-templates.js 拆分（模板是数据不是逻辑）。
+- **工坊对比视图**：同一数据集 final 记录 ≥2 条时出现 MSE 对比表（代码哈希 / val / test / 次数），行内可载回代码——「val→test 泛化差距」可视化。
+- **学习报告页 #/report**：难度段通过率（含薄弱段识别）+ 提交 verdict 分布（RE/TLE 偏高时给诊断建议）+ 工坊泛化差距表（test/val > 1.5 标红）+ 建议下一步（下一题 / 未用过能力）。
+- **成就扩展 +4**：促销感知（P17 AC）、渠道拆解（P18 AC）、三轮迭代（工坊同数据集 val 连续三代下降）、档案管理员（首次导出备份）。pages.js 对 achievements 改注入模式（与 storage-extras 同先例）解除加载顺序依赖。
+- **router 修复**：studio 分支补 studio var 声明（v3.10 时缺失，工坊路由曾报 undefined）。
+- 测试 266 全绿 0 skip；四件套全过；numbers 口径一致（53 脚本 / 266 用例 / 885KB）。

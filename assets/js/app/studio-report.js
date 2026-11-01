@@ -150,5 +150,59 @@
       '</div></body></html>';
   }
 
-  TSJ.appStudioReport = { paint: paint, buildShareCard: buildShareCard };
+  /**
+   * 协变量开关区 html（studio.js 只做赋值与绑定）。
+   * 数据集无 promoDays/parts 时给出明确空态，不冒充可注入。
+   */
+  function covChecksHtml(ds, cov) {
+    var checks = [];
+    if (ds.promoDays) checks.push('<label class="ds-badge"><input type="checkbox" id="studioCovPromo"' +
+      (cov.promo ? ' checked' : '') + '> 注入促销日历（ctx.promoDays，' + ds.promoDays.length + ' 天）</label>');
+    if (ds.parts) checks.push('<label class="ds-badge"><input type="checkbox" id="studioCovParts"' +
+      (cov.parts ? ' checked' : '') + '> 注入渠道历史（ctx.parts）</label>');
+    return checks.length
+      ? '<span class="ds-card-sub">协变量（只读注入，val/test 段同样可得）：</span>' + checks.join(' ')
+      : '<span class="ds-card-sub">该数据集无协变量注入。</span>';
+  }
+
+  /**
+   * 实验记录 + 对比视图：同一数据集的最终记录 ≥2 条时，追加 MSE 对比表
+   * （代码哈希 / val / test / 评测次数），行内 data-code 供「载回代码」。
+   */
+  function recordsPanel(records, datasetId) {
+    function fmtD(v) { return (typeof v === 'number' && isFinite(v)) ? v.toFixed(2) : '—'; }
+    var listHtml = records.length
+      ? '<div class="lab-history">' + records.map(function (r) {
+          return '<div class="lab-history-item"><span>' + (r.kind === 'final' ? '🏁' : '🔁') + ' ' +
+            esc(r.datasetId) + ' · ' + esc(r.kind === 'final' ? '最终' : '验证') + ' · MSE ' +
+            (r.kind === 'final' ? fmtD(r.testMetrics.mse) : fmtD(r.valMetrics.mse)) + ' · ' + esc(r.codeHash) + '</span>' +
+            '<span><button data-code="' + esc(r.codeHash) + '">载入代码</button></span></div>';
+        }).join('') + '</div>'
+      : '<div class="ds-empty"><strong>还没有实验记录</strong><span>每代代码的 val/test 成绩都会留档。</span></div>';
+    var finals = records.filter(function (r) {
+      return r.kind === 'final' && (!datasetId || r.datasetId === datasetId);
+    });
+    var compare = '';
+    if (finals.length >= 2) {
+      var rows = finals.map(function (r) {
+        return '<tr><td><button type="button" class="cmdk-go" data-code="' + esc(r.codeHash) + '">' + esc(r.codeHash) + '</button></td>' +
+          '<td class="num">' + fmtD(r.valMetrics.mse) + '</td>' +
+          '<td class="num">' + fmtD(r.testMetrics.mse) + '</td>' +
+          '<td class="num">' + r.testRuns + '</td></tr>';
+      }).join('');
+      compare = '<h3 class="lab-metrics-title">对比（同数据集最终评测）</h3>' +
+        '<div class="ds-table-wrap"><table class="ds-table ds-table-hover"><thead><tr>' +
+        '<th>代码</th><th class="num">val MSE</th><th class="num">test MSE</th><th class="num">test 次数</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        '<p class="ds-card-sub">val→test 的落差就是泛化差距；同一代码 test 次数 &gt;1 时数字已失去无偏性。</p>';
+    }
+    return listHtml + compare;
+  }
+
+  TSJ.appStudioReport = {
+    paint: paint,
+    buildShareCard: buildShareCard,
+    covChecksHtml: covChecksHtml,
+    recordsPanel: recordsPanel
+  };
 })(typeof window !== 'undefined' ? window : this);
