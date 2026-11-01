@@ -2973,6 +2973,66 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 /* RE/TLE 段在 verdict 分布条中用警示色 */
 .wk-dbar-bad { background: var(--v3-err) !important; }
 
+/* =========================================================================
+   v3.12 顶尖视觉打磨
+   ========================================================================= */
+
+/* 1) Dashboard hero 垂直居中：消除右栏撑高后的下方大片空白 */
+.wk-hero { align-items: center; }
+.wk-hero-slim { align-items: stretch; }
+
+/* 2) 成就徽章：已解锁的微发光 + 悬停放大 */
+.wk-ach-on {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--v3-warn) 28%, transparent);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.wk-ach-on:hover {
+  transform: scale(1.06);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--v3-warn) 42%, transparent);
+}
+
+/* 3) 卡片入场动画：路由切换时依次淡入上浮（带 stagger 延迟） */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ds-card,
+.mcard,
+.gcard,
+.course-module {
+  animation: card-in 0.35s ease both;
+}
+.ds-card:nth-child(2) { animation-delay: 0.05s; }
+.ds-card:nth-child(3) { animation-delay: 0.10s; }
+@media (prefers-reduced-motion: reduce) {
+  .ds-card, .mcard, .gcard, .course-module { animation: none; }
+}
+
+/* 5) 方法卡悬浮：微上浮 + 阴影增强（与 tier 色条联动） */
+.mcard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+/* 6) 术语卡小图标：类别前缀点 */
+.gcard::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  position: absolute;
+  left: 5px;
+  top: 18px;
+}
+.gcard { position: relative; }
+.gcard[data-cat="basics"]::before, .gcard[data-cat="methods"]::before { background: var(--tier-classic); }
+.gcard[data-cat="math"], .gcard[data-cat="prob"] { }
+.gcard[data-cat="math"]::before, .gcard[data-cat="prob"]::before { background: var(--tier-deep); }
+.gcard[data-cat="data"]::before, .gcard[data-cat="deep"]::before { background: var(--tier-foundation); }
+.gcard[data-cat="eval"], .gcard[data-cat="metrics"]::before { background: var(--tier-competition); }
+.gcard[data-cat="platform"]::before { background: var(--muted); }
+
 </style>
 
 <!-- 启动自检：脚本被拦 / 加载失败 / 1.5s 内没渲染出内容 → 直接把原因显示出来，绝不留白屏 -->
