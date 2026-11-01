@@ -37,7 +37,7 @@ const APP_NAMES = [
   'util', 'core', 'schema', 'store', 'storage', 'lifecycle', 'ui', 'a11y', 'theme',
   'views', 'problem', 'pages', 'lab-storage', 'lab-panels', 'lab-live',
   'studio-storage', 'studio-report', 'studio-csv', 'studio', 'achievements',
-  'dashboard', 'learn', 'method-detail', 'lab', 'library', 'glossary', 'boards', 'cmdk'
+  'dashboard', 'learn', 'method-detail', 'lab', 'library', 'glossary', 'boards', 'storage-extras', 'cmdk'
 ];
 const APP_FILES = APP_NAMES.map((n) => path.join(JS_DIR, 'app', n + '.js'))
   .concat([path.join(JS_DIR, 'app.js')]);
@@ -149,6 +149,7 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/app/library.js',
     'assets/js/app/glossary.js',
     'assets/js/app/boards.js',
+    'assets/js/app/storage-extras.js',
     'assets/js/app/cmdk.js',
     'assets/js/app/links.js',
     'assets/js/app/router.js',
@@ -178,7 +179,7 @@ test('依赖方向：引擎层不得引用 app 层；app 层只能引用**更早
     'TSJ.appProblem', 'TSJ.appPages', 'TSJ.appLabStorage', 'TSJ.appLabPanels',
     'TSJ.appStudioStorage', 'TSJ.appStudioReport', 'TSJ.appStudioCsv', 'TSJ.appStudio',
     'TSJ.appAchievements', 'TSJ.appDashboard', 'TSJ.appLearn', 'TSJ.appMethodDetail',
-    'TSJ.appLab', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appCmdk', 'TSJ.app',
+    'TSJ.appLab', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appStorageExtras', 'TSJ.appCmdk', 'TSJ.app',
   ];
   APP_FILES.forEach((file, idx) => {
     const src = read(file);

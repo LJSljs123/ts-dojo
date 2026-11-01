@@ -27,12 +27,48 @@
    * 生成导出包（纯函数，便于测试）。
    * @returns {Object} { schema, app, exportedAt, data, hash }
    */
+  /**
+   * v2 全量备份范围：三键之外的全部用户数据（课程进度 / 成就 / 实验室 / 工坊 / CSV）。
+   * 键名用 STORE 常量（静态测试禁止字面量）；guard 决定导入时的结构白名单。
+   */
+  var EXTRAS = [
+    { key: core.STORE.courseProgress, guard: 'object' },
+    { key: core.STORE.lab, guard: 'array' },
+    { key: core.STORE.studioExp, guard: 'array' },
+    { key: core.STORE.achievements, guard: 'object' },
+    { key: core.STORE.achMeta, guard: 'object' },
+    { key: core.STORE.labDraft, guard: 'string' },
+    { key: core.STORE.studioDraft, guard: 'string' },
+    { key: core.STORE.studioCsv, guard: 'object' }
+  ];
+
+  /** 读取一个 EXTRA 键的当前值（不存在或类型不符返回 undefined，不进备份）。 */
+  function readExtraRaw(key, guard) {
+    try {
+      var raw = global.localStorage.getItem(key);
+      if (raw == null) return undefined;
+      var val = JSON.parse(raw);
+      if (guard === 'object' && !core.isPlainObject(val)) return undefined;
+      if (guard === 'array' && !core.isArrayValue(val)) return undefined;
+      if (guard === 'string' && typeof val !== 'string') return undefined;
+      return val;
+    } catch (e) {
+      return undefined;
+    }
+  }
+
   function buildBundle() {
     var data = {
       progress: store.state.progress,
       drafts: store.state.drafts,
       submissions: store.state.submissions
     };
+    var extras = {};
+    for (var i = 0; i < EXTRAS.length; i++) {
+      var v = readExtraRaw(EXTRAS[i].key, EXTRAS[i].guard);
+      if (v !== undefined) extras[EXTRAS[i].key] = v;
+    }
+    if (Object.keys(extras).length) data.extras = extras;
     return {
       schema: core.CURRENT_SCHEMA,
       app: 'tsoj',
@@ -113,16 +149,34 @@
       return fail('校验失败：内容与校验码不一致（文件可能被修改过）。');
     }
 
-    // 字段白名单归一化：只接受 progress / drafts / submissions 三个键
+    // 字段白名单归一化：基础三键 + v2 的 extras（逐键结构白名单，深度归一化在合并时交各自模块）
     var data = {
       progress: schema.normalizeProgress(obj.data.progress),
       drafts: schema.normalizeDrafts(obj.data.drafts),
       submissions: schema.normalizeSubmissions(obj.data.submissions)
     };
+    var extras = null;
+    if (core.isPlainObject(obj.data.extras)) {
+      extras = {};
+      for (var i = 0; i < EXTRAS.length; i++) {
+        var spec = EXTRAS[i];
+        if (!Object.prototype.hasOwnProperty.call(obj.data.extras, spec.key)) continue;
+        var v = obj.data.extras[spec.key];
+        var ok = true;
+        if (spec.guard === 'object') ok = core.isPlainObject(v);
+        if (spec.guard === 'array') ok = core.isArrayValue(v);
+        if (spec.guard === 'string') ok = typeof v === 'string' && v.length <= core.CODE_LIMIT * 2;
+        if (ok) extras[spec.key] = v;
+      }
+      if (!Object.keys(extras).length) extras = null;
+    }
+    // extras 挂回 data：applyImport 只接收 data（顶层 extras 字段是历史形态，已废弃）
+    if (extras) data.extras = extras;
     var counts = {
       progress: Object.keys(data.progress).length,
       drafts: Object.keys(data.drafts).length,
-      submissions: data.submissions.length
+      submissions: data.submissions.length,
+      extras: extras ? Object.keys(extras).length : 0
     };
     return { ok: true, reason: '', data: data, schema: ver, counts: counts };
   }
@@ -144,12 +198,15 @@
     store.saveProgress();
     store.saveDrafts();
     store.saveSubmissions();
+    var extrasMerged = data.extras && extrasMerger ? extrasMerger(data.extras) : 0;
     return {
       progress: Object.keys(st.progress).length,
       drafts: Object.keys(st.drafts).length,
-      submissions: st.submissions.length
+      submissions: st.submissions.length,
+      extras: extrasMerged
     };
   }
+
 
   /**
    * 读取用户选择的文件并导入。
@@ -223,12 +280,21 @@
     return function () { global.removeEventListener('storage', onStorage); };
   }
 
+  /**
+   * extras 合并器注入点：storage.js 加载早于 storage-extras.js（避免静态反向依赖），
+   * storage-extras.js 装载后调用本 setter 把 mergeExtras 注册进来。
+   */
+  function setExtrasMerger(fn) { extrasMerger = typeof fn === 'function' ? fn : null; }
+  var extrasMerger = null;
+
   TSJ.appStorage = {
     buildBundle: buildBundle,
     exportFileName: exportFileName,
     exportProgress: exportProgress,
     parseBundle: parseBundle,
+    setExtrasMerger: setExtrasMerger,
     applyImport: applyImport,
+    setExtrasMerger: setExtrasMerger,
     importFile: importFile,
     clearAll: clearAll,
     bindStorageSync: bindStorageSync

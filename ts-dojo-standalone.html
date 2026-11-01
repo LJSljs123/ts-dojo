@@ -7458,7 +7458,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       when: '任何时序模型的离线评估。',
       limit: '窗口长度与步长会显著影响结论；单次切分方差大，需多次重复取均值与区间。',
       runnable: true,
-      practice: 'p7-direct-multistep'
+      practice: 'p9-rolling-challenge'
     },
     {
       id: 'conformal',
@@ -8286,7 +8286,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
           example: '预测 y_{t+1} 时，rolling_mean 的窗口结束点必须是 t，不能包含 t+1。'
         }
       ],
-      demo: { kind: 'sandbox', id: 'feature-window', label: '打开窗口构造演示' },
+      demo: { kind: 'concept', id: 'feature-window', label: '查看窗口构造演示（概念级）' },
       exercise: {
         problemIds: ['p7-direct-multistep'],
         output: '给定小表构造无泄漏特征表，并标注每个特征可用时间。'
@@ -14728,8 +14728,12 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   /** 判题模式 → 中文名 */
   var MODE_LABEL = { holdout: '留出法', rolling: '滚动回测' };
 
-  /** 当前存储格式版本；导入时 schema 高于此值一律拒绝（低版本按白名单归一化后接受） */
-  var CURRENT_SCHEMA = 1;
+  /**
+   * 当前存储格式版本；导入时 schema 高于此值一律拒绝（低版本按白名单归一化后接受）。
+   * v2（2026-11）：导出/导入扩展为全量用户数据（课程进度 / 成就 / 实验室 / 工坊 /
+   * 上传 CSV，见 storage.js 的 EXTRAS），旧 v1 文件（仅三键）仍可导入。
+   */
+  var CURRENT_SCHEMA = 2;
   /** 单条提交记录里代码快照的截断上限（20KB） */
   var CODE_LIMIT = 20 * 1024;
   /** 提交记录保留条数 */
@@ -15519,12 +15523,48 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
    * 生成导出包（纯函数，便于测试）。
    * @returns {Object} { schema, app, exportedAt, data, hash }
    */
+  /**
+   * v2 全量备份范围：三键之外的全部用户数据（课程进度 / 成就 / 实验室 / 工坊 / CSV）。
+   * 键名用 STORE 常量（静态测试禁止字面量）；guard 决定导入时的结构白名单。
+   */
+  var EXTRAS = [
+    { key: core.STORE.courseProgress, guard: 'object' },
+    { key: core.STORE.lab, guard: 'array' },
+    { key: core.STORE.studioExp, guard: 'array' },
+    { key: core.STORE.achievements, guard: 'object' },
+    { key: core.STORE.achMeta, guard: 'object' },
+    { key: core.STORE.labDraft, guard: 'string' },
+    { key: core.STORE.studioDraft, guard: 'string' },
+    { key: core.STORE.studioCsv, guard: 'object' }
+  ];
+
+  /** 读取一个 EXTRA 键的当前值（不存在或类型不符返回 undefined，不进备份）。 */
+  function readExtraRaw(key, guard) {
+    try {
+      var raw = global.localStorage.getItem(key);
+      if (raw == null) return undefined;
+      var val = JSON.parse(raw);
+      if (guard === 'object' && !core.isPlainObject(val)) return undefined;
+      if (guard === 'array' && !core.isArrayValue(val)) return undefined;
+      if (guard === 'string' && typeof val !== 'string') return undefined;
+      return val;
+    } catch (e) {
+      return undefined;
+    }
+  }
+
   function buildBundle() {
     var data = {
       progress: store.state.progress,
       drafts: store.state.drafts,
       submissions: store.state.submissions
     };
+    var extras = {};
+    for (var i = 0; i < EXTRAS.length; i++) {
+      var v = readExtraRaw(EXTRAS[i].key, EXTRAS[i].guard);
+      if (v !== undefined) extras[EXTRAS[i].key] = v;
+    }
+    if (Object.keys(extras).length) data.extras = extras;
     return {
       schema: core.CURRENT_SCHEMA,
       app: 'tsoj',
@@ -15605,16 +15645,34 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       return fail('校验失败：内容与校验码不一致（文件可能被修改过）。');
     }
 
-    // 字段白名单归一化：只接受 progress / drafts / submissions 三个键
+    // 字段白名单归一化：基础三键 + v2 的 extras（逐键结构白名单，深度归一化在合并时交各自模块）
     var data = {
       progress: schema.normalizeProgress(obj.data.progress),
       drafts: schema.normalizeDrafts(obj.data.drafts),
       submissions: schema.normalizeSubmissions(obj.data.submissions)
     };
+    var extras = null;
+    if (core.isPlainObject(obj.data.extras)) {
+      extras = {};
+      for (var i = 0; i < EXTRAS.length; i++) {
+        var spec = EXTRAS[i];
+        if (!Object.prototype.hasOwnProperty.call(obj.data.extras, spec.key)) continue;
+        var v = obj.data.extras[spec.key];
+        var ok = true;
+        if (spec.guard === 'object') ok = core.isPlainObject(v);
+        if (spec.guard === 'array') ok = core.isArrayValue(v);
+        if (spec.guard === 'string') ok = typeof v === 'string' && v.length <= core.CODE_LIMIT * 2;
+        if (ok) extras[spec.key] = v;
+      }
+      if (!Object.keys(extras).length) extras = null;
+    }
+    // extras 挂回 data：applyImport 只接收 data（顶层 extras 字段是历史形态，已废弃）
+    if (extras) data.extras = extras;
     var counts = {
       progress: Object.keys(data.progress).length,
       drafts: Object.keys(data.drafts).length,
-      submissions: data.submissions.length
+      submissions: data.submissions.length,
+      extras: extras ? Object.keys(extras).length : 0
     };
     return { ok: true, reason: '', data: data, schema: ver, counts: counts };
   }
@@ -15636,12 +15694,15 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     store.saveProgress();
     store.saveDrafts();
     store.saveSubmissions();
+    var extrasMerged = data.extras && extrasMerger ? extrasMerger(data.extras) : 0;
     return {
       progress: Object.keys(st.progress).length,
       drafts: Object.keys(st.drafts).length,
-      submissions: st.submissions.length
+      submissions: st.submissions.length,
+      extras: extrasMerged
     };
   }
+
 
   /**
    * 读取用户选择的文件并导入。
@@ -15715,12 +15776,21 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     return function () { global.removeEventListener('storage', onStorage); };
   }
 
+  /**
+   * extras 合并器注入点：storage.js 加载早于 storage-extras.js（避免静态反向依赖），
+   * storage-extras.js 装载后调用本 setter 把 mergeExtras 注册进来。
+   */
+  function setExtrasMerger(fn) { extrasMerger = typeof fn === 'function' ? fn : null; }
+  var extrasMerger = null;
+
   TSJ.appStorage = {
     buildBundle: buildBundle,
     exportFileName: exportFileName,
     exportProgress: exportProgress,
     parseBundle: parseBundle,
+    setExtrasMerger: setExtrasMerger,
     applyImport: applyImport,
+    setExtrasMerger: setExtrasMerger,
     importFile: importFile,
     clearAll: clearAll,
     bindStorageSync: bindStorageSync
@@ -17680,6 +17750,20 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   var core = TSJ.appCore;
   var esc = core.esc;
 
+  /**
+   * 课程「打开演示」预设（#/lab?demo=<id>，由 router 传入 lab.js）：
+   * 把课程概念映射成一组可运行的实验室配置 + 默认诊断图。
+   * feature-window（m3 特征工程）在实验室没有对应方法，课程侧为概念级演示。
+   */
+  var DEMO_PRESETS = {
+    'decomposition': { raw: { datasetId: 'airline', method: 'holt-winters' }, kind: 'decomposition' },
+    'acf-pacf': { raw: { datasetId: 'airline', method: 'ses' }, kind: 'acf' },
+    'dlinear': { raw: { datasetId: 'electricity', method: 'dlinear' }, kind: 'forecast' },
+    'intervals': { raw: { datasetId: 'airline', method: 'holt-winters' }, kind: 'forecast' },
+    'rolling': { raw: { datasetId: 'airline', method: 'holt-winters', split: { mode: 'rolling', horizon: 12, windows: 4, originStep: 12 } }, kind: 'forecast' },
+    'croston': { raw: { datasetId: 'intermittent', method: 'tsb' }, kind: 'forecast' }
+  };
+
   /** 诊断图类型（lab.js 与结果外壳共用同一份注册表）。 */
   var KINDS = [
     { id: 'forecast', label: '预测对比' },
@@ -17835,6 +17919,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 
   TSJ.appLabPanels = {
     KINDS: KINDS,
+    DEMO_PRESETS: DEMO_PRESETS,
     paramsHtml: paramsHtml,
     metricChecks: metricChecks,
     configPanel: configPanel,
@@ -18623,7 +18708,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       '<div class="wk-hero wk-hero-slim"><div class="wk-hero-main">',
       '  <div class="wk-kicker">模型工坊</div>',
       '  <h1>自己搓一个模型，跑完完整实验流程</h1>',
-      '  <p>训练逻辑写在 predict 里（只能用 history）——验证集上随便迭代，最终评测一次定论。沙箱、超时、防泄漏与判题完全同源。</p>',
+      '  <p>训练逻辑写在 predict 里（只能用 history）——验证集上随便迭代，最终评测一次定论。沙箱、超时、防泄漏与判题完全同源。范围：单变量模型；协变量题（P17/P18 依赖 ctx 扩展字段）请到题库练习。</p>',
       '</div></div>',
       '<div class="problem-layout studio-layout" id="studioLayout">',
       '<section class="pane pane-left">',
@@ -19495,7 +19580,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   var esc = core.esc;
   var doc = global.document;
   var panels = TSJ.appLabPanels;
-  var KINDS = panels.KINDS;   // 诊断图类型注册在 panels（外壳渲染需要），这里只引用
+  var KINDS = panels.KINDS;
+  var DEMO_PRESETS = panels.DEMO_PRESETS;   // 诊断图类型注册在 panels（外壳渲染需要），这里只引用
 
   function $(id) { return doc.getElementById(id); }
 
@@ -19525,15 +19611,24 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   }
 
 
-  function render(scope, initialRaw) {
-    // 初始配置：默认值，或调用方传入（载入历史记录时）。
+  function render(scope, initialRaw, demoId) {
+    // 初始配置：默认值，或调用方传入（载入历史记录 / 课程演示预设）。
     // 注意不能在这里无条件用 defaults —— 否则「载入配置 / 恢复记录」会被默认值覆盖。
-    var initial = TSJ.labConfig.normalize(initialRaw || TSJ.labConfig.defaults());
+    var preset = demoId ? DEMO_PRESETS[demoId] : null;
+    var seed = initialRaw;
+    if (!seed && preset) {
+      seed = TSJ.labConfig.defaults();
+      Object.keys(preset.raw).forEach(function (k) {
+        if (k === 'split') { seed.split = preset.raw.split; return; }
+        seed[k] = preset.raw[k];
+      });
+    }
+    var initial = TSJ.labConfig.normalize(seed || TSJ.labConfig.defaults());
     var ctx = {
       config: initial.config,
       result: null,
       originIndex: 0,
-      kind: 'forecast',
+      kind: (preset && preset.kind) || 'forecast',
       chart: null,
       token: 0,
       busy: false,
@@ -19559,8 +19654,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       if (!wrap || !canvas || !ctx.result) return;
       if (ctx.chart && ctx.chart.destroy) ctx.chart.destroy();
       var origin = ctx.result.origins[ctx.originIndex] || ctx.result.origins[0];
-      var model;
-      var kind = ctx.kind;
+      var model, kind = ctx.kind;
       if (kind === 'forecast') model = panels.originModel(origin);
       else if (kind === 'residual') {
         model = { residuals: origin.actual.map(function (a, i) { return a - origin.prediction[i]; }) };
@@ -20433,6 +20527,118 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 </script>
 <script>
 /**
+ * assets/js/app/storage-extras.js —— v2 全量备份的 extras 合并层（v3.9）
+ * 加载顺序：… app/storage → app/storage-extras → app/lifecycle
+ * 挂载点：window.TSJ.appStorageExtras
+ *
+ * storage.js 负责导出时收集 extras 与导入时结构白名单；本模块负责「合并落盘」——
+ * 各键用各自模块的归一化器深校验（appLabStorage / appStudioStorage 运行时才引用，
+ * 它们加载顺序晚于本文件，函数体内访问没有问题）。
+ * 合并策略：object 键浅合并（导入覆盖同名）；数组键按 id/configHash 去重取新；
+ * 字符串键导入值优先。全部写失败静默（与 writeJSON 语义一致）。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+
+  function mergeExtras(extras) {
+    var merged = 0;
+    var lab = TSJ.appLabStorage, studio = TSJ.appStudioStorage;
+
+    // 课程进度：浅合并（导入覆盖同名课程）
+    if (core.isPlainObject(extras[core.STORE.courseProgress])) {
+      var cur = core.readJSON(core.STORE.courseProgress, {}, core.isPlainObject);
+      var inc = extras[core.STORE.courseProgress];
+      for (var cid in inc) {
+        if (Object.prototype.hasOwnProperty.call(inc, cid)) cur[cid] = inc[cid];
+      }
+      core.writeJSON(core.STORE.courseProgress, cur);
+      merged++;
+    }
+    // 成就：按最早解锁时间合并（先解锁的算数）
+    if (core.isPlainObject(extras[core.STORE.achievements])) {
+      var ach = core.readJSON(core.STORE.achievements, {}, core.isPlainObject);
+      var incA = extras[core.STORE.achievements];
+      for (var aid in incA) {
+        if (!Object.prototype.hasOwnProperty.call(incA, aid)) continue;
+        var t = Number(incA[aid]);
+        if (!isFinite(t) || t <= 0) continue;
+        if (!isFinite(Number(ach[aid])) || t < Number(ach[aid])) ach[aid] = t;
+      }
+      core.writeJSON(core.STORE.achievements, ach);
+      merged++;
+    }
+    // achMeta：方法浏览并集 + 查阅次数取大
+    if (core.isPlainObject(extras[core.STORE.achMeta])) {
+      var meta = core.readJSON(core.STORE.achMeta, { methods: [], looks: 0 }, core.isPlainObject);
+      var incM = extras[core.STORE.achMeta];
+      if (core.isArrayValue(incM.methods)) {
+        for (var k = 0; k < incM.methods.length; k++) {
+          if (meta.methods.indexOf(incM.methods[k]) < 0) meta.methods.push(incM.methods[k]);
+        }
+      }
+      if (Number(incM.looks) > Number(meta.looks)) meta.looks = Number(incM.looks);
+      core.writeJSON(core.STORE.achMeta, meta);
+      merged++;
+    }
+    // 实验室记录：按 configHash 去重，createdAt 新者胜
+    if (core.isArrayValue(extras[core.STORE.lab]) && lab) {
+      var curLab = {};
+      lab.list().forEach(function (r) { curLab[r.configHash] = r; });
+      extras[core.STORE.lab].forEach(function (raw) {
+        var r = lab.normalizeRecord(raw);
+        if (!r) return;
+        var oldR = curLab[r.configHash];
+        if (!oldR || (r.createdAt || 0) >= (oldR.createdAt || 0)) curLab[r.configHash] = r;
+      });
+      var mergedLab = Object.keys(curLab).map(function (h) { return curLab[h]; });
+      mergedLab.sort(function (x, y) { return (y.createdAt || 0) - (x.createdAt || 0); });
+      while (mergedLab.length > lab.MAX) mergedLab.pop();
+      core.writeJSON(core.STORE.lab, mergedLab);
+      merged++;
+    }
+    // 工坊实验：按 id 去重，at 新者胜
+    if (core.isArrayValue(extras[core.STORE.studioExp]) && studio) {
+      var curExp = {};
+      studio.list().forEach(function (r) { curExp[r.id] = r; });
+      extras[core.STORE.studioExp].forEach(function (raw) {
+        var r = studio.normalizeRecord(raw);
+        if (!r) return;
+        var oldE = curExp[r.id];
+        if (!oldE || (r.at || 0) >= (oldE.at || 0)) curExp[r.id] = r;
+      });
+      var mergedExp = Object.keys(curExp).map(function (i) { return curExp[i]; });
+      mergedExp.sort(function (x, y) { return (y.at || 0) - (x.at || 0); });
+      while (mergedExp.length > studio.MAX) mergedExp.pop();
+      core.writeJSON(core.STORE.studioExp, mergedExp);
+      merged++;
+    }
+    // 字符串草稿与上传 CSV：导入值优先
+    [core.STORE.labDraft, core.STORE.studioDraft].forEach(function (k) {
+      if (typeof extras[k] === 'string') { core.writeJSON(k, extras[k]); merged++; }
+    });
+    var csv = extras[core.STORE.studioCsv];
+    if (core.isPlainObject(csv) && core.isArrayValue(csv.values)) {
+      core.writeJSON(core.STORE.studioCsv, csv);
+      if (TSJ.appStudioCsv) TSJ.appStudioCsv.restore();   // 重新注册进 TSJ.datasets（替换同名临时集）
+      merged++;
+    }
+    return merged;
+  }
+
+  TSJ.appStorageExtras = { mergeExtras: mergeExtras };
+
+  // 自注册到 storage（其加载早于本文件，通过注入点解除静态依赖）
+  if (TSJ.appStorage && typeof TSJ.appStorage.setExtrasMerger === 'function') {
+    TSJ.appStorage.setExtrasMerger(mergeExtras);
+  }
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
  * assets/js/app/cmdk.js —— 全局命令面板（Ctrl/Cmd + K，v3.5）
  * 加载顺序：… app/boards → app/cmdk → app.js　挂载点：window.TSJ.appCmdk
  *
@@ -20757,11 +20963,28 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
    * @returns {string[]} 路径段（已过滤空段）
    */
   function parse(href) {
-    return String(href || '')
+    var s = String(href || '')
       .replace(/^#/, '')
-      .replace(/^\//, '')
+      .replace(/^\//, '');
+    // query（#/lab?demo=xxx）不进路径段：按视图需要单独解析
+    var q = s.indexOf('?');
+    if (q >= 0) s = s.slice(0, q);
+    return s
       .split('/')
-      .filter(function (s) { return s.length > 0; });
+      .filter(function (x) { return x.length > 0; });
+  }
+
+  /** 从 hash 里解析 query（#/lab?demo=x&y=1 → {demo:'x', y:'1'}；无 query 返回 {}）。 */
+  function parseQuery(href) {
+    var s = String(href || '');
+    var q = s.indexOf('?');
+    if (q < 0) return {};
+    var out = {};
+    s.slice(q + 1).split('&').forEach(function (kv) {
+      var eq = kv.indexOf('=');
+      if (eq > 0) out[decodeURIComponent(kv.slice(0, eq))] = decodeURIComponent(kv.slice(eq + 1));
+    });
+    return out;
   }
 
   /** 路径段 → 规范地址（`#/` 或 `#/a/b`）。 */
@@ -20774,7 +20997,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
    *
    * @param {string[]} parts 路径段
    */
-  function render(parts) {
+  function render(parts, query) {
     var store = TSJ.appStore, a11y = TSJ.appA11y, lifecycle = TSJ.appLifecycle;
     var state = store.state;
     var problem = TSJ.appProblem, pages = TSJ.appPages, boards = TSJ.appBoards;
@@ -20847,7 +21070,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       learn.renderMap(scope);
     } else if (view === 'lab') {
       store.setActiveNav('lab');
-      lab.render(scope);
+      lab.render(scope, null, query && query.demo);
     } else if (view === 'studio') {
       store.setActiveNav('studio');
       studio.render(scope);
@@ -20880,7 +21103,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       return;
     }
     skipHash = null;
-    render(parse(hash));
+    render(parse(hash), parseQuery(hash));
   }
 
   /**

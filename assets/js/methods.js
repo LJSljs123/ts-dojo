@@ -770,7 +770,7 @@
       when: '任何时序模型的离线评估。',
       limit: '窗口长度与步长会显著影响结论；单次切分方差大，需多次重复取均值与区间。',
       runnable: true,
-      practice: 'p7-direct-multistep'
+      practice: 'p9-rolling-challenge'
     },
     {
       id: 'conformal',

@@ -19,7 +19,7 @@
 双击 ts-dojo-standalone.html
 ```
 
-它把 CSS 与 50 个脚本全部内联成一个约 855KB 的 HTML，**不依赖任何相对路径**。
+它把 CSS 与 51 个脚本全部内联成一个约 865KB 的 HTML，**不依赖任何相对路径**。
 所以无论是双击打开、丢进 http 服务器、还是被塞进 iframe / `srcdoc` / 预览面板里，都能正常渲染。
 
 **方式 B：模块化版**
@@ -35,7 +35,7 @@ python -m http.server 8080
 # 然后访问 http://localhost:8080
 ```
 
-模块化版有 50 个 `<script src>` + 4 个样式表，**必须保证 assets 目录随行**。
+模块化版有 51 个 `<script src>` + 4 个样式表，**必须保证 assets 目录随行**。
 如果它白屏，页面会自己显示「启动失败」面板并给出原因（脚本被拦截 / 资源 404 / 旧缓存），不会再无声无息。
 
 浏览器要求：Chrome / Edge / Firefox / Safari 近三年版本（需要 `Worker`、`canvas`、`localStorage`、`Proxy`）。
@@ -90,7 +90,7 @@ ts-dojo/
 ├── index.html                 # 模块化入口（含 CSP + 启动自检 + script 加载顺序）
 ├── ts-dojo-standalone.html    # 单文件版（由 tools/build-standalone.js 生成，勿手改）
 ├── tools/
-│   ├── build-standalone.js    # 把 CSS / 50 个 js 内联成单文件
+│   ├── build-standalone.js    # 把 CSS / 51 个 js 内联成单文件
 │   ├── stamp-assets.js        # 给 index.html 的 ?v= 打内容哈希（防旧缓存）
 │   └── numbers.js             # 口径计算：题数 / 方法数 / 脚本数 / 用例数（README 数字的唯一来源）
 ├── assets/
@@ -138,7 +138,7 @@ ts-dojo/
 │   ├── charts/                # v3 图表内核：core / series / diagnostics
 │   └── lab/                   # v3 实验室引擎：config / adapters / stats / runner
 ├── tests/
-│   ├── qa/                    # node --test tests/qa/*.test.js（259 条）
+│   ├── qa/                    # node --test tests/qa/*.test.js（263 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
 │   ├── starter-check.js       # 18 题模板原样提交必须全 WA
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
@@ -563,7 +563,7 @@ node tests/standalone-check.js  # 单文件版是否与源码同步、是否残�
 node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
 ```
 
-**测试规模：259 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
+**测试规模：263 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
 找不到浏览器时自动 skip，并在输出里注明「未验证」，不假装通过）。
 浏览器用例自带**全局文件锁**：多个测试文件并发时只会排队、不会同时 spawn 多个 Chromium，
 因此 `node --test tests/qa/*.test.js` 直接并发跑也是稳的。
@@ -676,11 +676,14 @@ P9 是唯一的例外形态：平均分 79 高于通过线，但窗口 1 只有 
 
 ### 进度导出 / 导入
 
-- 导出文件结构：`{ schema, app:'tsoj', exportedAt, data:{ progress, drafts, submissions }, hash }`，
+- 导出文件结构（v3.9 起为**全量备份**）：`{ schema:2, app:'tsoj', exportedAt, data:{ progress, drafts, submissions, extras }, hash }`，
   `hash` 是 `data` 的 FNV-1a 校验，用于识别「手改过的文件」。
 - 导入校验顺序：JSON 合法 → `app === 'tsoj'` → `schema <= 当前` → `hash` 匹配 → 字段白名单归一化。
   任一失败都给出具体原因，且**不动现有数据**。
 - 合并策略：`best = max`、`attempts` 相加、`passed` 取或、提交记录按 `id` 去重后按时间倒序截 120 条。
+- **v3.9 全量备份**：`extras` 键额外携带课程进度 / 成就 / 实验室记录 / 工坊实验与草稿 / 上传 CSV
+  （合并策略：成就取最早解锁、achMeta 取大、数组按 id/configHash 去重取新、草稿与 CSV 导入值优先）；
+  v1 旧备份文件（仅三键）仍可导入。
 
 ### 读取约定（把 storage 当不可信输入）
 

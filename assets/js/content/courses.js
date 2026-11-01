@@ -272,7 +272,7 @@
           example: '预测 y_{t+1} 时，rolling_mean 的窗口结束点必须是 t，不能包含 t+1。'
         }
       ],
-      demo: { kind: 'sandbox', id: 'feature-window', label: '打开窗口构造演示' },
+      demo: { kind: 'concept', id: 'feature-window', label: '查看窗口构造演示（概念级）' },
       exercise: {
         problemIds: ['p7-direct-multistep'],
         output: '给定小表构造无泄漏特征表，并标注每个特征可用时间。'

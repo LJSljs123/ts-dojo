@@ -46,11 +46,28 @@
    * @returns {string[]} 路径段（已过滤空段）
    */
   function parse(href) {
-    return String(href || '')
+    var s = String(href || '')
       .replace(/^#/, '')
-      .replace(/^\//, '')
+      .replace(/^\//, '');
+    // query（#/lab?demo=xxx）不进路径段：按视图需要单独解析
+    var q = s.indexOf('?');
+    if (q >= 0) s = s.slice(0, q);
+    return s
       .split('/')
-      .filter(function (s) { return s.length > 0; });
+      .filter(function (x) { return x.length > 0; });
+  }
+
+  /** 从 hash 里解析 query（#/lab?demo=x&y=1 → {demo:'x', y:'1'}；无 query 返回 {}）。 */
+  function parseQuery(href) {
+    var s = String(href || '');
+    var q = s.indexOf('?');
+    if (q < 0) return {};
+    var out = {};
+    s.slice(q + 1).split('&').forEach(function (kv) {
+      var eq = kv.indexOf('=');
+      if (eq > 0) out[decodeURIComponent(kv.slice(0, eq))] = decodeURIComponent(kv.slice(eq + 1));
+    });
+    return out;
   }
 
   /** 路径段 → 规范地址（`#/` 或 `#/a/b`）。 */
@@ -63,7 +80,7 @@
    *
    * @param {string[]} parts 路径段
    */
-  function render(parts) {
+  function render(parts, query) {
     var store = TSJ.appStore, a11y = TSJ.appA11y, lifecycle = TSJ.appLifecycle;
     var state = store.state;
     var problem = TSJ.appProblem, pages = TSJ.appPages, boards = TSJ.appBoards;
@@ -136,7 +153,7 @@
       learn.renderMap(scope);
     } else if (view === 'lab') {
       store.setActiveNav('lab');
-      lab.render(scope);
+      lab.render(scope, null, query && query.demo);
     } else if (view === 'studio') {
       store.setActiveNav('studio');
       studio.render(scope);
@@ -169,7 +186,7 @@
       return;
     }
     skipHash = null;
-    render(parse(hash));
+    render(parse(hash), parseQuery(hash));
   }
 
   /**

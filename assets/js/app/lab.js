@@ -13,7 +13,8 @@
   var esc = core.esc;
   var doc = global.document;
   var panels = TSJ.appLabPanels;
-  var KINDS = panels.KINDS;   // 诊断图类型注册在 panels（外壳渲染需要），这里只引用
+  var KINDS = panels.KINDS;
+  var DEMO_PRESETS = panels.DEMO_PRESETS;   // 诊断图类型注册在 panels（外壳渲染需要），这里只引用
 
   function $(id) { return doc.getElementById(id); }
 
@@ -43,15 +44,24 @@
   }
 
 
-  function render(scope, initialRaw) {
-    // 初始配置：默认值，或调用方传入（载入历史记录时）。
+  function render(scope, initialRaw, demoId) {
+    // 初始配置：默认值，或调用方传入（载入历史记录 / 课程演示预设）。
     // 注意不能在这里无条件用 defaults —— 否则「载入配置 / 恢复记录」会被默认值覆盖。
-    var initial = TSJ.labConfig.normalize(initialRaw || TSJ.labConfig.defaults());
+    var preset = demoId ? DEMO_PRESETS[demoId] : null;
+    var seed = initialRaw;
+    if (!seed && preset) {
+      seed = TSJ.labConfig.defaults();
+      Object.keys(preset.raw).forEach(function (k) {
+        if (k === 'split') { seed.split = preset.raw.split; return; }
+        seed[k] = preset.raw[k];
+      });
+    }
+    var initial = TSJ.labConfig.normalize(seed || TSJ.labConfig.defaults());
     var ctx = {
       config: initial.config,
       result: null,
       originIndex: 0,
-      kind: 'forecast',
+      kind: (preset && preset.kind) || 'forecast',
       chart: null,
       token: 0,
       busy: false,
@@ -77,8 +87,7 @@
       if (!wrap || !canvas || !ctx.result) return;
       if (ctx.chart && ctx.chart.destroy) ctx.chart.destroy();
       var origin = ctx.result.origins[ctx.originIndex] || ctx.result.origins[0];
-      var model;
-      var kind = ctx.kind;
+      var model, kind = ctx.kind;
       if (kind === 'forecast') model = panels.originModel(origin);
       else if (kind === 'residual') {
         model = { residuals: origin.actual.map(function (a, i) { return a - origin.prediction[i]; }) };

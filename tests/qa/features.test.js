@@ -185,7 +185,7 @@ test('T05 导出 → 清空 → 导入：progress / drafts / submissions 逐字�
   const diffDisk = diffDeep(out.before, out.disk, '', []);
   console.log('    逐字段 diff（before vs 落盘）：' + (diffDisk.length === 0 ? '无差异' : JSON.stringify(diffDisk)));
 
-  assert.equal(out.schema, 1);
+  assert.equal(out.schema, 2);
   assert.equal(out.app, 'tsoj');
   assert.equal(out.hashLen, 8, 'hash 应为 8 位 FNV-1a 十六进制');
   assert.match(out.fileName, /^tsoj-progress-\d{8}\.json$/);

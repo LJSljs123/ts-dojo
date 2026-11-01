@@ -500,3 +500,20 @@ L01 启动 · L02 点导航后应用还在 · L03 连续跳转 · L04 跳转链�
 H01 `sandbox="allow-scripts"` 里点导航真的换页（跨源 → postMessage 桥 + 真实鼠标坐标）· H02 运行期错误不许升级成全屏遮罩 · H03 禁脚本时兜底卡片必须落在首屏内。
 
 注入验证：去掉遮罩守卫 → H02 红；删掉 `.boot-noscript` 的 fixed 样式 → H03 红（`top=820` vs 视口 800）。
+
+## v3.9：深度分析改造——数据全生命周期 + 演示链路修复 + 内容闭环
+
+### 深度分析（数据驱动，四个真实缺口）
+
+1. **导出/导入只覆盖 3/13 个存储键**：「换机不丢记录」承诺对课程进度、成就、实验室记录、工坊实验、上传 CSV 全部失效（高）。
+2. **课程「打开演示」链接是死链**：`#/lab?demo=x` 的 query 从未被解析，路由匹配失败落到题库（高，比死链更糟）。
+3. **backtest 方法卡错链 p7**：滚动回测卡指向直接多步题，p9 才是完全同题（中）。
+4. **工坊缺能力边界说明**：P17/P18 依赖 ctx 协变量扩展，工坊单变量范围未告知（低）。
+
+### 修复
+
+- **全量备份 v2（schema 2）**：`storage.js` 导出时收集 extras 八键（课程进度/成就/achMeta/实验室/工坊实验/两个草稿/上传 CSV），`parseBundle` 结构白名单校验；新增 `storage-extras.js` 合并落盘（成就取最早解锁、achMeta 取大、数组按 id/configHash 去重取新、草稿与 CSV 导入值优先）；v1 旧文件向后兼容。**注入模式解耦**：storage.js 暴露 `setExtrasMerger`，storage-extras 自注册——不违反「只能引用更早加载命名空间」的静态依赖铁律。开发中抓出并修复 3 个自伤 bug：extras 未挂回 data（合并层永远拿不到）、computed-key 笔误（`extras[STORE.studioCsv.values]`）、CSV 写入后误调 remove()。
+- **router query 支持**：`parseQuery()` 从 hash 剥离 query；`#/lab?demo=<id>` 经 `DEMO_PRESETS`（6 个课程演示 → 数据集/方法/切分/诊断图预设）落到实验室真实配置；m3 的 feature-window 演示改概念级（实验室无对应方法，不冒充可运行）。
+- **内容闭环**：backtest.practice p7→p9；工坊页头注明单变量范围。
+- **测试**：新增 backup.test.js（3 条：extras 八键往返 / 合并策略 / 篡改拒绝 + v1 兼容）与 demo 预设端到端 1 条；metrics 集合断言 6 指标；features schema 断言 2。
+- **验证**：263 条全绿 0 skip；四件套全过；`tools/numbers.js` README 口径一致；app 层全部文件 ≤350 行（lab.js 344 / storage.js 291 / storage-extras 104）。

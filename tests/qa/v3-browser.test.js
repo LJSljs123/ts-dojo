@@ -878,3 +878,28 @@ test('视口：笔记本高度下工坊可用，移动端工具栏不裁切主�
     await page.send('Emulation.clearDeviceMetricsOverride');
   }
 });
+
+test('课程演示预设：#/lab?demo= 真正落到配置（v3.9 死链修复回归）', async (t) => {
+  if (!page) return t.skip('无浏览器');
+  // croston 演示：应选中 intermittent 数据集 + TSB 方法（原 bug：落进题库）
+  await goto('#/lab?demo=croston');
+  const st1 = await page.evaluate(`JSON.stringify({
+    view: document.getElementById('labMethod') ? 'lab' : 'other',
+    method: (document.getElementById('labMethod')||{}).value,
+    dataset: (document.getElementById('labDataset')||{}).value
+  })`);
+  const s1 = JSON.parse(st1);
+  assert.equal(s1.view, 'lab', '演示链接未落在实验室：' + st1);
+  assert.equal(s1.method, 'tsb', 'croston 演示应预设 TSB 方法：' + st1);
+  assert.equal(s1.dataset, 'intermittent', 'croston 演示应预设间歇需求数据集：' + st1);
+  // rolling 演示：切分模式应为滚动回测且窗口数解锁
+  await goto('#/lab?demo=rolling');
+  const st2 = await page.evaluate(`JSON.stringify({
+    mode: (document.getElementById('labMode')||{}).value,
+    windowsDisabled: (document.getElementById('labWindows')||{}).disabled
+  })`);
+  const s2 = JSON.parse(st2);
+  assert.equal(s2.mode, 'rolling', 'rolling 演示应预设滚动回测：' + st2);
+  assert.equal(s2.windowsDisabled, false, '滚动模式下窗口数不应禁用');
+  assert.deepEqual(page.exceptions, [], '演示预设出现异常：' + JSON.stringify(page.exceptions));
+});

@@ -98,7 +98,7 @@
       '<div class="wk-hero wk-hero-slim"><div class="wk-hero-main">',
       '  <div class="wk-kicker">模型工坊</div>',
       '  <h1>自己搓一个模型，跑完完整实验流程</h1>',
-      '  <p>训练逻辑写在 predict 里（只能用 history）——验证集上随便迭代，最终评测一次定论。沙箱、超时、防泄漏与判题完全同源。</p>',
+      '  <p>训练逻辑写在 predict 里（只能用 history）——验证集上随便迭代，最终评测一次定论。沙箱、超时、防泄漏与判题完全同源。范围：单变量模型；协变量题（P17/P18 依赖 ctx 扩展字段）请到题库练习。</p>',
       '</div></div>',
       '<div class="problem-layout studio-layout" id="studioLayout">',
       '<section class="pane pane-left">',

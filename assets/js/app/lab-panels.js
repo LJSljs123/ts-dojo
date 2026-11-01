@@ -11,6 +11,20 @@
   var core = TSJ.appCore;
   var esc = core.esc;
 
+  /**
+   * 课程「打开演示」预设（#/lab?demo=<id>，由 router 传入 lab.js）：
+   * 把课程概念映射成一组可运行的实验室配置 + 默认诊断图。
+   * feature-window（m3 特征工程）在实验室没有对应方法，课程侧为概念级演示。
+   */
+  var DEMO_PRESETS = {
+    'decomposition': { raw: { datasetId: 'airline', method: 'holt-winters' }, kind: 'decomposition' },
+    'acf-pacf': { raw: { datasetId: 'airline', method: 'ses' }, kind: 'acf' },
+    'dlinear': { raw: { datasetId: 'electricity', method: 'dlinear' }, kind: 'forecast' },
+    'intervals': { raw: { datasetId: 'airline', method: 'holt-winters' }, kind: 'forecast' },
+    'rolling': { raw: { datasetId: 'airline', method: 'holt-winters', split: { mode: 'rolling', horizon: 12, windows: 4, originStep: 12 } }, kind: 'forecast' },
+    'croston': { raw: { datasetId: 'intermittent', method: 'tsb' }, kind: 'forecast' }
+  };
+
   /** 诊断图类型（lab.js 与结果外壳共用同一份注册表）。 */
   var KINDS = [
     { id: 'forecast', label: '预测对比' },
@@ -166,6 +180,7 @@
 
   TSJ.appLabPanels = {
     KINDS: KINDS,
+    DEMO_PRESETS: DEMO_PRESETS,
     paramsHtml: paramsHtml,
     metricChecks: metricChecks,
     configPanel: configPanel,
