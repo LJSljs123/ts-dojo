@@ -50,7 +50,6 @@
     var cnt = { AC: 0, WA: 0, RE: 0, TLE: 0 };
     subs.forEach(function (s) { if (cnt[s.verdict] != null) cnt[s.verdict]++; });
     var total = subs.length || 1;
-    var cls = { AC: 'vm-ac', WA: 'vm-wa', RE: 'vm-re', TLE: 'vm-tle' };
     var bars = order.map(function (v) {
       var pct = Math.round((cnt[v] / total) * 100);
       return '<div class="wk-dbar"><span class="wk-dbar-name">' + v + '</span>' +

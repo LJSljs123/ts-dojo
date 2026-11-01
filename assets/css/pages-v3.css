@@ -687,3 +687,6 @@
 .studio-cov { margin-top: var(--v3-space-3); }
 .studio-cov .ds-card-sub { display: block; margin-bottom: 6px; }
 .studio-cov .ds-badge { margin-right: 4px; cursor: pointer; }
+
+/* RE/TLE 段在 verdict 分布条中用警示色 */
+.wk-dbar-bad { background: var(--v3-err) !important; }

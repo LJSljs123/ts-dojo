@@ -2970,6 +2970,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 .studio-cov .ds-card-sub { display: block; margin-bottom: 6px; }
 .studio-cov .ds-badge { margin-right: 4px; cursor: pointer; }
 
+/* RE/TLE 段在 verdict 分布条中用警示色 */
+.wk-dbar-bad { background: var(--v3-err) !important; }
+
 </style>
 
 <!-- 启动自检：脚本被拦 / 加载失败 / 1.5s 内没渲染出内容 → 直接把原因显示出来，绝不留白屏 -->
@@ -20782,7 +20785,6 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     var cnt = { AC: 0, WA: 0, RE: 0, TLE: 0 };
     subs.forEach(function (s) { if (cnt[s.verdict] != null) cnt[s.verdict]++; });
     var total = subs.length || 1;
-    var cls = { AC: 'vm-ac', WA: 'vm-wa', RE: 'vm-re', TLE: 'vm-tle' };
     var bars = order.map(function (v) {
       var pct = Math.round((cnt[v] / total) * 100);
       return '<div class="wk-dbar"><span class="wk-dbar-name">' + v + '</span>' +
