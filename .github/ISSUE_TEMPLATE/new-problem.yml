@@ -1,0 +1,47 @@
+name: 新题提案
+about: 提议一道新的判题题目
+title: '[新题] '
+labels: ['new-problem']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提案不必自带完整实现——把「教什么、用什么数据、怎么标定」说清楚即可。
+        正式落地请读 CONTRIBUTING.md 的「加一道题」流程（含 P16 先例）。
+  - type: textarea
+    id: topic
+    attributes:
+      label: 教学主题
+      description: 这道题教会什么？对应方法库哪张卡（如有）？为什么现有 18 题覆盖不了？
+    validations:
+      required: true
+  - type: dropdown
+    id: dataset
+    attributes:
+      label: 数据集
+      options:
+        - 复用现有 10 套之一（注明哪套）
+        - 需要新合成数据集
+    validations:
+      required: true
+  - type: dropdown
+    id: metric
+    attributes:
+      label: 评分指标
+      options:
+        - mse（现有）
+        - mae（现有）
+        - pinball（现有，τ=0.95）
+        - 需要新指标（说明为何现有 6 个不行——注意判题语义锁死，新指标必须纯增量）
+    validations:
+      required: true
+  - type: textarea
+    id: calibration
+    attributes:
+      label: 标定思路
+      description: 参考解大致思路；为什么能打败最优基线；预期阈值范围
+  - type: textarea
+    id: pitfalls
+    attributes:
+      label: 陷阱设计（starter 的洞）
+      description: 模板保留什么洞，让学习者踩到什么（必须 WA 而非 RE/TLE）

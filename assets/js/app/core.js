@@ -29,6 +29,24 @@
    * 上传 CSV，见 storage.js 的 EXTRAS），旧 v1 文件（仅三键）仍可导入。
    */
   var CURRENT_SCHEMA = 2;
+  /** 应用版本（CHANGELOG 顶端为准；备份文件记录它，导入旧/新备份时给出语境）。 */
+  var VERSION = '3.9.1';
+
+  /**
+   * 版本比较：a 比 b 新返回 1、旧返回 -1、相同返回 0。
+   * 只比数字段（'3.9.1' / '3.9' 均可），非数字段按 0 处理，长度不齐补 0 比较。
+   */
+  function compareVersion(a, b) {
+    var pa = String(a == null ? '' : a).split('.');
+    var pb = String(b == null ? '' : b).split('.');
+    for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
+      var na = Number(pa[i]) || 0;
+      var nb = Number(pb[i]) || 0;
+      if (na > nb) return 1;
+      if (na < nb) return -1;
+    }
+    return 0;
+  }
   /** 单条提交记录里代码快照的截断上限（20KB） */
   var CODE_LIMIT = 20 * 1024;
   /** 提交记录保留条数 */
@@ -260,6 +278,8 @@
     STORE: STORE,
     STORAGE_PREFIX: STORAGE_PREFIX,
     CURRENT_SCHEMA: CURRENT_SCHEMA,
+    VERSION: VERSION,
+    compareVersion: compareVersion,
     CODE_LIMIT: CODE_LIMIT,
     MAX_SUBMISSIONS: MAX_SUBMISSIONS,
     MAX_CASES: MAX_CASES,

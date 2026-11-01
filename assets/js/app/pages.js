@@ -122,8 +122,14 @@
             a11y.toast('导入失败：' + result.reason, 'err');
             return;
           }
+          var verNote = '';
+          if (result.appVersion && core.compareVersion(result.appVersion, core.VERSION) > 0) {
+            verNote = ' · ⚠ 备份来自更新版本 v' + result.appVersion + '（当前 v' + core.VERSION + '），部分数据可能无法识别';
+          } else if (result.appVersion) {
+            verNote = ' · v' + result.appVersion;
+          }
           a11y.toast('导入成功：进度 ' + result.counts.progress + ' 题 · 草稿 ' +
-            result.counts.drafts + ' 份 · 提交 ' + result.counts.submissions + ' 条', 'ok');
+            result.counts.drafts + ' 份 · 提交 ' + result.counts.submissions + ' 条' + verNote, 'ok');
           doRefresh();
         });
       });

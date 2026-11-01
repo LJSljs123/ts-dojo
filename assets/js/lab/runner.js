@@ -181,7 +181,7 @@
         ok: true,
         canceled: false,
         schema: 1,
-        appVersion: '3.2.0',
+        appVersion: (TSJ.appCore && TSJ.appCore.VERSION) || '3.9.1',
         algorithmVersion: 'lab-1',
         datasetVersion: 'datasets-' + ((TSJ.datasets || []).length),
         createdAt: Date.now(),

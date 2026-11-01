@@ -1,5 +1,18 @@
 # 时序竞技场 TSOJ · 时间序列预测在线判题平台
 
+[![Deploy to GitHub Pages](https://github.com/LJSljs123/ts-dojo/actions/workflows/deploy.yml/badge.svg)](https://github.com/LJSljs123/ts-dojo/actions/workflows/deploy.yml)
+
+**TSOJ · Time-Series Arena** — an online judge for time-series forecasting, fully client-side:
+zero dependencies, zero build steps, works offline from a single HTML file.
+Write a `predict(history, horizon, ctx)` function, submit, and beat statistical baselines
+to score points and unlock editorial solutions.
+
+Includes **18 judged problems**, **47 annotated methods** (classic statistics through
+2024-2026 foundation models), **9 courses**, a visual experiment lab with live parameter
+sliders, and a model studio with a strict train/val/test experiment protocol.
+
+> **Online**: <https://ljsljs123.github.io/ts-dojo/> (auto-deploys on push to main)
+
 一个**纯前端、零依赖、零构建**的时间序列预测在线判题学习平台（类洛谷）：看题 → 写代码 → 提交 → 判题给分 → 解锁题解。
 
 - **无需安装任何东西**：双击 `index.html` 即可使用（`file://` 协议下完整可用）。
@@ -12,6 +25,8 @@
 ---
 
 ## 一、如何运行
+
+**方式 A0（最省事）：在线版**——<https://ljsljs123.github.io/ts-dojo/>（推送 main 自动部署，GitHub Pages + Actions，见 `.github/workflows/deploy.yml`）。
 
 **方式 A（推荐，最不容易出问题）：单文件版**
 
@@ -144,6 +159,11 @@ ts-dojo/
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
 │   └── standalone-check.js    # 单文件产物校验（是否过期 / 有无外部引用 / 是否被截断）
 ├── CHANGELOG.md               # v3.2 → v3.9 逐版变更记录
+├── ROADMAP.md                 # 三阶段升级路线（触达/能力闭环/机会型）+ 不做清单
+├── CONTRIBUTING.md            # 贡献指南（铁律 / 开发循环 / 加题标定流程）
+├── 404.html                   # Pages 未知路径兜底（回首页，hash 路由说明）
+├── .github/workflows/         # Pages 自动部署（push main → Actions 发布）
+├── .github/ISSUE_TEMPLATE/    # bug / 新题提案 / 功能建议表单
 ├── docs/archive/              # 历史设计文档（v1 审查 / v2.2 施工图 / v3 PRD 与架构 / 接手审计）
 └── README.md
 ```

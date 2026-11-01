@@ -72,6 +72,7 @@
     return {
       schema: core.CURRENT_SCHEMA,
       app: 'tsoj',
+      appVersion: core.VERSION,
       exportedAt: Date.now(),
       data: data,
       hash: core.fnv1a(JSON.stringify(data))
@@ -178,7 +179,11 @@
       submissions: data.submissions.length,
       extras: extras ? Object.keys(extras).length : 0
     };
-    return { ok: true, reason: '', data: data, schema: ver, counts: counts };
+    return {
+      ok: true, reason: '', data: data, schema: ver, counts: counts,
+      // 备份自带的应用版本：导入侧用来提示「备份比当前程序还新」这类语境
+      appVersion: typeof obj.appVersion === 'string' ? obj.appVersion : null
+    };
   }
 
   /**
@@ -234,7 +239,7 @@
       }
       if (!parsed.ok) { cb({ ok: false, reason: parsed.reason, counts: null }); return; }
       var counts = applyImport(parsed.data);
-      cb({ ok: true, reason: '', counts: counts, schema: parsed.schema });
+      cb({ ok: true, reason: '', counts: counts, schema: parsed.schema, appVersion: parsed.appVersion });
     };
     reader.readAsText(file, 'utf-8');
   }

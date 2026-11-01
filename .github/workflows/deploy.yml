@@ -1,0 +1,47 @@
+name: Deploy to GitHub Pages
+
+# 纯静态零构建站点：main 分支每次推送自动发布到 Pages。
+# 前提（一次性）：仓库 Settings → Pages → Source 选「GitHub Actions」。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个部署，新推送取消旧的
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 只发布运行所需文件；测试 / 工具 / 文档留在仓库里不上站
+      - name: Assemble site
+        run: |
+          mkdir -p dist
+          cp index.html ts-dojo-standalone.html 404.html dist/
+          cp -r assets dist/assets
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

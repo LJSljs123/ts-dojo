@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>时序竞技场 TSOJ · 页面不存在</title>
+<style>
+  body { font: 15px/1.8 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #0d1117; color: #e6edf3; margin: 0; padding: 60px 20px;
+         display: flex; justify-content: center; }
+  .box { max-width: 560px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  code { color: #7dd3fc; font-family: ui-monospace, Consolas, monospace; }
+  a { color: #2dd4bf; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  p.muted { color: #8b98a9; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>404 · 这个地址不存在</h1>
+  <p>时序竞技场使用 hash 路由：正确地址形如 <code>/ts-dojo/#/problems</code>。</p>
+  <p class="muted">正在带你回到首页…（<a href="./">立即跳转</a>）</p>
+  <script>
+    // 单页应用 + hash 路由：未知路径统一回首页，避免多一跳历史记录
+    try { location.replace('./'); } catch (e) { /* 保留手动链接兜底 */ }
+  </script>
+</div>
+</body>
+</html>

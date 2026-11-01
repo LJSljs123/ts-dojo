@@ -1,0 +1,59 @@
+name: Bug 报告
+about: 报告一个可复现的问题
+title: '[bug] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢报告！请先确认：**265 条 QA 全绿的前提下**这个问题仍然存在（`node --test tests/qa/*.test.js`）。
+  - type: dropdown
+    id: entry
+    attributes:
+      label: 入口方式
+      options:
+        - GitHub Pages 在线版
+        - 单文件版 ts-dojo-standalone.html（file:// 双击）
+        - 模块化版 index.html（file:// 双击）
+        - 模块化版（http 服务器）
+    validations:
+      required: true
+  - type: dropdown
+    id: browser
+    attributes:
+      label: 浏览器
+      options:
+        - Chrome/Edge 最新
+        - Firefox 最新
+        - Safari 最新
+        - 其他（请在描述中注明版本）
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从打开哪个页面开始，依次做了什么
+      placeholder: |
+        1. 打开 #/lab
+        2. 选择 xxx
+        3. 点击「运行实验」
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望与实际
+      placeholder: 期望……实际……
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: 控制台输出
+      description: F12 → Console 的报错（如有）
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 提交哈希或 CHANGELOG 里的版本号

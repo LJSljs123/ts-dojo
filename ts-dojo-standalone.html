@@ -14557,7 +14557,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
         ok: true,
         canceled: false,
         schema: 1,
-        appVersion: '3.2.0',
+        appVersion: (TSJ.appCore && TSJ.appCore.VERSION) || '3.9.1',
         algorithmVersion: 'lab-1',
         datasetVersion: 'datasets-' + ((TSJ.datasets || []).length),
         createdAt: Date.now(),
@@ -14734,6 +14734,24 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
    * 上传 CSV，见 storage.js 的 EXTRAS），旧 v1 文件（仅三键）仍可导入。
    */
   var CURRENT_SCHEMA = 2;
+  /** 应用版本（CHANGELOG 顶端为准；备份文件记录它，导入旧/新备份时给出语境）。 */
+  var VERSION = '3.9.1';
+
+  /**
+   * 版本比较：a 比 b 新返回 1、旧返回 -1、相同返回 0。
+   * 只比数字段（'3.9.1' / '3.9' 均可），非数字段按 0 处理，长度不齐补 0 比较。
+   */
+  function compareVersion(a, b) {
+    var pa = String(a == null ? '' : a).split('.');
+    var pb = String(b == null ? '' : b).split('.');
+    for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
+      var na = Number(pa[i]) || 0;
+      var nb = Number(pb[i]) || 0;
+      if (na > nb) return 1;
+      if (na < nb) return -1;
+    }
+    return 0;
+  }
   /** 单条提交记录里代码快照的截断上限（20KB） */
   var CODE_LIMIT = 20 * 1024;
   /** 提交记录保留条数 */
@@ -14965,6 +14983,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     STORE: STORE,
     STORAGE_PREFIX: STORAGE_PREFIX,
     CURRENT_SCHEMA: CURRENT_SCHEMA,
+    VERSION: VERSION,
+    compareVersion: compareVersion,
     CODE_LIMIT: CODE_LIMIT,
     MAX_SUBMISSIONS: MAX_SUBMISSIONS,
     MAX_CASES: MAX_CASES,
@@ -15568,6 +15588,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     return {
       schema: core.CURRENT_SCHEMA,
       app: 'tsoj',
+      appVersion: core.VERSION,
       exportedAt: Date.now(),
       data: data,
       hash: core.fnv1a(JSON.stringify(data))
@@ -15674,7 +15695,11 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       submissions: data.submissions.length,
       extras: extras ? Object.keys(extras).length : 0
     };
-    return { ok: true, reason: '', data: data, schema: ver, counts: counts };
+    return {
+      ok: true, reason: '', data: data, schema: ver, counts: counts,
+      // 备份自带的应用版本：导入侧用来提示「备份比当前程序还新」这类语境
+      appVersion: typeof obj.appVersion === 'string' ? obj.appVersion : null
+    };
   }
 
   /**
@@ -15730,7 +15755,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       }
       if (!parsed.ok) { cb({ ok: false, reason: parsed.reason, counts: null }); return; }
       var counts = applyImport(parsed.data);
-      cb({ ok: true, reason: '', counts: counts, schema: parsed.schema });
+      cb({ ok: true, reason: '', counts: counts, schema: parsed.schema, appVersion: parsed.appVersion });
     };
     reader.readAsText(file, 'utf-8');
   }
@@ -17512,8 +17537,14 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
             a11y.toast('导入失败：' + result.reason, 'err');
             return;
           }
+          var verNote = '';
+          if (result.appVersion && core.compareVersion(result.appVersion, core.VERSION) > 0) {
+            verNote = ' · ⚠ 备份来自更新版本 v' + result.appVersion + '（当前 v' + core.VERSION + '），部分数据可能无法识别';
+          } else if (result.appVersion) {
+            verNote = ' · v' + result.appVersion;
+          }
           a11y.toast('导入成功：进度 ' + result.counts.progress + ' 题 · 草稿 ' +
-            result.counts.drafts + ' 份 · 提交 ' + result.counts.submissions + ' 条', 'ok');
+            result.counts.drafts + ' 份 · 提交 ' + result.counts.submissions + ' 条' + verNote, 'ok');
           doRefresh();
         });
       });

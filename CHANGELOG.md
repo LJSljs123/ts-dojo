@@ -531,3 +531,11 @@ H01 `sandbox="allow-scripts"` 里点导航真的换页（跨源 → postMessage 
 - **导入消毒（P2）**：备份 extras 里的 CSV `values` 可能被手改成垃圾（字符串/对象/超长）——
   合并落盘前过滤有限数值并截到 5000 点，name/season 白名单化。
 - 验证：265 条全绿 0 skip；四件套全过；README 口径一致（tools/numbers.js）。
+
+## v3.10：阶段一——触达与包装
+
+- **GitHub Pages 自动部署**：`.github/workflows/deploy.yml`（push main → Actions 组装 dist：index/standalone/404/assets → deploy-pages）；`404.html` 未知路径兜底（hash 路由说明 + 回首页）。启用前提：仓库 Settings → Pages → Source 选 GitHub Actions。
+- **README 国际门面**：英文简介段（项目一句话 + 规模）+ Pages 徽章 + 运行方式新增「方式 A0 在线版」。
+- **社区化**：CONTRIBUTING.md（四条铁律 / 开发循环八命令 / 加题八步标定流程 / 代码风格 / 提交规范）；issue 模板（bug 表单 / 新题提案表单 / 功能建议）。
+- **备份带 appVersion**：bundle 记录 `core.VERSION`（新增中央版本常量 + `compareVersion` 助手）；导入时透传，备份比当前程序新则 toast 警告；lab runner 陈旧 appVersion 同步。
+- 验证：265 条全绿 0 skip；四件套全过；numbers 口径一致。
