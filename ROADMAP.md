@@ -53,3 +53,21 @@
 1. 判题语义锁死：metrics/baselines/scoreForRatio/buildTestPoints 一行不改，新能力走纯增量（P16/P17 先例）
 2. 265+ 测试全绿 0 skip；`tools/numbers.js` 口径一致；app 层文件 ≤350 行
 3. 零依赖、零构建、file:// 可用、connect-src 'none' 四条产品约束不可破
+
+---
+
+## 阶段二执行记录（2026-11-01）
+
+- ✅ #5 工坊协变量支持：promoDays/parts 注入开关 + COV 示范模板 + 记录标记（commit 206cc4e）
+- ✅ #6 学习报告页 #/report：难度段 / verdict 分布 / 泛化差距 / 建议下一步
+- ✅ #8 成就扩展：促销感知 / 渠道拆解 / 三轮迭代 / 档案管理员（+4 → 12 枚）
+- ✅ #9 工坊对比视图：同数据集 final ≥2 条的 MSE 对比表 + 载回
+- ⏸ #7 P19 缺失值插补题 → **可行性评估完成，设计已定稿，实施延后**：
+  - **结论**：纯增量路径可行，但成本超预期——history 含 null 时 naive/seasonal_naive/mean
+    三条基线会产生 NaN 传播（pinball/mse 对 NaN 的处理各有假设），且 buildTestPoints
+    对含 null 窗口的 trainLen 计算需要新增「有效点」口径。两类改法：
+    a) metrics 层加 null 跳过（改 5 个指标的循环——触碰判题语义锁死红线，不做）；
+    b) 数据集层发掩码 ctx.missing，history 仍传 null，用户代码自行插补，基线在
+       judge 内部先用「前值填充」预处理再走现有管线（judge.js 纯增量 ~15 行）。
+    **推荐 b**，但需要 6 条新基线 NaN 行为测试 + 1 条沙箱回归，成本 ~1 天。
+  - 触发条件：有真实学习者反馈「缺数据」是痛点时再启动。
