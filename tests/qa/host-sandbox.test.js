@@ -136,6 +136,14 @@ test('H01 不透明源沙箱里应用能启动，点导航真的换页', async (
     assert.equal(first.s.cur, '#/', '初始路由不是工作台（' + first.s.cur + '）');
     assert.deepEqual(first.e, [], '启动期有异常：' + JSON.stringify(first.e));
 
+    // 首次引导现在会留在屏幕上（这是修复后的正确行为）。不透明源里
+    // 往往写不了 localStorage，所以用 Esc 把弹层关掉再测导航。
+    await page.send('Input.dispatchKeyEvent', {
+      type: 'keyDown', key: 'Escape', code: 'Escape',
+      windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27
+    });
+    await sleep(300);
+
     // 点「题库」——这是用户最先点的那个链接
     assert.ok(first.s.rect && first.s.rect.w > 0, '拿不到「题库」的坐标（顶栏折叠？）');
     await clickAt(page, first.s.rect.x, first.s.rect.y);

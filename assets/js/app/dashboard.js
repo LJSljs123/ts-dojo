@@ -112,23 +112,83 @@
       '<div class="wk-ach-row">' + chips + '</div></div>';
   }
 
+
+  /** 课程标题在「：」前的短名，避免工作台按钮被长副标题撑爆。 */
+  function shortTitle(title) {
+    var s = String(title || '');
+    var i = s.indexOf('：');
+    if (i > 0 && i <= 10) return s.slice(0, i);
+    return s;
+  }
+
+  /** 还没有任何做题 / 课程 / 实验记录的访客。 */
+  function isFresh(state) {
+    if ((state.submissions || []).length) return false;
+    var id;
+    for (id in state.progress) {
+      if (!Object.prototype.hasOwnProperty.call(state.progress, id)) continue;
+      var rec = state.progress[id];
+      if (rec && (rec.passed || rec.attempts || rec.best)) return false;
+    }
+    if (doneCount(readProgress()) > 0) return false;
+    if (TSJ.appLabStorage && typeof TSJ.appLabStorage.list === 'function' && TSJ.appLabStorage.list().length) {
+      return false;
+    }
+    return true;
+  }
+
+  /** 下一道尚未通过的题（按题号顺序）。 */
+  function nextProblem(state) {
+    var i;
+    for (i = 0; i < TSJ.problems.length; i++) {
+      var rec = state.progress[TSJ.problems[i].id];
+      if (!rec || rec.passed !== true) return TSJ.problems[i];
+    }
+    return null;
+  }
+
   function render(scope) {
     var state = store.state;
     var lesson = nextLesson();
     var subs = recentSubmissions(5);
     var labs = recentExperiments(5);
+    var fresh = isFresh(state);
+    var upcoming = nextProblem(state);
+    var cta = [];
+    if (fresh) {
+      cta.push('<a class="ds-btn ds-btn-primary" href="#/learn/m0">开始零基础第一课</a>');
+      cta.push('<a class="ds-btn" href="#/problem/p1-naive">打开第 1 题</a>');
+      cta.push('<a class="ds-btn" href="#/learn">查看课程地图</a>');
+      cta.push('<a class="ds-btn" href="#/methods">浏览方法库</a>');
+    } else {
+      if (upcoming) {
+        cta.push('<a class="ds-btn ds-btn-primary" href="#/problem/' + encodeURIComponent(upcoming.id) + '">继续做题：#' + upcoming.index + ' ' + esc(upcoming.title) + '</a>');
+      } else {
+        cta.push('<a class="ds-btn ds-btn-primary" href="#/lab">进入可视化实验室</a>');
+      }
+      if (lesson) {
+        cta.push('<a class="ds-btn" href="#/learn/' + encodeURIComponent(lesson.id) + '">继续学习：' + esc(shortTitle(lesson.title)) + '</a>');
+      } else {
+        cta.push('<a class="ds-btn" href="#/learn">查看课程地图</a>');
+      }
+      cta.push('<a class="ds-btn" href="#/methods">浏览方法库</a>');
+      cta.push('<a class="ds-btn" href="#/report">查看学习报告</a>');
+    }
 
     var html = [
       '<div class="wk-hero">',
       '  <div class="wk-hero-main">',
-      '    <div class="wk-kicker">TSOJ v3 · 研究工作台</div>',
-      '    <h1>看数据、选方法、回测、诊断、复盘</h1>',
-      '    <p>先用基线与评估建立可靠判断，再进入高阶方法。所有实验都固定数据版本、切分协议与指标；本地进度可导出，换机器不丢记录。</p>',
+      fresh
+        ? '    <div class="wk-kicker">TSOJ · 时间序列预测在线判题</div>'
+        : '    <div class="wk-kicker">TSOJ v3 · 研究工作台</div>',
+      fresh
+        ? '    <h1>从第一课开始，看数据再写预测</h1>'
+        : '    <h1>看数据、选方法、回测、诊断、复盘</h1>',
+      fresh
+        ? '    <p>写一个 predict 函数，提交后打败统计基线就能得分、解锁题解。课程、题库、实验室都在本机完成，不用注册、也不用安装。</p>'
+        : '    <p>先用基线与评估建立可靠判断，再进入高阶方法。所有实验都固定数据版本、切分协议与指标；本地进度可导出，换机器不丢记录。</p>',
       '    <div class="wk-cta-row">',
-      '      <a class="ds-btn ds-btn-primary" href="#/lab">进入可视化实验室</a>',
-      lesson ? '<a class="ds-btn" href="#/learn/' + encodeURIComponent(lesson.id) + '">继续学习：' + esc(lesson.title) + '</a>' : '<a class="ds-btn" href="#/learn">查看课程地图</a>',
-      '      <a class="ds-btn" href="#/methods">浏览方法库</a>',
-      '      <a class="ds-btn" href="#/glossary">新手术语表</a>',
+      cta.join(''),
       '    </div>',
       '  </div>',
       '  <div class="wk-side-stack">',

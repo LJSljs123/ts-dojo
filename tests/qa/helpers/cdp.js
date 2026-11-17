@@ -16,6 +16,14 @@ const CANDIDATES = [
   'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium-browser',
+  '/usr/bin/chromium',
+  '/usr/bin/microsoft-edge-stable',
+  '/usr/bin/microsoft-edge',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge'
 ];
 
 function findBrowser() {
@@ -207,6 +215,8 @@ async function launchInner(url, opts) {
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-extensions',
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
       '--remote-debugging-port=' + port,
       '--user-data-dir=' + profile,
       '--allow-file-access-from-files',

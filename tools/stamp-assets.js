@@ -48,7 +48,9 @@ function scan(html) {
   REF.lastIndex = 0;
   while ((m = REF.exec(html))) {
     const ref = m[2];
-    if (/^(?:https?:)?\/\//.test(ref) || ref.charAt(0) === '#') continue;
+    if (/^(?:https?:)?\/\//.test(ref) || ref.charAt(0) === '#' || ref.charAt(0) === '/') continue;
+    // 只给会进缓存的样式表 / 脚本打标；canonical、触摸图标等站点元数据不参与
+    if (!/\.(?:css|js)$/i.test(ref)) continue;
     out.push({
       ref: ref,
       token: m[3] || '',

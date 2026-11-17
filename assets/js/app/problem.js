@@ -1,5 +1,5 @@
 /**
- * assets/js/app/problem.js —— 题目页（题面 + 编辑器 + 工具栏）、题解、首次进入引导
+ * assets/js/app/problem.js —— 题目页（题面 + 编辑器 + 工具栏）、题解
  *
  * 加载顺序：util → core → schema → store → storage → ui → a11y → views → problem → pages → app.js
  * 挂载点：window.TSJ.appProblem
@@ -269,45 +269,6 @@
     host.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  /* ---------- 3. 首次进入引导 ---------- */
-  /** 首次进入时的简短引导（弹层：焦点陷阱 + ESC 关闭 + 关闭后焦点回 #view）。 */
-  function showOnboarding() {
-    var html = [
-      '<div class="modal">',
-      '  <h2>欢迎来到时序竞技场</h2>',
-      '  <div class="modal-flow">',
-      '    <span class="flow-step">写 predict 函数</span><span class="flow-arrow">→</span>',
-      '    <span class="flow-step">提交</span><span class="flow-arrow">→</span>',
-      '    <span class="flow-step">打败基线得分</span><span class="flow-arrow">→</span>',
-      '    <span class="flow-step">解锁题解</span>',
-      '  </div>',
-      '  <p>每道题只要实现一个函数：</p>',
-      '  <p><code>predict(history, horizon, ctx) → number[]</code></p>',
-      '  <ul>',
-      '    <li>得分由「你的误差 ÷ 最优基线误差」决定，误差比越小分越高</li>',
-      '    <li>误差比 = 0.5 得满分 100，等于阈值恰好得 60 分，≥ 2 得 0 分</li>',
-      '    <li>全部测试点达标才算通过，通过后可查看参考实现</li>',
-      '    <li>代码与成绩都存在浏览器本地，随时可以继续</li>',
-      '  </ul>',
-      '  <p style="margin:0 0 6px">完全零基础？先用 25 分钟上' +
-        '<a href="#/learn/m0" style="color:var(--accent)">「零基础第一课」</a>' +
-        '，第 1 题还有手把手带做面板。</p>',
-      '  <div class="modal-actions">',
-      '    <button type="button" class="btn btn-primary" id="onbStart">开始做题</button>',
-      '  </div>',
-      '</div>'
-    ].join('\n');
-
-    a11y.openModal({ html: html, label: '欢迎来到时序竞技场', initialFocus: '#onbStart' });
-    var btn = $('#onbStart');
-    if (btn) {
-      btn.addEventListener('click', function () {
-        core.writeJSON(STORE.onboarded, true);
-        a11y.closeModal();
-      });
-    }
-  }
-
   /**
    * 刷新题头的「历史最高 / 尚未提交」徽标。
    * 判题落盘后必须调用：否则刚提交完，右上角等级分已经变了，题头却还写着「尚未提交」。
@@ -332,7 +293,6 @@
   TSJ.appProblem = {
     renderProblem: renderProblem,
     showSolution: showSolution,
-    showOnboarding: showOnboarding,
     refreshBestBadge: refreshBestBadge
   };
 })(typeof window !== 'undefined' ? window : this);

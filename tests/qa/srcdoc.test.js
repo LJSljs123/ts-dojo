@@ -106,6 +106,13 @@ async function openHost() {
   const page = await launch('file://' + hostFile.replace(/\\/g, '/'), { readyExpr: READY, readyTimeout: 20000 });
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await sleep(600);
+  // 首次引导会挡住顶栏点击；同源 srcdoc 可以记下已看过并关掉弹层
+  await page.evaluate(`(function(){
+    var w = document.getElementById('tsjFrame').contentWindow;
+    try { w.localStorage.setItem('tsoj:onboarded', JSON.stringify(true)); } catch (e) {}
+    if (w.TSJ && w.TSJ.appA11y && w.TSJ.appA11y.modalOpen()) w.TSJ.appA11y.closeModal();
+  })()`);
+  await sleep(200);
   return page;
 }
 

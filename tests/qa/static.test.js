@@ -31,13 +31,13 @@ const LAB_FILES = LAB_NAMES.map((n) => path.join(JS_DIR, n + '.js'));
  *   → views → problem → pages → lab-storage → lab-panels → lab-live
  *   → studio-storage → studio-report → studio-csv → studio → achievements
  *   → dashboard → learn → method-detail → lab → library → glossary → boards
- *   → cmdk → app.js
+ *   → cmdk → onboarding → shell → app.js
  */
 const APP_NAMES = [
   'util', 'core', 'schema', 'store', 'storage', 'lifecycle', 'ui', 'a11y', 'theme',
   'views', 'problem', 'pages', 'lab-storage', 'lab-panels', 'lab-live',
   'studio-storage', 'studio-report', 'studio-csv', 'studio-templates', 'studio', 'achievements',
-  'dashboard', 'learn', 'method-detail', 'lab', 'library', 'glossary', 'boards', 'report', 'storage-extras', 'cmdk'
+  'dashboard', 'learn', 'method-detail', 'lab', 'library', 'glossary', 'boards', 'report', 'storage-extras', 'cmdk', 'onboarding', 'shell'
 ];
 const APP_FILES = APP_NAMES.map((n) => path.join(JS_DIR, 'app', n + '.js'))
   .concat([path.join(JS_DIR, 'app.js')]);
@@ -155,6 +155,8 @@ test('script 加载顺序与 window.TSJ.* 依赖一致，且 app.js 在 body 末
     'assets/js/app/cmdk.js',
     'assets/js/app/links.js',
     'assets/js/app/router.js',
+    'assets/js/app/onboarding.js',
+    'assets/js/app/shell.js',
     'assets/js/app.js',
   ]);
   // 每个文件必须真实存在
@@ -174,14 +176,14 @@ test('依赖方向：引擎层不得引用 app 层；app 层只能引用**更早
     assert.ok(!/TSJ\.renderProblem|TSJ\.route\b/.test(src), path.basename(f) + ' 反向依赖了应用层');
   }
   // 2) app 层按固定顺序加载，每个文件只能引用排在自己前面的命名空间
-  //    顺序与 APP_NAMES 一致：… studio 系 → achievements → dashboard → learn … → cmdk → app
+  //    顺序与 APP_NAMES 一致：… studio 系 → achievements → dashboard → learn … → cmdk → onboarding → shell → app
   const namespaces = [
     'TSJ.appUtil', 'TSJ.appCore', 'TSJ.appSchema', 'TSJ.appStore', 'TSJ.appStorage',
     'TSJ.appLifecycle', 'TSJ.appUi', 'TSJ.appA11y', 'TSJ.appTheme', 'TSJ.appViews',
     'TSJ.appProblem', 'TSJ.appPages', 'TSJ.appLabStorage', 'TSJ.appLabPanels',
     'TSJ.appStudioStorage', 'TSJ.appStudioReport', 'TSJ.appStudioCsv', 'TSJ.appStudioTemplates', 'TSJ.appStudio',
     'TSJ.appAchievements', 'TSJ.appDashboard', 'TSJ.appLearn', 'TSJ.appMethodDetail',
-    'TSJ.appLab', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appReport', 'TSJ.appStorageExtras', 'TSJ.appCmdk', 'TSJ.app',
+    'TSJ.appLab', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appReport', 'TSJ.appStorageExtras', 'TSJ.appCmdk', 'TSJ.appOnboarding', 'TSJ.appShell', 'TSJ.app',
   ];
   APP_FILES.forEach((file, idx) => {
     const src = read(file);

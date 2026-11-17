@@ -34,7 +34,7 @@ sliders, and a model studio with a strict train/val/test experiment protocol.
 双击 ts-dojo-standalone.html
 ```
 
-它把 CSS 与 53 个脚本全部内联成一个约 890KB 的 HTML，**不依赖任何相对路径**。
+它把 CSS 与 55 个脚本全部内联成一个约 904KB 的 HTML，**不依赖任何相对路径**。
 所以无论是双击打开、丢进 http 服务器、还是被塞进 iframe / `srcdoc` / 预览面板里，都能正常渲染。
 
 **方式 B：模块化版**
@@ -50,12 +50,12 @@ python -m http.server 8080
 # 然后访问 http://localhost:8080
 ```
 
-模块化版有 53 个 `<script src>` + 4 个样式表，**必须保证 assets 目录随行**。
+模块化版有 55 个 `<script src>` + 4 个样式表，**必须保证 assets 目录随行**。
 如果它白屏，页面会自己显示「启动失败」面板并给出原因（脚本被拦截 / 资源 404 / 旧缓存），不会再无声无息。
 
 浏览器要求：Chrome / Edge / Firefox / Safari 近三年版本（需要 `Worker`、`canvas`、`localStorage`、`Proxy`）。
 
-首次进入会有一个简短引导，说明「写 `predict` 函数 → 提交 → 打败基线得分 → 解锁题解」，并附「零基础第一课」（`#/learn/m0`，25 分钟）入口；第 1 题题面下方默认展开「手把手带做」四步面板。
+首次进入会弹出简短引导（不会被默认路由立刻关掉），主按钮指向「零基础第一课」（`#/learn/m0`，约 25 分钟），也可以先做第 1 题。工作台会按是否已有进度给出不同的入口：新访客不会被直接送进实验室。第 1 题题面下方默认展开「手把手带做」四步面板。全站可用 Ctrl / ⌘ + K 搜索，按 ? 查看快捷键。
 
 ### 改了源码后如何更新单文件版
 
@@ -105,7 +105,7 @@ ts-dojo/
 ├── index.html                 # 模块化入口（含 CSP + 启动自检 + script 加载顺序）
 ├── ts-dojo-standalone.html    # 单文件版（由 tools/build-standalone.js 生成，勿手改）
 ├── tools/
-│   ├── build-standalone.js    # 把 CSS / 53 个 js 内联成单文件
+│   ├── build-standalone.js    # 把 CSS / 55 个 js 内联成单文件
 │   ├── stamp-assets.js        # 给 index.html 的 ?v= 打内容哈希（防旧缓存）
 │   └── numbers.js             # 口径计算：题数 / 方法数 / 脚本数 / 用例数（README 数字的唯一来源）
 ├── assets/
@@ -131,7 +131,7 @@ ts-dojo/
 │           ├── theme.js       #   system/light/dark 主题与画布重绘联动
 │           ├── views.js       #   题库页（搜索 / 标签 / 难度 / 随机一题 / 卡片列表）+ 预览图装配
 │           ├── problem-extras.js  # 题目页辅助区块：分量预览图 + 相关方法/课程链接（不参与判题）
-│           ├── problem.js     #   题目页、编辑器装配、题解弹层、引导弹层
+│           ├── problem.js     #   题目页、编辑器装配、题解弹层
 │           ├── pages.js       #   提交记录、提交详情、排行榜、学习路径
 │           ├── lab-storage.js #   实验室最近 20 组记录、导入导出
 │           ├── lab-panels.js  #   实验室配置/指标/历史面板片段
@@ -148,12 +148,14 @@ ts-dojo/
 │           ├── library.js     #   方法库页（层筛选 / 搜索 / 只看能练的 / 卡片展开）
 │           ├── glossary.js    #   #/glossary 术语表
 │           ├── boards.js      #   排行榜与学习路径的共享渲染片段
-│           └── cmdk.js        #   Ctrl/Cmd+K 全局命令面板
+│           ├── cmdk.js        #   Ctrl/Cmd+K 全局命令面板
+│           ├── onboarding.js  #   首次进入引导（第一课 / 第 1 题）
+│           └── shell.js       #   顶栏「更多」菜单、搜索入口、快捷键说明
 │   ├── content/               # v3 内容层：references / courses / method-details / content / glossary（术语表）
 │   ├── charts/                # v3 图表内核：core / series / diagnostics
 │   └── lab/                   # v3 实验室引擎：config / adapters / stats / runner
 ├── tests/
-│   ├── qa/                    # node --test tests/qa/*.test.js（266 条）
+│   ├── qa/                    # node --test tests/qa/*.test.js（270 条）
 │   ├── selftest.js            # 判题引擎自测（Node 直接运行，不参与页面加载）
 │   ├── starter-check.js       # 18 题模板原样提交必须全 WA
 │   ├── storage-audit.js       # localStorage 输出安全静态审计
@@ -580,13 +582,14 @@ node tests/selftest.js        # 判题引擎自测（数据 / 参考解 / 指标
 node tests/starter-check.js   # 模板有效性自证（18 题模板原样提交必须全部不通过）
 node tests/storage-audit.js   # localStorage 输出安全静态审计（esc() 覆盖率 / 类型守卫）
 node tests/standalone-check.js  # 单文件版是否与源码同步、是否残留外部引用
-node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，必须用 glob）
+node --test --test-concurrency=1 tests/qa/*.test.js  # QA 用例（必须串行：浏览器用例共享一台无头浏览器）
 ```
 
-**测试规模：266 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
+**测试规模：270 条用例，0 skip**（其中约 80 条用本机 Edge/Chrome 无头 + CDP 在 `file://` 下真实执行；
 找不到浏览器时自动 skip，并在输出里注明「未验证」，不假装通过）。
-浏览器用例自带**全局文件锁**：多个测试文件并发时只会排队、不会同时 spawn 多个 Chromium，
-因此 `node --test tests/qa/*.test.js` 直接并发跑也是稳的。
+浏览器用例自带**全局文件锁**，同一时刻只会启动一台无头浏览器。
+但默认并发会让后排队的文件在锁超时后失败，所以全量请加 `--test-concurrency=1`。
+Linux / macOS 上的 Chrome / Chromium / Edge 也能被探测到（不仅是 Windows）。
 
 | 测试文件 | 关注点 |
 |---|---|
@@ -606,6 +609,7 @@ node --test tests/qa/*.test.js  # QA 用例（Node 22 不支持目录参数，�
 | `achievements` | 成就判定：首 AC / 整题满分（单窗口满分不算）/ 三连胜 / 入门毕业 / 词典编纂者 / 幂等 |
 | `docs-numbers` | README 数字与源码一致：题数 / 方法数 / 分层 / 可练 / 数据集 / 课程 / 术语 / 脚本 / 用例数 / 单文件体积 |
 | `assets-version` | 发布级：`index.html` 每处 `?v=` 都等于资源内容哈希（防旧缓存）、引用不 404、`assets/` 下无孤儿文件 |
+| `onboarding-shell` | 首次引导不被初始路由关掉、新访客主 CTA 指向第一课、1024 宽顶栏「更多」菜单可打开后排入口 |
 | `contrast` | 主题对比度：深色 / 浅色下逐路由审计可见文字，对比度 < 3:1 即失败（挡「深色粉彩色被搬到浅底上」这类回归） |
 | `a11y` | 键盘可达性：跳转链接是第一个可聚焦元素、编辑器 Tab 缩进但 Esc 能退出（键盘陷阱）、弹层焦点陷阱 + Esc + 焦点归还触发按钮、焦点环 ≥2px、可聚焦元素都有可读名字 |
 | `clickthrough` | 前端功能点击走查：13 路由冒烟 + 约 90 个控件（主题/抽屉/命令面板、题库筛选、编辑器与判题、方法库/课程/术语表、实验室/工坊、提交记录）逐一点击，验「有反应、不报错、不残留占位符」 |

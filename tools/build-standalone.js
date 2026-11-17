@@ -49,6 +49,9 @@ function buildHtml() {
     return '<style>\n' + css + '\n</style>';
   });
 
+  // 1b) 单文件版用不上的站点元数据（canonical / 触摸图标），去掉以免留下外链
+  html = html.replace(/<link rel="(?:canonical|apple-touch-icon)"[^>]*>\s*/g, '');
+
   // 2) 外部脚本 → 内联脚本（保持原有顺序，顺序即依赖顺序）
   html = html.replace(/<script src="([^"]+)"><\/script>/g, (m, src) => {
     const file = path.join(ROOT, src.split('?')[0]);

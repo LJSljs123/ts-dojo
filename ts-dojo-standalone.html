@@ -20,6 +20,24 @@
 <meta http-equiv="Content-Security-Policy" content="connect-src 'none'">
 <title>时序竞技场 TSOJ · 时间序列预测在线判题</title>
 <meta name="description" content="时序竞技场 TSOJ：写 predict 函数、提交、打败统计基线得分并解锁题解的纯前端时间序列预测判题平台。">
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f7fb" media="(prefers-color-scheme: light)">
+<meta property="og:site_name" content="时序竞技场 TSOJ">
+<meta property="og:title" content="时序竞技场 TSOJ · 时间序列预测在线判题">
+<meta property="og:description" content="纯前端、零依赖的时间序列预测在线判题学习平台：写 predict 函数、提交、打败统计基线得分并解锁题解。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ljsljs123.github.io/ts-dojo/">
+<meta property="og:image" content="https://ljsljs123.github.io/ts-dojo/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="时序竞技场 TSOJ · 时间序列预测在线判题">
+<meta name="twitter:description" content="纯前端、零依赖的时间序列预测在线判题学习平台。">
+<meta name="twitter:image" content="https://ljsljs123.github.io/ts-dojo/assets/og-image.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebApplication","name":"时序竞技场 TSOJ","applicationCategory":"EducationalApplication","operatingSystem":"Any","url":"https://ljsljs123.github.io/ts-dojo/","description":"纯前端、零依赖的时间序列预测在线判题学习平台。","inLanguage":"zh-CN","offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}
+</script>
 <style>
 /* =========================================================================
    v3 设计令牌（Design Tokens）
@@ -1089,6 +1107,44 @@ body.dragging { user-select: none; cursor: col-resize; }
   font-size: 12px;
 }
 .modal .modal-actions { display: flex; justify-content: flex-end; gap: 9px; }
+.modal .modal-actions-stack { justify-content: flex-start; flex-wrap: wrap; }
+.modal a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+.modal-onboard { max-width: 520px; }
+.onb-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.onb-later { margin: 12px 0 0; }
+.onb-hint { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.ks-list { display: grid; gap: 8px; margin: 0 0 18px; }
+.ks-row {
+  display: grid;
+  grid-template-columns: minmax(140px, auto) 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.ks-row kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+.modal-keys { max-width: 520px; }
 .modal .modal-flow {
   display: flex;
   gap: 6px;
@@ -2027,10 +2083,8 @@ html[data-theme="light"] body {
   gap: 4px;
   flex: 1 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  /* 不再横向滚动：11 个入口已收进「更多」。overflow 会把绝对定位的下拉菜单裁进顶栏。 */
 }
-.wk-nav::-webkit-scrollbar { display: none; }
 
 .wk-nav a {
   display: inline-flex;
@@ -2066,7 +2120,9 @@ html[data-theme="light"] body {
 }
 .wk-score b { color: var(--v3-text); }
 
-.wk-menu-btn { display: none; }
+/* 必须压过后面的 .ds-btn { display:inline-flex }，否则「菜单」在桌面常驻，挤占导航宽度 */
+.ds-btn.wk-menu-btn { display: none; }
+
 
 .wk-drawer {
   position: fixed;
@@ -2090,6 +2146,77 @@ html[data-theme="light"] body {
   color: var(--v3-text-dim);
 }
 .wk-drawer a[aria-current="page"] { color: var(--v3-accent); background: var(--v3-accent-soft); }
+.wk-drawer-action {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  margin: 6px 0 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--v3-radius-sm);
+  background: transparent;
+  color: var(--v3-text-dim);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wk-drawer-action:hover { background: var(--v3-panel-3); color: var(--v3-text); }
+
+.wk-more { position: relative; flex: 0 0 auto; }
+.wk-more-btn,
+.wk-more-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--v3-text-dim);
+  font: inherit;
+  font-size: var(--v3-fs-sm);
+  cursor: pointer;
+}
+.wk-more-btn:hover,
+.wk-more-btn[aria-expanded="true"] { background: var(--v3-panel-3); color: var(--v3-text); }
+.wk-more-btn.is-current {
+  color: var(--v3-accent);
+  background: var(--v3-accent-soft);
+  font-weight: 650;
+}
+.wk-more-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--v3-panel);
+  border: 1px solid var(--v3-line);
+  border-radius: 12px;
+  box-shadow: var(--v3-shadow);
+  z-index: 60;
+}
+.wk-more-menu[hidden] { display: none !important; }
+.wk-more-menu a,
+.wk-more-action {
+  min-height: 40px;
+  width: 100%;
+  justify-content: flex-start;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--v3-text-dim);
+  text-decoration: none;
+}
+.wk-more-menu a:hover,
+.wk-more-action:hover { background: var(--v3-panel-3); color: var(--v3-text); }
+.wk-more-menu a[aria-current="page"] {
+  color: var(--v3-accent);
+  background: var(--v3-accent-soft);
+  font-weight: 650;
+}
 
 .wk-main {
   max-width: var(--v3-max);
@@ -2263,10 +2390,11 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 
 @media (max-width: 860px) {
   .wk-nav { display: none; }
-  .wk-menu-btn { display: inline-flex; }
+  .ds-btn.wk-menu-btn { display: inline-flex; }
+  .wk-cmdk-btn { display: none; }
   .wk-score { display: inline-flex; min-height: 32px; padding: 0 8px; font-size: var(--v3-fs-xs); }
   .wk-topbar { gap: var(--v3-space-2); padding: 0 var(--v3-space-3); }
-  .wk-brand-text { display: none; }
+  .wk-brand-text, .brand-text { display: none; }
 }
 
 @media (max-width: 640px) {
@@ -3149,7 +3277,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
             stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="18.6" cy="7.2" r="1.7" fill="currentColor"/>
     </svg>
-    <span class="brand-text">时序竞技场 <b>TSOJ</b></span>
+    <span class="brand-text wk-brand-text">时序竞技场 <b>TSOJ</b></span>
   </a>
 
   <nav class="nav wk-nav" id="nav" aria-label="主导航">
@@ -3157,16 +3285,24 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     <a href="#/problems" data-nav="problems">题库</a>
     <a href="#/methods" data-nav="methods">方法库</a>
     <a href="#/learn" data-nav="learn">课程</a>
-    <a href="#/glossary" data-nav="glossary">术语表</a>
     <a href="#/lab" data-nav="lab">实验室</a>
     <a href="#/studio" data-nav="studio">模型工坊</a>
-    <a href="#/submissions" data-nav="submissions">提交记录</a>
-    <a href="#/ranking" data-nav="ranking">排行榜</a>
-    <a href="#/report" data-nav="report">学习报告</a>
-    <a href="#/path" data-nav="path">学习路径</a>
+    <div class="wk-more" id="navMore">
+      <button class="wk-more-btn" id="btnNavMore" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="navMoreMenu">更多</button>
+      <div class="wk-more-menu" id="navMoreMenu" hidden>
+        <a href="#/glossary" data-nav="glossary">术语表</a>
+        <a href="#/submissions" data-nav="submissions">提交记录</a>
+        <a href="#/ranking" data-nav="ranking">排行榜</a>
+        <a href="#/report" data-nav="report">学习报告</a>
+        <a href="#/path" data-nav="path">学习路径</a>
+        <button type="button" class="wk-more-action" id="btnMoreKeys">快捷键</button>
+        <button type="button" class="wk-more-action" id="btnMoreOnboard">重新查看引导</button>
+      </div>
+    </div>
   </nav>
 
   <div class="topbar-right wk-actions">
+    <button class="ds-btn ds-btn-ghost ds-btn-sm wk-cmdk-btn" id="btnCmdk" type="button" aria-label="打开命令面板（Ctrl 或 ⌘ + K）" title="命令面板 · Ctrl / ⌘ + K">搜索</button>
     <button class="ds-btn ds-btn-ghost ds-btn-sm" id="btnTheme" type="button" aria-label="切换深浅主题">主题</button>
     <div class="score-chip wk-score" id="scoreChip" title="累计等级分 = 各题历史最高分之和">
       <span class="lv" id="lvText">Lv.1</span>
@@ -3181,13 +3317,15 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   <a href="#/problems" data-nav="problems">题库</a>
   <a href="#/methods" data-nav="methods">方法库</a>
   <a href="#/learn" data-nav="learn">课程</a>
-    <a href="#/glossary" data-nav="glossary">术语表</a>
+  <a href="#/glossary" data-nav="glossary">术语表</a>
   <a href="#/lab" data-nav="lab">实验室</a>
-    <a href="#/studio" data-nav="studio">模型工坊</a>
+  <a href="#/studio" data-nav="studio">模型工坊</a>
   <a href="#/submissions" data-nav="submissions">提交记录</a>
   <a href="#/ranking" data-nav="ranking">排行榜</a>
-    <a href="#/report" data-nav="report">学习报告</a>
+  <a href="#/report" data-nav="report">学习报告</a>
   <a href="#/path" data-nav="path">学习路径</a>
+  <button type="button" class="wk-drawer-action" id="btnDrawerCmdk">命令面板</button>
+  <button type="button" class="wk-drawer-action" id="btnDrawerKeys">快捷键</button>
 </nav>
 
 <!-- ============ 视图容器 ============
@@ -17147,7 +17285,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 </script>
 <script>
 /**
- * assets/js/app/problem.js —— 题目页（题面 + 编辑器 + 工具栏）、题解、首次进入引导
+ * assets/js/app/problem.js —— 题目页（题面 + 编辑器 + 工具栏）、题解
  *
  * 加载顺序：util → core → schema → store → storage → ui → a11y → views → problem → pages → app.js
  * 挂载点：window.TSJ.appProblem
@@ -17417,45 +17555,6 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     host.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  /* ---------- 3. 首次进入引导 ---------- */
-  /** 首次进入时的简短引导（弹层：焦点陷阱 + ESC 关闭 + 关闭后焦点回 #view）。 */
-  function showOnboarding() {
-    var html = [
-      '<div class="modal">',
-      '  <h2>欢迎来到时序竞技场</h2>',
-      '  <div class="modal-flow">',
-      '    <span class="flow-step">写 predict 函数</span><span class="flow-arrow">→</span>',
-      '    <span class="flow-step">提交</span><span class="flow-arrow">→</span>',
-      '    <span class="flow-step">打败基线得分</span><span class="flow-arrow">→</span>',
-      '    <span class="flow-step">解锁题解</span>',
-      '  </div>',
-      '  <p>每道题只要实现一个函数：</p>',
-      '  <p><code>predict(history, horizon, ctx) → number[]</code></p>',
-      '  <ul>',
-      '    <li>得分由「你的误差 ÷ 最优基线误差」决定，误差比越小分越高</li>',
-      '    <li>误差比 = 0.5 得满分 100，等于阈值恰好得 60 分，≥ 2 得 0 分</li>',
-      '    <li>全部测试点达标才算通过，通过后可查看参考实现</li>',
-      '    <li>代码与成绩都存在浏览器本地，随时可以继续</li>',
-      '  </ul>',
-      '  <p style="margin:0 0 6px">完全零基础？先用 25 分钟上' +
-        '<a href="#/learn/m0" style="color:var(--accent)">「零基础第一课」</a>' +
-        '，第 1 题还有手把手带做面板。</p>',
-      '  <div class="modal-actions">',
-      '    <button type="button" class="btn btn-primary" id="onbStart">开始做题</button>',
-      '  </div>',
-      '</div>'
-    ].join('\n');
-
-    a11y.openModal({ html: html, label: '欢迎来到时序竞技场', initialFocus: '#onbStart' });
-    var btn = $('#onbStart');
-    if (btn) {
-      btn.addEventListener('click', function () {
-        core.writeJSON(STORE.onboarded, true);
-        a11y.closeModal();
-      });
-    }
-  }
-
   /**
    * 刷新题头的「历史最高 / 尚未提交」徽标。
    * 判题落盘后必须调用：否则刚提交完，右上角等级分已经变了，题头却还写着「尚未提交」。
@@ -17480,7 +17579,6 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   TSJ.appProblem = {
     renderProblem: renderProblem,
     showSolution: showSolution,
-    showOnboarding: showOnboarding,
     refreshBestBadge: refreshBestBadge
   };
 })(typeof window !== 'undefined' ? window : this);
@@ -19548,23 +19646,83 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       '<div class="wk-ach-row">' + chips + '</div></div>';
   }
 
+
+  /** 课程标题在「：」前的短名，避免工作台按钮被长副标题撑爆。 */
+  function shortTitle(title) {
+    var s = String(title || '');
+    var i = s.indexOf('：');
+    if (i > 0 && i <= 10) return s.slice(0, i);
+    return s;
+  }
+
+  /** 还没有任何做题 / 课程 / 实验记录的访客。 */
+  function isFresh(state) {
+    if ((state.submissions || []).length) return false;
+    var id;
+    for (id in state.progress) {
+      if (!Object.prototype.hasOwnProperty.call(state.progress, id)) continue;
+      var rec = state.progress[id];
+      if (rec && (rec.passed || rec.attempts || rec.best)) return false;
+    }
+    if (doneCount(readProgress()) > 0) return false;
+    if (TSJ.appLabStorage && typeof TSJ.appLabStorage.list === 'function' && TSJ.appLabStorage.list().length) {
+      return false;
+    }
+    return true;
+  }
+
+  /** 下一道尚未通过的题（按题号顺序）。 */
+  function nextProblem(state) {
+    var i;
+    for (i = 0; i < TSJ.problems.length; i++) {
+      var rec = state.progress[TSJ.problems[i].id];
+      if (!rec || rec.passed !== true) return TSJ.problems[i];
+    }
+    return null;
+  }
+
   function render(scope) {
     var state = store.state;
     var lesson = nextLesson();
     var subs = recentSubmissions(5);
     var labs = recentExperiments(5);
+    var fresh = isFresh(state);
+    var upcoming = nextProblem(state);
+    var cta = [];
+    if (fresh) {
+      cta.push('<a class="ds-btn ds-btn-primary" href="#/learn/m0">开始零基础第一课</a>');
+      cta.push('<a class="ds-btn" href="#/problem/p1-naive">打开第 1 题</a>');
+      cta.push('<a class="ds-btn" href="#/learn">查看课程地图</a>');
+      cta.push('<a class="ds-btn" href="#/methods">浏览方法库</a>');
+    } else {
+      if (upcoming) {
+        cta.push('<a class="ds-btn ds-btn-primary" href="#/problem/' + encodeURIComponent(upcoming.id) + '">继续做题：#' + upcoming.index + ' ' + esc(upcoming.title) + '</a>');
+      } else {
+        cta.push('<a class="ds-btn ds-btn-primary" href="#/lab">进入可视化实验室</a>');
+      }
+      if (lesson) {
+        cta.push('<a class="ds-btn" href="#/learn/' + encodeURIComponent(lesson.id) + '">继续学习：' + esc(shortTitle(lesson.title)) + '</a>');
+      } else {
+        cta.push('<a class="ds-btn" href="#/learn">查看课程地图</a>');
+      }
+      cta.push('<a class="ds-btn" href="#/methods">浏览方法库</a>');
+      cta.push('<a class="ds-btn" href="#/report">查看学习报告</a>');
+    }
 
     var html = [
       '<div class="wk-hero">',
       '  <div class="wk-hero-main">',
-      '    <div class="wk-kicker">TSOJ v3 · 研究工作台</div>',
-      '    <h1>看数据、选方法、回测、诊断、复盘</h1>',
-      '    <p>先用基线与评估建立可靠判断，再进入高阶方法。所有实验都固定数据版本、切分协议与指标；本地进度可导出，换机器不丢记录。</p>',
+      fresh
+        ? '    <div class="wk-kicker">TSOJ · 时间序列预测在线判题</div>'
+        : '    <div class="wk-kicker">TSOJ v3 · 研究工作台</div>',
+      fresh
+        ? '    <h1>从第一课开始，看数据再写预测</h1>'
+        : '    <h1>看数据、选方法、回测、诊断、复盘</h1>',
+      fresh
+        ? '    <p>写一个 predict 函数，提交后打败统计基线就能得分、解锁题解。课程、题库、实验室都在本机完成，不用注册、也不用安装。</p>'
+        : '    <p>先用基线与评估建立可靠判断，再进入高阶方法。所有实验都固定数据版本、切分协议与指标；本地进度可导出，换机器不丢记录。</p>',
       '    <div class="wk-cta-row">',
-      '      <a class="ds-btn ds-btn-primary" href="#/lab">进入可视化实验室</a>',
-      lesson ? '<a class="ds-btn" href="#/learn/' + encodeURIComponent(lesson.id) + '">继续学习：' + esc(lesson.title) + '</a>' : '<a class="ds-btn" href="#/learn">查看课程地图</a>',
-      '      <a class="ds-btn" href="#/methods">浏览方法库</a>',
-      '      <a class="ds-btn" href="#/glossary">新手术语表</a>',
+      cta.join(''),
       '    </div>',
       '  </div>',
       '  <div class="wk-side-stack">',
@@ -21243,7 +21401,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
         '<input id="cmdkInput" class="cmdk-input" type="text" autocomplete="off" spellcheck="false"' +
         ' placeholder="跳转到题目 / 方法 / 课程 / 术语，或输入命令…" aria-label="搜索或跳转">' +
         '<div id="cmdkResults" class="cmdk-results" role="listbox" aria-label="结果"></div>' +
-        '<div class="cmdk-foot"><span>↑↓ 选择</span><span>↵ 跳转</span><span>ESC 关闭</span></div></div>'
+        '<div class="cmdk-foot"><span>↑↓ 选择</span><span>↵ 跳转</span><span>ESC 关闭</span><span>? 快捷键</span></div></div>'
     });
     root = a11y.modalOpen() ? global.document.getElementById('overlay') : null;
     input = core.$('#cmdkInput', root);
@@ -21493,7 +21651,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     var lab = TSJ.appLab, studio = TSJ.appStudio, studio = TSJ.appStudio, dashboard = TSJ.appDashboard;
     var views = TSJ.appViews;
 
-    currentPath = toHash(parts);
+    var nextPath = toHash(parts);
+    var pathChanged = nextPath !== currentPath;
+    currentPath = nextPath;
 
     var view = parts[0] || 'dashboard';
 
@@ -21517,8 +21677,9 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     state.session = null;
     state.busyToken = -1;
 
-    // 路由切换时如果有弹层打开，先关掉（避免弹层浮在新页面上）
-    if (a11y.modalOpen()) a11y.closeModal();
+    // 只在路径真的变了时关弹层。首次进入会先 route() 再打开引导，
+    // 随后把空 hash 写成 #/ 触发的 hashchange 路径不变，绝不能把引导关掉。
+    if (pathChanged && a11y.modalOpen()) a11y.closeModal();
     document.body.classList.remove('dragging');   // 分栏拖拽中途切路由：DOM 已换、pointerup 不再触发，摘掉防光标困住
 
     if (view === 'problem' && parts[1]) {
@@ -21634,6 +21795,249 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 </script>
 <script>
 /**
+ * assets/js/app/onboarding.js —— 首次进入引导
+ *
+ * 从 problem.js 抽出：引导属于整站第一课，不是某道题的附属弹层。
+ * 关闭方式（主按钮、链到课程/第 1 题、ESC、「先四处看看」）都会记下已看过，
+ * 避免下次进来再挡一次。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var a11y = TSJ.appA11y;
+  var STORE = core.STORE;
+  var $ = core.$;
+
+  function isDone() {
+    return core.readJSON(STORE.onboarded, false, function (v) { return typeof v === 'boolean'; }) === true;
+  }
+
+  function markDone() {
+    if (!isDone()) core.writeJSON(STORE.onboarded, true);
+  }
+
+  /** 首次进入时的简短引导（弹层：焦点陷阱 + ESC 关闭 + 关闭后焦点回 #view）。 */
+  function show() {
+    if (isDone()) return;
+    var html = [
+      '<div class="modal modal-onboard">',
+      '  <p class="onb-kicker">TSOJ · 时间序列预测在线判题</p>',
+      '  <h2>欢迎来到时序竞技场</h2>',
+      '  <div class="modal-flow">',
+      '    <span class="flow-step">写 predict 函数</span><span class="flow-arrow">→</span>',
+      '    <span class="flow-step">提交</span><span class="flow-arrow">→</span>',
+      '    <span class="flow-step">打败基线得分</span><span class="flow-arrow">→</span>',
+      '    <span class="flow-step">解锁题解</span>',
+      '  </div>',
+      '  <p>每道题只要实现一个函数：</p>',
+      '  <p><code>predict(history, horizon, ctx) → number[]</code></p>',
+      '  <ul>',
+      '    <li>得分由「你的误差 ÷ 最优基线误差」决定，误差比越小分越高</li>',
+      '    <li>误差比 = 0.5 得满分 100，等于阈值恰好得 60 分，≥ 2 得 0 分</li>',
+      '    <li>全部测试点达标才算通过，通过后可查看参考实现</li>',
+      '    <li>代码与成绩都存在浏览器本地，随时可以继续</li>',
+      '  </ul>',
+      '  <div class="modal-actions modal-actions-stack">',
+      '    <a class="btn btn-primary" id="onbLesson" href="#/learn/m0">开始零基础第一课</a>',
+      '    <a class="btn" id="onbProblem" href="#/problem/p1-naive">先做第 1 题</a>',
+      '  </div>',
+      '  <p class="onb-later"><button type="button" class="btn btn-ghost" id="onbLater">先四处看看</button></p>',
+      '  <p class="onb-hint">之后可用 Ctrl / ⌘ + K 搜索全站，按 ? 查看快捷键。</p>',
+      '</div>'
+    ].join('\n');
+
+    a11y.openModal({
+      html: html,
+      label: '欢迎来到时序竞技场',
+      initialFocus: '#onbLesson',
+      onClose: markDone
+    });
+
+    function finish() { markDone(); a11y.closeModal(); }
+    var later = $('#onbLater');
+    if (later) later.addEventListener('click', finish);
+    // 课程 / 第 1 题是站内链接：由 links.js 导航，路由切换会关弹层并触发 onClose。
+    // 这里再记一次，避免个别宿主只关弹层不走 onClose。
+    ['onbLesson', 'onbProblem'].forEach(function (id) {
+      var el = $('#' + id);
+      if (el) el.addEventListener('click', markDone);
+    });
+  }
+
+  TSJ.appOnboarding = { show: show, isDone: isDone, markDone: markDone };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
+ * assets/js/app/shell.js —— 顶栏「更多」菜单、命令面板入口、快捷键说明
+ *
+ * 11 个导航项在常见笔记本宽度下会把后面的「学习报告 / 学习路径」裁掉，
+ * 且滚动条被藏起来，用户不知道后面还有页。主栏目只留常用入口，其余进「更多」。
+ */
+(function (global) {
+  'use strict';
+
+  var TSJ = global.TSJ || (global.TSJ = {});
+  var core = TSJ.appCore;
+  var $ = core.$;
+
+  function isTypingTarget(el) {
+    if (!el || el === document.body) return false;
+    var tag = (el.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    if (el.isContentEditable) return true;
+    if (typeof el.closest === 'function' && el.closest('.tsj-editor-host, .editor-host, [contenteditable="true"]')) {
+      return true;
+    }
+    return false;
+  }
+
+  function closeMore() {
+    var btn = $('#btnNavMore');
+    var menu = $('#navMoreMenu');
+    if (!btn || !menu) return;
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleMore() {
+    var btn = $('#btnNavMore');
+    var menu = $('#navMoreMenu');
+    if (!btn || !menu) return;
+    var open = menu.hidden;
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      var first = menu.querySelector('a');
+      if (first) try { first.focus(); } catch (e) { /* ignore */ }
+    }
+  }
+
+  function syncMoreState() {
+    var btn = $('#btnNavMore');
+    var menu = $('#navMoreMenu');
+    if (!btn || !menu) return;
+    var on = !!menu.querySelector('a[aria-current="page"]');
+    btn.classList.toggle('is-current', on);
+    if (on) btn.setAttribute('aria-current', 'true');
+    else btn.removeAttribute('aria-current');
+  }
+
+  function wrapSetActiveNav() {
+    var store = TSJ.appStore;
+    if (!store || typeof store.setActiveNav !== 'function' || store.setActiveNav._tsojWrapped) return;
+    var prev = store.setActiveNav;
+    function wrapped(name) {
+      prev(name);
+      syncMoreState();
+    }
+    wrapped._tsojWrapped = true;
+    store.setActiveNav = wrapped;
+  }
+
+  function showShortcuts() {
+    var a11y = TSJ.appA11y;
+    var rows = [
+      ['Ctrl / ⌘ + K', '打开命令面板，搜索题目、方法、课程、术语'],
+      ['?', '打开本快捷键说明'],
+      ['Ctrl / ⌘ + Enter', '在题目页运行当前代码（不记成绩）'],
+      ['Ctrl / ⌘ + S', '保存当前题目的代码草稿'],
+      ['Esc', '关闭弹层或收起菜单']
+    ];
+    var body = rows.map(function (r) {
+      return '<div class="ks-row"><kbd>' + core.esc(r[0]) + '</kbd><span>' + core.esc(r[1]) + '</span></div>';
+    }).join('');
+    a11y.openModal({
+      label: '键盘快捷键',
+      initialFocus: '#ksClose',
+      html: '<div class="modal modal-keys">' +
+        '<h2>键盘快捷键</h2>' +
+        '<p>在输入框或代码编辑器里打字时，这些快捷键不会抢键。</p>' +
+        '<div class="ks-list">' + body + '</div>' +
+        '<div class="modal-actions"><button type="button" class="btn btn-primary" id="ksClose">知道了</button></div>' +
+        '</div>'
+    });
+    var close = $('#ksClose');
+    if (close) close.addEventListener('click', function () { a11y.closeModal(); });
+  }
+
+  function install(scope) {
+    wrapSetActiveNav();
+    syncMoreState();
+
+    var moreBtn = $('#btnNavMore');
+    var moreMenu = $('#navMoreMenu');
+    if (moreBtn && moreMenu && scope) {
+      moreMenu.hidden = true;
+      moreBtn.setAttribute('aria-expanded', 'false');
+      scope.listen(moreBtn, 'click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleMore();
+      });
+      scope.listen(moreMenu, 'click', function (ev) {
+        if (ev.target && ev.target.tagName === 'A') closeMore();
+      });
+      scope.listen(document, 'click', function (ev) {
+        var wrap = $('#navMore');
+        if (!wrap || moreMenu.hidden) return;
+        if (wrap.contains(ev.target)) return;
+        closeMore();
+      });
+    }
+
+    function openCmdk() {
+      closeMore();
+      if (TSJ.appCmdk && typeof TSJ.appCmdk.openPalette === 'function') TSJ.appCmdk.openPalette();
+    }
+    function openKeys() {
+      closeMore();
+      showShortcuts();
+    }
+
+    var cmdkBtn = $('#btnCmdk');
+    if (cmdkBtn && scope) scope.listen(cmdkBtn, 'click', openCmdk);
+    var drawerCmdk = $('#btnDrawerCmdk');
+    if (drawerCmdk && scope) scope.listen(drawerCmdk, 'click', openCmdk);
+    var drawerKeys = $('#btnDrawerKeys');
+    if (drawerKeys && scope) scope.listen(drawerKeys, 'click', openKeys);
+    var moreKeys = $('#btnMoreKeys');
+    if (moreKeys && scope) scope.listen(moreKeys, 'click', openKeys);
+    var moreOnb = $('#btnMoreOnboard');
+    if (moreOnb && scope) {
+      scope.listen(moreOnb, 'click', function () {
+        closeMore();
+        if (TSJ.appOnboarding) {
+          // 允许再看一次：清标记后弹出
+          core.writeJSON(core.STORE.onboarded, false);
+          TSJ.appOnboarding.show();
+        }
+      });
+    }
+
+    if (scope) {
+      scope.listen(document, 'keydown', function (ev) {
+        if (ev.key === 'Escape' || ev.key === 'Esc') closeMore();
+        if (ev.defaultPrevented || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+        if (isTypingTarget(ev.target)) return;
+        if (TSJ.appA11y && TSJ.appA11y.modalOpen()) return;
+        var ask = ev.key === '?' || (ev.key === '/' && ev.shiftKey);
+        if (!ask) return;
+        ev.preventDefault();
+        showShortcuts();
+      });
+    }
+  }
+
+  TSJ.appShell = { install: install, showShortcuts: showShortcuts, closeMore: closeMore };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+/**
  * assets/js/app.js —— 应用外壳：路由、判题会话、启动装配
  *
  * 加载顺序（经典 script）：core → store → storage → ui → a11y → views → pages → app.js。
@@ -21667,6 +22071,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
   var methodDetail = TSJ.appMethodDetail;
   var lab = TSJ.appLab;
   var studio = TSJ.appStudio;
+  var onboarding = TSJ.appOnboarding;
+  var shell = TSJ.appShell;
 
   var $ = core.$;
   var esc = core.esc;
@@ -21818,7 +22224,10 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     function paintTheme() {
       if (!btn) return;
       var mode = theme.get();
-      btn.textContent = mode === 'system' ? '主题：跟随系统' : (mode === 'dark' ? '主题：深色' : '主题：浅色');
+      var label = mode === 'system' ? '跟随系统' : (mode === 'dark' ? '深色' : '浅色');
+      btn.textContent = '主题';
+      btn.title = '当前：' + label + '（点击切换深色 / 浅色 / 跟随系统）';
+      btn.setAttribute('aria-label', '切换深浅主题，当前：' + label);
       btn.setAttribute('aria-pressed', theme.resolved() === 'light' ? 'true' : 'false');
     }
     paintTheme();
@@ -21852,6 +22261,8 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
       });
     }
 
+    if (shell && typeof shell.install === 'function') shell.install(rootScope);
+
     global.addEventListener('hashchange', route);
     // 站内链接的点击语义：srcdoc 宿主里 href="#/x" 会被解析成父页面 URL 导致整个应用被卸载
     TSJ.appLinks.bind();
@@ -21884,9 +22295,7 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
     route();
     store.updateScoreChip();
 
-    if (core.readJSON(STORE.onboarded, false, function (v) { return typeof v === 'boolean'; }) !== true) {
-      problem.showOnboarding();
-    }
+    if (onboarding && typeof onboarding.show === 'function') onboarding.show();
   }
 
   TSJ.app = {

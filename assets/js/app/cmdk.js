@@ -124,7 +124,7 @@
         '<input id="cmdkInput" class="cmdk-input" type="text" autocomplete="off" spellcheck="false"' +
         ' placeholder="跳转到题目 / 方法 / 课程 / 术语，或输入命令…" aria-label="搜索或跳转">' +
         '<div id="cmdkResults" class="cmdk-results" role="listbox" aria-label="结果"></div>' +
-        '<div class="cmdk-foot"><span>↑↓ 选择</span><span>↵ 跳转</span><span>ESC 关闭</span></div></div>'
+        '<div class="cmdk-foot"><span>↑↓ 选择</span><span>↵ 跳转</span><span>ESC 关闭</span><span>? 快捷键</span></div></div>'
     });
     root = a11y.modalOpen() ? global.document.getElementById('overlay') : null;
     input = core.$('#cmdkInput', root);

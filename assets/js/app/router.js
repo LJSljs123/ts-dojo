@@ -97,7 +97,9 @@
     var lab = TSJ.appLab, studio = TSJ.appStudio, studio = TSJ.appStudio, dashboard = TSJ.appDashboard;
     var views = TSJ.appViews;
 
-    currentPath = toHash(parts);
+    var nextPath = toHash(parts);
+    var pathChanged = nextPath !== currentPath;
+    currentPath = nextPath;
 
     var view = parts[0] || 'dashboard';
 
@@ -121,8 +123,9 @@
     state.session = null;
     state.busyToken = -1;
 
-    // 路由切换时如果有弹层打开，先关掉（避免弹层浮在新页面上）
-    if (a11y.modalOpen()) a11y.closeModal();
+    // 只在路径真的变了时关弹层。首次进入会先 route() 再打开引导，
+    // 随后把空 hash 写成 #/ 触发的 hashchange 路径不变，绝不能把引导关掉。
+    if (pathChanged && a11y.modalOpen()) a11y.closeModal();
     document.body.classList.remove('dragging');   // 分栏拖拽中途切路由：DOM 已换、pointerup 不再触发，摘掉防光标困住
 
     if (view === 'problem' && parts[1]) {

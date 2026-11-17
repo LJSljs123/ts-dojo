@@ -32,6 +32,8 @@
   var methodDetail = TSJ.appMethodDetail;
   var lab = TSJ.appLab;
   var studio = TSJ.appStudio;
+  var onboarding = TSJ.appOnboarding;
+  var shell = TSJ.appShell;
 
   var $ = core.$;
   var esc = core.esc;
@@ -183,7 +185,10 @@
     function paintTheme() {
       if (!btn) return;
       var mode = theme.get();
-      btn.textContent = mode === 'system' ? '主题：跟随系统' : (mode === 'dark' ? '主题：深色' : '主题：浅色');
+      var label = mode === 'system' ? '跟随系统' : (mode === 'dark' ? '深色' : '浅色');
+      btn.textContent = '主题';
+      btn.title = '当前：' + label + '（点击切换深色 / 浅色 / 跟随系统）';
+      btn.setAttribute('aria-label', '切换深浅主题，当前：' + label);
       btn.setAttribute('aria-pressed', theme.resolved() === 'light' ? 'true' : 'false');
     }
     paintTheme();
@@ -217,6 +222,8 @@
       });
     }
 
+    if (shell && typeof shell.install === 'function') shell.install(rootScope);
+
     global.addEventListener('hashchange', route);
     // 站内链接的点击语义：srcdoc 宿主里 href="#/x" 会被解析成父页面 URL 导致整个应用被卸载
     TSJ.appLinks.bind();
@@ -249,9 +256,7 @@
     route();
     store.updateScoreChip();
 
-    if (core.readJSON(STORE.onboarded, false, function (v) { return typeof v === 'boolean'; }) !== true) {
-      problem.showOnboarding();
-    }
+    if (onboarding && typeof onboarding.show === 'function') onboarding.show();
   }
 
   TSJ.app = {
