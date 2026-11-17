@@ -217,7 +217,11 @@ test('C02 顶栏：主题切换 / 菜单抽屉 / 命令面板全流程', async (
   themes.forEach((th) => assert.ok(th === 'dark' || th === 'light', '主题值非法：' + th));
   assert.equal(themes[3], themes[1], '主题没有在深浅之间循环');
 
-  // 菜单抽屉：打开 → 里面有导航 → aria-expanded 同步
+  // 菜单抽屉只在窄屏显示（桌面改走「更多」）。先切到手机宽度再点。
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    width: 390, height: 844, deviceScaleFactor: 2, mobile: true
+  });
+  await sleep(200);
   await click('#btnMenu', { label: '菜单抽屉', effect: 'any', wait: 300 });
   const drawer = await page.evaluate(`(function(){
     var d = document.getElementById('drawerNav');
@@ -236,8 +240,12 @@ test('C02 顶栏：主题切换 / 菜单抽屉 / 命令面板全流程', async (
   assert.equal(drawer.open, true, '点了「菜单」抽屉没有打开');
   assert.equal(drawer.expanded, 'true', 'aria-expanded 没有同步为 true');
   assert.ok(drawer.links >= 7, '抽屉里只有 ' + drawer.links + ' 个导航链接');
-  // 收起来，避免挡住后面的点击
+  // 收起来，避免挡住后面的点击，并恢复桌面视口
   await click('#btnMenu', { label: '菜单抽屉收起', effect: 'any', wait: 250 });
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    width: 1440, height: 900, deviceScaleFactor: 1, mobile: false
+  });
+  await sleep(200);
 
   // 命令面板：Ctrl+K → 输入 → ↓ → Enter
   await page.send('Input.dispatchKeyEvent', {

@@ -16,16 +16,11 @@ const assert = require('node:assert/strict');
 
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'ts-dojo-standalone.html');
+const { buildHtml } = require('../tools/build-standalone.js');
 
-/** 与 tools/build-standalone.js 完全一致的内联逻辑（保持同步）。 */
+/** 与打包工具共用同一套内联逻辑，避免两边各写一份然后悄悄漂移。 */
 function buildInMemory() {
-  let html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  html = html.replace(/<link rel="stylesheet" href="([^"]+)">/g, (m, href) =>
-    '<style>\n' + fs.readFileSync(path.join(ROOT, href.split('?')[0]), 'utf8') + '\n</style>');
-  html = html.replace(/<script src="([^"]+)"><\/script>/g, (m, src) =>
-    '<script>\n' + fs.readFileSync(path.join(ROOT, src.split('?')[0]), 'utf8')
-      .replace(/<\/script/gi, '<\\/script') + '\n</script>');
-  return html;
+  return buildHtml().html;
 }
 
 const results = [];
@@ -64,7 +59,7 @@ check('全部脚本内联，关键命名空间齐全', () => {
   ['TSJ.datasets', 'TSJ.problems', 'TSJ.methods', 'TSJ.judge', 'TSJ.createEditor', 'TSJ.drawSeries',
     'TSJ.glossary', 'TSJ.charts', 'TSJ.labConfig', 'TSJ.labRunner',
     'TSJ.appCore', 'TSJ.appStore', 'TSJ.appStorage', 'TSJ.appViews', 'TSJ.appProblemExtras', 'TSJ.appProblem',
-    'TSJ.appPages', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appLabLive', 'TSJ.appStudio', 'TSJ.appStudioTemplates', 'TSJ.appReport', 'TSJ.appCmdk', 'TSJ.app'].forEach((ns) => {
+    'TSJ.appPages', 'TSJ.appLibrary', 'TSJ.appGlossary', 'TSJ.appBoards', 'TSJ.appLabLive', 'TSJ.appStudio', 'TSJ.appStudioTemplates', 'TSJ.appReport', 'TSJ.appCmdk', 'TSJ.appOnboarding', 'TSJ.appShell', 'TSJ.app'].forEach((ns) => {
     assert.ok(html.indexOf(ns) >= 0, '缺少命名空间：' + ns);
   });
 });

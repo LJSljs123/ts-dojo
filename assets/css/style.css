@@ -882,6 +882,44 @@ body.dragging { user-select: none; cursor: col-resize; }
   font-size: 12px;
 }
 .modal .modal-actions { display: flex; justify-content: flex-end; gap: 9px; }
+.modal .modal-actions-stack { justify-content: flex-start; flex-wrap: wrap; }
+.modal a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+.modal-onboard { max-width: 520px; }
+.onb-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.onb-later { margin: 12px 0 0; }
+.onb-hint { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.ks-list { display: grid; gap: 8px; margin: 0 0 18px; }
+.ks-row {
+  display: grid;
+  grid-template-columns: minmax(140px, auto) 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.ks-row kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+.modal-keys { max-width: 520px; }
 .modal .modal-flow {
   display: flex;
   gap: 6px;

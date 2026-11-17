@@ -20,9 +20,29 @@
 <meta http-equiv="Content-Security-Policy" content="connect-src 'none'">
 <title>时序竞技场 TSOJ · 时间序列预测在线判题</title>
 <meta name="description" content="时序竞技场 TSOJ：写 predict 函数、提交、打败统计基线得分并解锁题解的纯前端时间序列预测判题平台。">
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f7fb" media="(prefers-color-scheme: light)">
+<link rel="canonical" href="/ts-dojo/">
+<meta property="og:site_name" content="时序竞技场 TSOJ">
+<meta property="og:title" content="时序竞技场 TSOJ · 时间序列预测在线判题">
+<meta property="og:description" content="纯前端、零依赖的时间序列预测在线判题学习平台：写 predict 函数、提交、打败统计基线得分并解锁题解。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ljsljs123.github.io/ts-dojo/">
+<meta property="og:image" content="https://ljsljs123.github.io/ts-dojo/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="时序竞技场 TSOJ · 时间序列预测在线判题">
+<meta name="twitter:description" content="纯前端、零依赖的时间序列预测在线判题学习平台。">
+<meta name="twitter:image" content="https://ljsljs123.github.io/ts-dojo/assets/og-image.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebApplication","name":"时序竞技场 TSOJ","applicationCategory":"EducationalApplication","operatingSystem":"Any","url":"https://ljsljs123.github.io/ts-dojo/","description":"纯前端、零依赖的时间序列预测在线判题学习平台。","inLanguage":"zh-CN","offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}
+</script>
 <link rel="stylesheet" href="assets/css/tokens.css?v=fe6d4442">
-<link rel="stylesheet" href="assets/css/style.css?v=f87208d3">
-<link rel="stylesheet" href="assets/css/components.css?v=613fc188">
+<link rel="stylesheet" href="assets/css/style.css?v=2afd7d94">
+<link rel="stylesheet" href="assets/css/components.css?v=c8ac7869">
 <link rel="stylesheet" href="assets/css/pages-v3.css?v=38af721e">
 
 <!-- 启动自检：脚本被拦 / 加载失败 / 1.5s 内没渲染出内容 → 直接把原因显示出来，绝不留白屏 -->
@@ -135,7 +155,7 @@
             stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="18.6" cy="7.2" r="1.7" fill="currentColor"/>
     </svg>
-    <span class="brand-text">时序竞技场 <b>TSOJ</b></span>
+    <span class="brand-text wk-brand-text">时序竞技场 <b>TSOJ</b></span>
   </a>
 
   <nav class="nav wk-nav" id="nav" aria-label="主导航">
@@ -143,16 +163,24 @@
     <a href="#/problems" data-nav="problems">题库</a>
     <a href="#/methods" data-nav="methods">方法库</a>
     <a href="#/learn" data-nav="learn">课程</a>
-    <a href="#/glossary" data-nav="glossary">术语表</a>
     <a href="#/lab" data-nav="lab">实验室</a>
     <a href="#/studio" data-nav="studio">模型工坊</a>
-    <a href="#/submissions" data-nav="submissions">提交记录</a>
-    <a href="#/ranking" data-nav="ranking">排行榜</a>
-    <a href="#/report" data-nav="report">学习报告</a>
-    <a href="#/path" data-nav="path">学习路径</a>
+    <div class="wk-more" id="navMore">
+      <button class="wk-more-btn" id="btnNavMore" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="navMoreMenu">更多</button>
+      <div class="wk-more-menu" id="navMoreMenu" hidden>
+        <a href="#/glossary" data-nav="glossary">术语表</a>
+        <a href="#/submissions" data-nav="submissions">提交记录</a>
+        <a href="#/ranking" data-nav="ranking">排行榜</a>
+        <a href="#/report" data-nav="report">学习报告</a>
+        <a href="#/path" data-nav="path">学习路径</a>
+        <button type="button" class="wk-more-action" id="btnMoreKeys">快捷键</button>
+        <button type="button" class="wk-more-action" id="btnMoreOnboard">重新查看引导</button>
+      </div>
+    </div>
   </nav>
 
   <div class="topbar-right wk-actions">
+    <button class="ds-btn ds-btn-ghost ds-btn-sm wk-cmdk-btn" id="btnCmdk" type="button" aria-label="打开命令面板（Ctrl 或 ⌘ + K）" title="命令面板 · Ctrl / ⌘ + K">搜索</button>
     <button class="ds-btn ds-btn-ghost ds-btn-sm" id="btnTheme" type="button" aria-label="切换深浅主题">主题</button>
     <div class="score-chip wk-score" id="scoreChip" title="累计等级分 = 各题历史最高分之和">
       <span class="lv" id="lvText">Lv.1</span>
@@ -167,13 +195,15 @@
   <a href="#/problems" data-nav="problems">题库</a>
   <a href="#/methods" data-nav="methods">方法库</a>
   <a href="#/learn" data-nav="learn">课程</a>
-    <a href="#/glossary" data-nav="glossary">术语表</a>
+  <a href="#/glossary" data-nav="glossary">术语表</a>
   <a href="#/lab" data-nav="lab">实验室</a>
-    <a href="#/studio" data-nav="studio">模型工坊</a>
+  <a href="#/studio" data-nav="studio">模型工坊</a>
   <a href="#/submissions" data-nav="submissions">提交记录</a>
   <a href="#/ranking" data-nav="ranking">排行榜</a>
-    <a href="#/report" data-nav="report">学习报告</a>
+  <a href="#/report" data-nav="report">学习报告</a>
   <a href="#/path" data-nav="path">学习路径</a>
+  <button type="button" class="wk-drawer-action" id="btnDrawerCmdk">命令面板</button>
+  <button type="button" class="wk-drawer-action" id="btnDrawerKeys">快捷键</button>
 </nav>
 
 <!-- ============ 视图容器 ============
@@ -234,7 +264,7 @@
 <script src="assets/js/app/theme.js?v=ed67524f"></script>
 <script src="assets/js/app/views.js?v=43b06c35"></script>
 <script src="assets/js/app/problem-extras.js?v=074fc346"></script>
-<script src="assets/js/app/problem.js?v=e3df9dd5"></script>
+<script src="assets/js/app/problem.js?v=fbb99da5"></script>
 <script src="assets/js/app/pages.js?v=76077aa3"></script>
 <script src="assets/js/app/lab-storage.js?v=7b178608"></script>
 <script src="assets/js/app/lab-panels.js?v=d1c740d0"></script>
@@ -245,7 +275,7 @@
 <script src="assets/js/app/studio-templates.js?v=5e2de02f"></script>
 <script src="assets/js/app/studio.js?v=ba73e994"></script>
 <script src="assets/js/app/achievements.js?v=ac1284a0"></script>
-<script src="assets/js/app/dashboard.js?v=efd6ea77"></script>
+<script src="assets/js/app/dashboard.js?v=e240ce7e"></script>
 <script src="assets/js/app/learn.js?v=cce3dd77"></script>
 <script src="assets/js/app/method-detail.js?v=af1941c5"></script>
 <script src="assets/js/app/lab.js?v=743af1bf"></script>
@@ -254,9 +284,11 @@
 <script src="assets/js/app/boards.js?v=8d7dd0d4"></script>
 <script src="assets/js/app/report.js?v=52e35bab"></script>
 <script src="assets/js/app/storage-extras.js?v=9b4e4a46"></script>
-<script src="assets/js/app/cmdk.js?v=8ed14d74"></script>
+<script src="assets/js/app/cmdk.js?v=bfd607da"></script>
 <script src="assets/js/app/links.js?v=c2ed7a20"></script>
-<script src="assets/js/app/router.js?v=cfeb1375"></script>
-<script src="assets/js/app.js?v=1b95347c"></script>
+<script src="assets/js/app/router.js?v=faa0a199"></script>
+<script src="assets/js/app/onboarding.js?v=4f610b99"></script>
+<script src="assets/js/app/shell.js?v=30d634b2"></script>
+<script src="assets/js/app.js?v=3546100f"></script>
 </body>
 </html>

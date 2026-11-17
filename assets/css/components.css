@@ -55,10 +55,8 @@ html[data-theme="light"] body {
   gap: 4px;
   flex: 1 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  /* 不再横向滚动：11 个入口已收进「更多」。overflow 会把绝对定位的下拉菜单裁进顶栏。 */
 }
-.wk-nav::-webkit-scrollbar { display: none; }
 
 .wk-nav a {
   display: inline-flex;
@@ -94,7 +92,9 @@ html[data-theme="light"] body {
 }
 .wk-score b { color: var(--v3-text); }
 
-.wk-menu-btn { display: none; }
+/* 必须压过后面的 .ds-btn { display:inline-flex }，否则「菜单」在桌面常驻，挤占导航宽度 */
+.ds-btn.wk-menu-btn { display: none; }
+
 
 .wk-drawer {
   position: fixed;
@@ -118,6 +118,77 @@ html[data-theme="light"] body {
   color: var(--v3-text-dim);
 }
 .wk-drawer a[aria-current="page"] { color: var(--v3-accent); background: var(--v3-accent-soft); }
+.wk-drawer-action {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  margin: 6px 0 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--v3-radius-sm);
+  background: transparent;
+  color: var(--v3-text-dim);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wk-drawer-action:hover { background: var(--v3-panel-3); color: var(--v3-text); }
+
+.wk-more { position: relative; flex: 0 0 auto; }
+.wk-more-btn,
+.wk-more-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--v3-text-dim);
+  font: inherit;
+  font-size: var(--v3-fs-sm);
+  cursor: pointer;
+}
+.wk-more-btn:hover,
+.wk-more-btn[aria-expanded="true"] { background: var(--v3-panel-3); color: var(--v3-text); }
+.wk-more-btn.is-current {
+  color: var(--v3-accent);
+  background: var(--v3-accent-soft);
+  font-weight: 650;
+}
+.wk-more-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--v3-panel);
+  border: 1px solid var(--v3-line);
+  border-radius: 12px;
+  box-shadow: var(--v3-shadow);
+  z-index: 60;
+}
+.wk-more-menu[hidden] { display: none !important; }
+.wk-more-menu a,
+.wk-more-action {
+  min-height: 40px;
+  width: 100%;
+  justify-content: flex-start;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--v3-text-dim);
+  text-decoration: none;
+}
+.wk-more-menu a:hover,
+.wk-more-action:hover { background: var(--v3-panel-3); color: var(--v3-text); }
+.wk-more-menu a[aria-current="page"] {
+  color: var(--v3-accent);
+  background: var(--v3-accent-soft);
+  font-weight: 650;
+}
 
 .wk-main {
   max-width: var(--v3-max);
@@ -291,10 +362,11 @@ html[data-theme="light"] .ds-btn-primary { color: #ffffff; }
 
 @media (max-width: 860px) {
   .wk-nav { display: none; }
-  .wk-menu-btn { display: inline-flex; }
+  .ds-btn.wk-menu-btn { display: inline-flex; }
+  .wk-cmdk-btn { display: none; }
   .wk-score { display: inline-flex; min-height: 32px; padding: 0 8px; font-size: var(--v3-fs-xs); }
   .wk-topbar { gap: var(--v3-space-2); padding: 0 var(--v3-space-3); }
-  .wk-brand-text { display: none; }
+  .wk-brand-text, .brand-text { display: none; }
 }
 
 @media (max-width: 640px) {

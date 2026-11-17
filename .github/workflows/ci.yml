@@ -1,0 +1,38 @@
+name: Tests
+
+# 纯静态零构建：Node 自带测试跑类型/内容/静态审计；
+# 浏览器用例在有 Chrome 的环境里执行，没有时自动 skip，不挡合并。
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Asset stamp check
+        run: node tools/stamp-assets.js --check
+
+      - name: QA
+        run: node --test --test-concurrency=1 tests/qa/*.test.js
+
+      - name: Engine & storage checks
+        run: |
+          node tests/selftest.js
+          node tests/starter-check.js
+          node tests/storage-audit.js
+          node tests/standalone-check.js
+
+      - name: README numbers
+        run: node tools/numbers.js

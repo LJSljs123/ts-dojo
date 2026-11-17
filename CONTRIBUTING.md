@@ -16,7 +16,7 @@
 node tools/build-standalone.js    # 重建单文件版（产物过期会被 standalone-check 抓住）
 node tools/stamp-assets.js        # 重算 index.html 的 ?v= 内容哈希
 node tools/numbers.js             # README 数量口径核对（报告行号，照改即可）
-node --test tests/qa/*.test.js    # 全量 QA（当前 265 条，0 skip 是常态）
+node --test --test-concurrency=1 tests/qa/*.test.js    # 全量 QA（浏览器用例共享一台无头浏览器，必须串行；Linux / macOS 也可跑）
 node tests/selftest.js            # 判题引擎自测（18 题参考解全 AC + 模板全 WA）
 node tests/starter-check.js       # 模板有效性（每题 starter 必须 WA 而非 RE/TLE）
 node tests/storage-audit.js       # localStorage 输出安全审计
