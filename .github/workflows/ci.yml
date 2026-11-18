@@ -1,7 +1,9 @@
 name: Tests
 
 # 纯静态零构建：Node 自带测试跑类型/内容/静态审计；
-# 浏览器用例在有 Chrome 的环境里执行，没有时自动 skip，不挡合并。
+# 浏览器用例在有 Chrome 且运行时有全局 WebSocket（Node 22+）时执行，否则自动 skip，不挡合并。
+# GitHub 托管的 ubuntu 镜像往往已带 Chrome，但当前 job 使用 Node 20（无全局 WebSocket），
+# 此前会在拉起浏览器后抛错并留下进程，任务挂到 6 小时上限才被取消。
 on:
   push:
   pull_request:
@@ -12,6 +14,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
