@@ -2,7 +2,8 @@
  * helpers/cdp.js —— 用本机 Edge/Chrome 无头模式 + CDP 做真实浏览器冒烟
  *
  * 只依赖 Node 内置能力（child_process / fetch / WebSocket），不装任何 npm 包。
- * 找不到浏览器或连不上 CDP 时，调用方应跳过（返回 null），并在报告里明确写「未验证」。
+ * 找不到浏览器、没有全局 WebSocket（例如 Node 20），或连不上 CDP 时，
+ * 调用方应跳过（返回 null），并在报告里明确写「未验证」。
  */
 'use strict';
 
@@ -27,6 +28,10 @@ const CANDIDATES = [
 ];
 
 function findBrowser() {
+  // Node 20 没有全局 WebSocket。若此时仍去拉起 Chrome，随后 `new WebSocket` 会抛错，
+  // 且错误发生在收尸逻辑之前，浏览器进程会一直占着事件循环，CI 会挂到 GitHub 的 6 小时上限。
+  // 没有 WebSocket 时与「找不到浏览器」同等对待，调用方 skip，不挡合并。
+  if (typeof WebSocket !== 'function') return null;
   for (const p of CANDIDATES) {
     try {
       if (fs.existsSync(p)) return p;
@@ -225,6 +230,18 @@ async function launchInner(url, opts) {
     { stdio: 'ignore' }
   );
 
+  let onExit = null;
+  const cleanup = function () {
+    killTree(proc);
+    try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+    if (onExit) {
+      process.removeListener('exit', onExit);
+      onExit = null;
+    }
+  };
+
+  try {
+  let ws = null;
   const deadline = Date.now() + (opts && opts.timeout ? opts.timeout : 15000);
   let target = null;
   while (Date.now() < deadline) {
@@ -241,30 +258,20 @@ async function launchInner(url, opts) {
     await sleep(200);
   }
   if (!target) {
-    killTree(proc);
-    try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+    cleanup();
     return null;
   }
 
   // 兜底：测试进程异常退出（未走到 close）时也不能把浏览器留在机器上
-  const onExit = () => killTree(proc);
+  onExit = () => killTree(proc);
   process.once('exit', onExit);
 
-  const ws = new WebSocket(target.webSocketDebuggerUrl);
-  try {
+  ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {
       ws.addEventListener('open', resolve, { once: true });
       ws.addEventListener('error', reject, { once: true });
       setTimeout(() => reject(new Error('CDP 连接超时')), 10000);
     });
-  } catch (e) {
-    // 连不上也必须收尸：否则浏览器进程留在后台，下一轮测试被它拖慢
-    try { ws.close(); } catch (e2) { /* ignore */ }
-    killTree(proc);
-    try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e3) { /* ignore */ }
-    process.removeListener('exit', onExit);
-    throw e;
-  }
 
   let seq = 0;
   const pending = new Map();
@@ -420,11 +427,16 @@ async function launchInner(url, opts) {
     },
     close() {
       try { ws.close(); } catch (e) { /* ignore */ }
-      killTree(proc);
-      try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) { /* ignore */ }
-      process.removeListener('exit', onExit);
+      cleanup();
     },
   };
+  } catch (e) {
+    // `new WebSocket` 在收尸之前抛错（例如 Node 20 没有全局 WebSocket）时，
+    // 也必须杀掉已拉起的 Chrome，否则 node:test 会因残留子进程一直不退出。
+    try { if (ws) ws.close(); } catch (e2) { /* ignore */ }
+    cleanup();
+    throw e;
+  }
 }
 
 module.exports = { launch, findBrowser };
